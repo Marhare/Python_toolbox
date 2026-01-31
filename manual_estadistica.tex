@@ -1,0 +1,944 @@
+\documentclass[11pt,a4paper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+
+\geometry{margin=2.5cm}
+
+% Configuración de listings para Python
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray}
+}
+
+% Teoremas y definiciones
+\theoremstyle{definition}
+\newtheorem{definition}{Definición}[section]
+\newtheorem{theorem}{Teorema}[section]
+\newtheorem{remark}{Observación}[section]
+\newtheorem{example}{Ejemplo}[section]
+
+% Encabezados
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\title{\textbf{Manual Técnico}\\
+\large Toolbox Científica en Python\\
+para Análisis Experimental}
+\author{Documentación Técnica}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+
+\chapter*{Introducción General}
+\addcontentsline{toc}{chapter}{Introducción General}
+
+\section*{Qué es esta toolbox}
+
+Esta toolbox es una colección modular de herramientas Python diseñadas específicamente para el análisis de datos experimentales en física. No pretende ser una reimplementación de NumPy, SciPy o pandas, sino una capa semántica orientada al flujo de trabajo experimental: desde la adquisición de datos, pasando por el análisis estadístico, el ajuste de modelos, hasta la presentación metrológica de resultados con incertidumbres.
+
+El diseño responde a una necesidad concreta: reducir la fricción entre el \emph{razonamiento físico-matemático} y su implementación computacional. Cada módulo está concebido para reflejar una distinción conceptual clara, evitando la mezcla indiscriminada de responsabilidades que a menudo lleva a código confuso o resultados mal interpretados.
+
+\section*{Filosofía general: separación de capas}
+
+La arquitectura de la toolbox se basa en una separación estricta de capas funcionales:
+
+\begin{enumerate}
+    \item \textbf{Cálculo numérico puro (NumPy/SciPy)}: Operaciones algebraicas, vectoriales, matriciales. No añade semántica física.
+    
+    \item \textbf{Estadística inferencial (\texttt{estadistica.py})}: Extracción de información a partir de datos observados. Se enfoca exclusivamente en incertidumbre Tipo A según ISO GUM (análisis estadístico de observaciones repetidas). Devuelve valores escalares (\texttt{float}), intervalos, o diccionarios con resultados de tests. \textbf{No maneja representaciones tipo ``valor $\pm$ incertidumbre''}.
+    
+    \item \textbf{Ajuste de modelos (\texttt{ajustes.py})}: Estimación de parámetros mediante regresión (mínimos cuadrados, máxima verosimilitud, etc.). Devuelve parámetros óptimos y matrices de covarianza. No calcula directamente incertidumbres combinadas ni propagaciones simbólicas.
+    
+    \item \textbf{Metrología e incertidumbres (\texttt{incertidumbres.py})}: Capa de frontera. Construye magnitudes con incertidumbre (usando la librería \texttt{uncertainties}), combina incertidumbres Tipo A y Tipo B, propaga incertidumbres a través de cálculos, y formatea resultados para LaTeX. Este módulo \emph{no calcula estadística ni ajustes}, solo los representa y combina.
+    
+    \item \textbf{Visualización y presentación (\texttt{graficos.py}, \texttt{latex\_tools.py})}: Generación de gráficos y tablas con formato consistente.
+\end{enumerate}
+
+\textbf{Principio rector}: Cada módulo debe ser conceptualmente coherente. Si una función mezcla estadística con propagación de incertidumbres instrumentales, probablemente está en el módulo equivocado.
+
+\section*{Mapa de módulos}
+
+A continuación se presenta un resumen de los módulos principales (algunos aún por documentar en este manual):
+
+\begin{itemize}
+    \item \texttt{estadistica.py} (Capítulo \ref{chap:estadistica}): Estadística descriptiva, intervalos de confianza, tests de hipótesis. Incertidumbre Tipo A.
+    
+    \item \texttt{ajustes.py} (Capítulo futuro): Regresión lineal y no lineal, mínimos cuadrados, estimación robusta.
+    
+    \item \texttt{incertidumbres.py} (Capítulo futuro): Construcción de magnitudes con incertidumbre, propagación, combinación Tipo A + Tipo B.
+    
+    \item \texttt{montecarlo.py} (Capítulo futuro): Simulación Monte Carlo para propagación de incertidumbres complejas.
+    
+    \item \texttt{graficos.py} (Capítulo futuro): Visualización de datos experimentales con estilo consistente.
+    
+    \item \texttt{latex\_tools.py} (Capítulo futuro): Generación automatizada de tablas y expresiones LaTeX.
+\end{itemize}
+
+En este documento, nos centraremos en el módulo \texttt{estadistica.py}, por ser la base conceptual sobre la que se construyen los demás.
+
+
+\chapter{Estadística (\texttt{estadistica.py})}
+\label{chap:estadistica}
+
+\section{Rol del módulo de estadística}
+
+\subsection{Qué problemas resuelve}
+
+El módulo \texttt{estadistica.py} está diseñado para resolver problemas de \textbf{inferencia estadística a partir de datos experimentales}. En el contexto de la física experimental, esto incluye:
+
+\begin{itemize}
+    \item Estimar el valor ``verdadero'' de una magnitud a partir de mediciones repetidas (media muestral).
+    \item Cuantificar la dispersión de las observaciones (varianza, desviación típica).
+    \item Estimar la incertidumbre del valor central debido a la variabilidad estadística (error estándar).
+    \item Construir intervalos de confianza para parámetros poblacionales.
+    \item Contrastar hipótesis sobre los datos (tests de significancia).
+\end{itemize}
+
+Todas estas operaciones corresponden a lo que la \emph{Guía para la Expresión de la Incertidumbre de Medida} (ISO GUM) clasifica como \textbf{incertidumbre Tipo A}: evaluada mediante análisis estadístico de series de observaciones.
+
+\subsection{Qué problemas NO pretende resolver}
+
+Este módulo \textbf{no} aborda:
+
+\begin{itemize}
+    \item \textbf{Incertidumbre Tipo B}: Evaluación de incertidumbres basada en información externa (resolución del instrumento, certificados de calibración, juicio experto). Esto se maneja en \texttt{incertidumbres.py}.
+    
+    \item \textbf{Propagación de incertidumbres}: Cálculo de cómo las incertidumbres de las variables de entrada afectan a una función. Esto también corresponde a \texttt{incertidumbres.py}.
+    
+    \item \textbf{Ajuste de modelos}: Estimación de parámetros de funciones teóricas mediante regresión. Esto se trata en \texttt{ajustes.py}.
+    
+    \item \textbf{Representación metrológica}: El módulo devuelve valores escalares (\texttt{float}), no magnitudes tipo ``valor $\pm$ incertidumbre''. La construcción de objetos \texttt{ufloat} es responsabilidad de \texttt{incertidumbres.py}.
+\end{itemize}
+
+\subsection{Relación con otros módulos}
+
+El flujo típico de trabajo es:
+
+\begin{enumerate}
+    \item \textbf{Recolección de datos}: Arrays NumPy con mediciones repetidas.
+    
+    \item \textbf{Análisis estadístico (\texttt{estadistica.py})}: Cálculo de media, error estándar, intervalos de confianza. Salida: valores \texttt{float}.
+    
+    \item \textbf{Ajuste de modelos (\texttt{ajustes.py})}: Si los datos siguen un modelo teórico, se estiman parámetros y su matriz de covarianza. Salida: parámetros \texttt{float} + matriz de covarianza.
+    
+    \item \textbf{Metrología (\texttt{incertidumbres.py})}: Se combinan incertidumbres Tipo A (de \texttt{estadistica.py} o \texttt{ajustes.py}) con Tipo B (instrumentales). Se construyen objetos \texttt{ufloat} para propagación automática.
+    
+    \item \textbf{Presentación}: Generación de tablas, gráficos y expresiones LaTeX.
+\end{enumerate}
+
+\textbf{Importante}: \texttt{estadistica.py} es una capa de cálculo puro. No debe importar \texttt{uncertainties} ni devolver \texttt{ufloat}. La semántica metrológica se añade \emph{después}, en la capa correspondiente.
+
+
+\section{Estadística descriptiva}
+
+\subsection{Media muestral}
+
+\begin{definition}[Media muestral]
+Dada una muestra $\{x_1, x_2, \ldots, x_n\}$ de $n$ observaciones independientes de una variable aleatoria $X$, la media muestral se define como:
+\begin{equation}
+    \bar{x} = \frac{1}{n} \sum_{i=1}^{n} x_i
+\end{equation}
+\end{definition}
+
+\textbf{Interpretación física}: La media muestral es el mejor estimador (no sesgado, varianza mínima) del valor esperado $\mu = \mathbb{E}[X]$ de la magnitud subyacente, bajo el supuesto de que las observaciones son independientes y provienen de la misma distribución.
+
+\textbf{Implementación}:
+\begin{lstlisting}
+from estadistica import estadistica
+import numpy as np
+
+x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+media = estadistica.media(x)  # Devuelve: float
+\end{lstlisting}
+
+\textbf{Consideraciones}:
+\begin{itemize}
+    \item La media es sensible a valores atípicos (outliers). Si la distribución es fuertemente asimétrica o presenta colas pesadas, considerar usar la mediana.
+    \item Para distribuciones gaussianas, la media muestral es el estimador de máxima verosimilitud de $\mu$.
+\end{itemize}
+
+\subsection{Varianza y desviación típica}
+
+\begin{definition}[Varianza muestral]
+La varianza muestral (corregida por sesgo) se define como:
+\begin{equation}
+    s^2 = \frac{1}{n-1} \sum_{i=1}^{n} (x_i - \bar{x})^2
+\end{equation}
+donde el factor $n-1$ (en lugar de $n$) corrige el sesgo del estimador, aplicando la corrección de Bessel.
+\end{definition}
+
+\begin{definition}[Desviación típica muestral]
+La desviación típica (o estándar) muestral es la raíz cuadrada de la varianza:
+\begin{equation}
+    s = \sqrt{s^2}
+\end{equation}
+\end{definition}
+
+\textbf{Interpretación física}: $s$ cuantifica la dispersión de las observaciones respecto a su media. Es un estimador no sesgado de la desviación típica poblacional $\sigma$ si las observaciones son independientes y provienen de una distribución normal.
+
+\textbf{Implementación}:
+\begin{lstlisting}
+varianza = estadistica.varianza(x, ddof=1)  # ddof=1: muestra
+sigma = estadistica.desviacion_tipica(x, ddof=1)
+\end{lstlisting}
+
+\textbf{Parámetro \texttt{ddof}}:
+\begin{itemize}
+    \item \texttt{ddof=1}: Varianza muestral (divide por $n-1$). Usado cuando $x$ es una muestra.
+    \item \texttt{ddof=0}: Varianza poblacional (divide por $n$). Usado cuando $x$ es la población completa.
+\end{itemize}
+
+En física experimental, casi siempre se usa \texttt{ddof=1}, ya que trabajamos con muestras.
+
+\subsection{Error estándar de la media}
+
+\begin{definition}[Error estándar de la media]
+El error estándar de la media (standard error of the mean, SEM) cuantifica la incertidumbre del estimador $\bar{x}$ debido a la variabilidad estadística:
+\begin{equation}
+    \sigma_{\bar{x}} = \frac{s}{\sqrt{n}}
+\end{equation}
+\end{definition}
+
+\textbf{Interpretación física}: Mientras que $s$ describe la dispersión de las observaciones individuales, $\sigma_{\bar{x}}$ describe cuánto esperamos que $\bar{x}$ se desvíe del valor verdadero $\mu$ debido al tamaño finito de la muestra. Es directamente la \textbf{incertidumbre Tipo A} de la media.
+
+\textbf{Relación con intervalos de confianza}: El error estándar es el ingrediente fundamental para construir intervalos de confianza para $\mu$ (ver sección \ref{sec:intervalos}).
+
+\textbf{Implementación}:
+\begin{lstlisting}
+error_std = estadistica.error_estandar(x)
+# Devuelve: sigma_x_barra = s / sqrt(n)
+\end{lstlisting}
+
+\begin{remark}
+El error estándar disminuye como $1/\sqrt{n}$. Duplicar la precisión requiere cuadruplicar el número de mediciones. Esto es fundamental para planificar experimentos.
+\end{remark}
+
+\subsection{Covarianza y correlación}
+
+Para dos variables $X$ e $Y$:
+
+\begin{definition}[Covarianza muestral]
+\begin{equation}
+    \text{Cov}(X, Y) = \frac{1}{n-1} \sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})
+\end{equation}
+\end{definition}
+
+\begin{definition}[Coeficiente de correlación de Pearson]
+\begin{equation}
+    r = \frac{\text{Cov}(X, Y)}{s_X \, s_Y}
+\end{equation}
+donde $r \in [-1, 1]$.
+\end{definition}
+
+\textbf{Interpretación}: $r = 1$ indica correlación lineal perfecta positiva, $r = -1$ correlación perfecta negativa, $r = 0$ ausencia de correlación lineal (pero no necesariamente independencia).
+
+\textbf{Implementación}:
+\begin{lstlisting}
+cov_xy = estadistica.covarianza(x, y, ddof=1)
+r = estadistica.correlacion(x, y)
+\end{lstlisting}
+
+\textbf{Uso en propagación de incertidumbres}: La covarianza entre variables es esencial para propagar correctamente incertidumbres cuando las variables están correlacionadas. Esto se usará en \texttt{ajustes.py} (matriz de covarianza de parámetros) y en \texttt{incertidumbres.py} (propagación con correlaciones).
+
+
+\section{Intervalos de confianza}
+\label{sec:intervalos}
+
+\subsection{Diferencia entre incertidumbre e intervalo de confianza}
+
+Es crucial distinguir:
+
+\begin{itemize}
+    \item \textbf{Incertidumbre (error estándar)}: Cuantifica la dispersión esperada del estimador. Es un número: $\sigma_{\bar{x}} = s/\sqrt{n}$.
+    
+    \item \textbf{Intervalo de confianza}: Es un intervalo $[L, U]$ construido de tal forma que, si repitiéramos el experimento muchas veces, el parámetro verdadero $\mu$ estaría dentro del intervalo en un porcentaje de las veces igual al \emph{nivel de confianza} (típicamente 95\%).
+\end{itemize}
+
+\textbf{Interpretación correcta}: Un intervalo de confianza al 95\% significa que si repitiéramos el procedimiento experimental (incluyendo muestreo y cálculo del intervalo) infinitas veces, en el 95\% de los casos el intervalo contendría el valor verdadero $\mu$. \textbf{No significa} que hay 95\% de probabilidad de que $\mu$ esté en ese intervalo particular (eso sería interpretación bayesiana, no frecuentista).
+
+\subsection{Intervalo para la media con $\sigma$ conocida}
+
+Si conocemos la desviación típica poblacional $\sigma$ (situación poco común en la práctica), y asumimos normalidad de los datos, el intervalo de confianza al nivel $(1-\alpha)$ para $\mu$ es:
+
+\begin{equation}
+    \bar{x} \pm z_{\alpha/2} \frac{\sigma}{\sqrt{n}}
+\end{equation}
+
+donde $z_{\alpha/2}$ es el cuantil de la distribución normal estándar que deja probabilidad $\alpha/2$ en cada cola.
+
+\textbf{Implementación}:
+\begin{lstlisting}
+li, ls = estadistica.intervalo_media_sigma_conocida(
+    x, sigma=0.5, nivel=0.95
+)
+# Devuelve: (limite_inferior, limite_superior)
+\end{lstlisting}
+
+\subsection{Intervalo para la media con $\sigma$ desconocida (t-Student)}
+
+En la práctica, no conocemos $\sigma$ y lo estimamos con $s$. En este caso, la distribución del estadístico:
+\begin{equation}
+    t = \frac{\bar{x} - \mu}{s / \sqrt{n}}
+\end{equation}
+sigue una distribución $t$ de Student con $n-1$ grados de libertad.
+
+El intervalo de confianza al nivel $(1-\alpha)$ es:
+\begin{equation}
+    \bar{x} \pm t_{\alpha/2, n-1} \frac{s}{\sqrt{n}}
+\end{equation}
+
+donde $t_{\alpha/2, n-1}$ es el cuantil de la distribución $t$ con $n-1$ grados de libertad.
+
+\textbf{Implementación}:
+\begin{lstlisting}
+li, ls = estadistica.intervalo_media_sigma_desconocida(
+    x, nivel=0.95
+)
+\end{lstlisting}
+
+\textbf{Observaciones}:
+\begin{itemize}
+    \item Para $n$ grande ($n > 30$), la distribución $t$ converge a la normal estándar.
+    \item Para muestras pequeñas, $t$ tiene colas más pesadas que la normal, reflejando la incertidumbre adicional por estimar $\sigma$.
+    \item \textbf{Supuesto crítico}: Los datos deben provenir (aproximadamente) de una distribución normal. Para datos muy asimétricos o con outliers, el intervalo puede no ser válido.
+\end{itemize}
+
+\subsection{Intervalo para la varianza}
+
+El intervalo de confianza para $\sigma^2$ (asumiendo normalidad) se basa en la distribución $\chi^2$:
+
+\begin{equation}
+    \left[ \frac{(n-1)s^2}{\chi^2_{\alpha/2, n-1}}, \, \frac{(n-1)s^2}{\chi^2_{1-\alpha/2, n-1}} \right]
+\end{equation}
+
+\textbf{Implementación}:
+\begin{lstlisting}
+li_var, ls_var = estadistica.intervalo_varianza(x, nivel=0.95)
+\end{lstlisting}
+
+\textbf{Advertencia}: Este intervalo es mucho más sensible a desviaciones de la normalidad que el intervalo para la media. Usar con precaución.
+
+
+\section{Tests estadísticos}
+
+\subsection{Hipótesis nula y alternativa}
+
+Un test de hipótesis contrasta dos afirmaciones mutuamente excluyentes:
+
+\begin{itemize}
+    \item \textbf{Hipótesis nula ($H_0$)}: Afirmación que se asume cierta por defecto (p.ej., ``no hay efecto'', ``la media es $\mu_0$'').
+    \item \textbf{Hipótesis alternativa ($H_1$ o $H_a$)}: Afirmación que se acepta si hay evidencia suficiente contra $H_0$.
+\end{itemize}
+
+El procedimiento:
+\begin{enumerate}
+    \item Calcular un \textbf{estadístico de prueba} a partir de los datos.
+    \item Determinar la distribución del estadístico bajo $H_0$.
+    \item Calcular el \textbf{p-valor}: probabilidad de observar un estadístico tan extremo (o más) que el observado, si $H_0$ fuera cierta.
+    \item Si $p < \alpha$ (nivel de significancia, típicamente 0.05), se rechaza $H_0$.
+\end{enumerate}
+
+\subsection{Interpretación del p-valor}
+
+\textbf{El p-valor NO es}:
+\begin{itemize}
+    \item La probabilidad de que $H_0$ sea cierta.
+    \item La probabilidad de haber cometido un error.
+\end{itemize}
+
+\textbf{El p-valor SÍ es}:
+\begin{itemize}
+    \item La probabilidad de obtener datos tan extremos como los observados (o más), \emph{asumiendo que $H_0$ es cierta}.
+    \item Una medida de la \emph{compatibilidad} entre los datos y $H_0$.
+\end{itemize}
+
+Un p-valor pequeño indica que los datos son poco probables bajo $H_0$, sugiriendo evidencia en contra de $H_0$. Pero \textbf{no prueba} que $H_1$ sea cierta, ni cuantifica su probabilidad.
+
+\subsection{Test $t$ de Student}
+
+\textbf{Objetivo}: Contrastar si la media poblacional $\mu$ es igual a un valor hipotético $\mu_0$.
+
+\textbf{Hipótesis}:
+\begin{align}
+    H_0 &: \mu = \mu_0 \\
+    H_1 &: \mu \neq \mu_0 \quad \text{(dos colas)}
+\end{align}
+
+\textbf{Estadístico de prueba}:
+\begin{equation}
+    t = \frac{\bar{x} - \mu_0}{s / \sqrt{n}}
+\end{equation}
+
+Bajo $H_0$, $t$ sigue una distribución $t$ de Student con $n-1$ grados de libertad.
+
+\textbf{Implementación}:
+\begin{lstlisting}
+resultado = estadistica.test_media_t(
+    x, mu0=3.0, alternativa="dos_colas"
+)
+# Devuelve: {"t": estadistico, "p": p_valor, "df": grados_libertad}
+print(f"t = {resultado['t']:.3f}, p = {resultado['p']:.4f}")
+\end{lstlisting}
+
+\textbf{Alternativas}:
+\begin{itemize}
+    \item \texttt{alternativa="dos\_colas"}: $H_1: \mu \neq \mu_0$ (más común).
+    \item \texttt{alternativa="mayor"}: $H_1: \mu > \mu_0$ (test unilateral).
+    \item \texttt{alternativa="menor"}: $H_1: \mu < \mu_0$ (test unilateral).
+\end{itemize}
+
+\textbf{Interpretación}:
+\begin{itemize}
+    \item Si $p < 0.05$: Rechazamos $H_0$ al nivel de significancia del 5\%. Hay evidencia de que $\mu \neq \mu_0$.
+    \item Si $p \geq 0.05$: No rechazamos $H_0$. No hay evidencia suficiente para descartar que $\mu = \mu_0$.
+\end{itemize}
+
+\textbf{Supuestos}:
+\begin{itemize}
+    \item Observaciones independientes.
+    \item Distribución aproximadamente normal (menos crítico para $n$ grande por el Teorema Central del Límite).
+\end{itemize}
+
+\subsection{Test de Kolmogórov--Smirnov}
+
+\textbf{Objetivo}: Contrastar si una muestra proviene de una distribución teórica especificada.
+
+\textbf{Hipótesis}:
+\begin{align}
+    H_0 &: \text{Los datos siguen la distribución teórica } F_0 \\
+    H_1 &: \text{Los datos no siguen } F_0
+\end{align}
+
+\textbf{Estadístico de prueba}: Máxima distancia entre la función de distribución empírica y la teórica:
+\begin{equation}
+    D = \sup_x |F_n(x) - F_0(x)|
+\end{equation}
+
+\textbf{Implementación}:
+\begin{lstlisting}
+resultado = estadistica.test_ks(x, distribucion="normal")
+# Devuelve: {"estadistico": D, "p_valor": p}
+print(f"D = {resultado['estadistico']:.3f}, p = {resultado['p_valor']:.4f}")
+\end{lstlisting}
+
+\textbf{Distribuciones soportadas}:
+\begin{itemize}
+    \item \texttt{"normal"}: Estima $\mu$ y $\sigma$ de los datos.
+    \item \texttt{"uniforme"}: Distribución uniforme estándar.
+\end{itemize}
+
+\textbf{Advertencias}:
+\begin{itemize}
+    \item Si los parámetros de la distribución teórica se estiman de los datos (como en \texttt{"normal"}), el test es conservador (tiende a no rechazar $H_0$).
+    \item El test K-S es sensible a diferencias en toda la distribución, no solo en las colas o la media.
+    \item Para contrastar normalidad con parámetros estimados, el test de Shapiro-Wilk es generalmente más potente.
+\end{itemize}
+
+
+\section{Conexión con otros módulos}
+
+\subsection{Salidas hacia \texttt{ajustes.py}}
+
+El módulo de ajustes utilizará frecuentemente:
+\begin{itemize}
+    \item \textbf{Varianza residual}: Para estimar la bondad del ajuste.
+    \item \textbf{Correlación}: Para detectar correlaciones entre variables explicativas.
+    \item \textbf{Error estándar}: Como peso en regresiones ponderadas.
+\end{itemize}
+
+La filosofía es la misma: \texttt{ajustes.py} devuelve parámetros óptimos y matriz de covarianza (valores \texttt{float}), sin construir \texttt{ufloat}.
+
+\subsection{Salidas hacia \texttt{incertidumbres.py}}
+
+El módulo de incertidumbres combinará:
+\begin{itemize}
+    \item \textbf{Incertidumbre Tipo A}: Error estándar calculado por \texttt{estadistica.py}.
+    \item \textbf{Incertidumbre Tipo B}: Información instrumental o externa (resolución, calibración).
+\end{itemize}
+
+Ejemplo de flujo típico:
+\begin{lstlisting}
+from estadistica import estadistica
+from incertidumbres import incertidumbres
+
+# 1. Mediciones repetidas
+x = np.array([1.0, 1.1, 0.9, 1.05, 0.95])
+
+# 2. Estadistica Tipo A (estadistica.py)
+x_media = estadistica.media(x)
+u_A = estadistica.error_estandar(x)
+
+# 3. Incertidumbre Tipo B (externa)
+u_B = 0.02  # Resolucion del instrumento
+
+# 4. Combinacion (incertidumbres.py)
+x_final = incertidumbres.u(x_media, np.sqrt(u_A**2 + u_B**2))
+# x_final es un ufloat, listo para propagacion
+\end{lstlisting}
+
+\subsection{Qué NO debe hacerse en \texttt{estadistica.py}}
+
+\begin{itemize}
+    \item \textbf{No} devolver objetos \texttt{ufloat}.
+    \item \textbf{No} combinar incertidumbres Tipo A y Tipo B.
+    \item \textbf{No} implementar propagación simbólica de errores.
+    \item \textbf{No} ajustar modelos (eso es responsabilidad de \texttt{ajustes.py}).
+\end{itemize}
+
+Mantener esta separación permite que cada módulo sea conceptualmente claro, testeable de forma independiente, y reutilizable en diferentes contextos.
+
+
+\section{Conclusión del capítulo}
+
+El módulo \texttt{estadistica.py} proporciona las herramientas fundamentales para la \textbf{inferencia estadística a partir de datos experimentales}, enfocándose exclusivamente en incertidumbre Tipo A según la clasificación ISO GUM.
+
+Sus funciones devuelven valores escalares (\texttt{float}), intervalos, o diccionarios con resultados de tests, sin introducir representaciones metrológicas tipo ``valor $\pm$ incertidumbre''. Esta pureza conceptual facilita:
+
+\begin{itemize}
+    \item \textbf{Claridad}: Cada módulo tiene un propósito bien delimitado.
+    \item \textbf{Testabilidad}: Funciones puras son más fáciles de validar.
+    \item \textbf{Composición}: Los resultados de \texttt{estadistica.py} se combinan naturalmente con otros módulos.
+\end{itemize}
+
+En los siguientes capítulos (futuros), exploraremos cómo los resultados de \texttt{estadistica.py} se integran con:
+
+\begin{itemize}
+    \item \textbf{Ajuste de modelos (\texttt{ajustes.py})}: Estimación de parámetros y sus incertidumbres correlacionadas.
+    \item \textbf{Metrología (\texttt{incertidumbres.py})}: Combinación de Tipo A + Tipo B, propagación automática, formateo para presentación.
+\end{itemize}
+
+Esta arquitectura modular refleja la estructura conceptual del análisis experimental moderno, reduciendo la fricción entre el razonamiento físico y su implementación computacional.
+
+
+\chapter{Generación de resultados en \LaTeX{}: \texttt{latex\_tools.py}}
+\label{chap:latex_tools}
+
+\section{Rol del módulo de presentación}
+
+\subsection{Contexto en el flujo experimental}
+
+El módulo \texttt{latex\_tools.py} completa el flujo experimental:
+
+\begin{center}
+    \framebox{Experimento} $\to$ \framebox{Adquisición (Excel/CSV)} $\to$ \framebox{Python: \texttt{estadistica.py}};
+\end{center}
+
+\begin{center}
+    $\to$ \framebox{\texttt{ajustes.py}} $\to$ \framebox{\texttt{incertidumbres.py}} $\to$ \framebox{\textbf{\texttt{latex\_tools.py}}} $\to$ \framebox{\LaTeX{} $\to$ PDF/Artículo}
+\end{center}
+
+\textbf{Propósito específico}: Transformar resultados numéricos (valores con incertidumbre) en código \LaTeX{} de presentación profesional, listo para compilar en documentos científicos.
+
+\textbf{Qué NO hace este módulo}:
+\begin{itemize}
+    \item No calcula estadística (eso es \texttt{estadistica.py}).
+    \item No combina incertidumbres Tipo A + Tipo B (eso es \texttt{incertidumbres.py}).
+    \item No propaga incertidumbres automáticamente.
+    \item No ajusta modelos (eso es \texttt{ajustes.py}).
+\end{itemize}
+
+\textbf{Qué hace este módulo}:
+\begin{itemize}
+    \item Redondea valores e incertidumbres siguiendo normas metrológicas.
+    \item Formatea valores escalares con su incertidumbre como expresiones \LaTeX{}.
+    \item Transforma arrays/matrices en tablas \LaTeX{} estilizadas.
+    \item Maneja unidades físicas y soporte \texttt{siunitx}.
+    \item Exporta contenido \LaTeX{} a archivos \texttt{.tex}.
+\end{itemize}
+
+\subsection{Separación de responsabilidades}
+
+Es crucial entender que \textbf{presentación $\neq$ cálculo}:
+
+\begin{itemize}
+    \item \textbf{Cálculo}: NumPy $\to$ \texttt{estadistica.py} (float/ndarray) $\to$ \texttt{incertidumbres.py} (ufloat).
+    \item \textbf{Presentación}: \texttt{latex\_tools.py} toma valores ya calculados (float o ufloat) y los transforma en código \LaTeX{}.
+\end{itemize}
+
+Esto permite que \texttt{latex\_tools.py} sea \textbf{independiente de la fuente de los datos}. Puede recibir valores de \texttt{estadistica.py}, \texttt{ajustes.py}, simulaciones Monte Carlo, o cálculos simbólicos. El módulo no pregunta ``de dónde vienes''; solo ``¿cuál es tu valor y tu incertidumbre?''.
+
+
+\section{Redondeo metrológico}
+
+\subsection{Principios de redondeo}
+
+El redondeo de magnitudes con incertidumbre sigue la norma ISO~GUM y la práctica metrológica estándar:
+
+\begin{definition}[Regla de redondeo metrológico]
+Dado un valor $x$ con incertidumbre $u$ (o $\sigma$):
+\begin{enumerate}
+    \item La incertidumbre se expresa con 1 o 2 cifras significativas (típicamente 2 en equipos de precisión).
+    \item El valor se redondea al mismo orden decimal que la incertidumbre.
+    \item El orden decimal se determina por el orden de magnitud decimal de la incertidumbre.
+\end{enumerate}
+\end{definition}
+
+\begin{example}[Ejemplo numérico]
+Supongamos $x = 9.8127$ m/s y $\sigma = 0.0347$ m/s:
+
+\textbf{Paso 1}: Calcular el orden de magnitud decimal de $\sigma$:
+$$\log_{10}(0.0347) \approx -1.46 \implies \text{orden} = -2$$
+
+\textbf{Paso 2}: Con 2 cifras significativas en la incertidumbre:
+$$\text{decimales} = -((-2) - (2-1)) = -(-1) = 1$$
+
+Redondeamos $\sigma$ a 1 decimal:
+$$\sigma_r = \text{round}(0.0347, 1) = 0.0$$
+
+\textbf{Problema}: 0.0 es demasiado pequeño. Generalmente se usan 2 cifras significativas:
+$$\sigma_r = \text{round}(0.0347, 2) = 0.03$$
+
+\textbf{Paso 3}: Redondeamos $x$ al mismo decimal:
+$$x_r = \text{round}(9.8127, 2) = 9.81$$
+
+\textbf{Resultado final}: $(9.81 \pm 0.03)$ m/s
+\end{example}
+
+\subsection{La función \texttt{redondeo\_incertidumbre()}}
+
+\begin{lstlisting}
+redondeo_incertidumbre(valor, sigma, cifras=2)
+    -> (valor_redondeado, sigma_redondeada, decimales)
+\end{lstlisting}
+
+\textbf{Parámetros}:
+\begin{itemize}
+    \item \texttt{valor} (float): Valor central $x$.
+    \item \texttt{sigma} (float): Incertidumbre $\sigma > 0$.
+    \item \texttt{cifras} (int, default=2): Cifras significativas para $\sigma$ (1 o 2).
+\end{itemize}
+
+\textbf{Devuelve}:
+\begin{itemize}
+    \item \texttt{valor\_redondeado} (float): $x$ redondeado.
+    \item \texttt{sigma\_redondeada} (float): $\sigma$ redondeada.
+    \item \texttt{decimales} (int): Número de decimales aplicado.
+\end{itemize}
+
+\textbf{Uso típico}:
+\begin{lstlisting}
+from latex_tools import latex_tools
+
+v_r, s_r, dec = latex_tools.redondeo_incertidumbre(
+    valor=9.8127, 
+    sigma=0.0347, 
+    cifras=2
+)
+# Devuelve: (9.81, 0.03, 2)
+\end{lstlisting}
+
+\textbf{Nota}: Esta función es \textbf{determinista}, no tiene efectos secundarios y puede usarse sin dependencias de estado.
+
+
+\section{Formato de valores con incertidumbre}
+
+\subsection{La función \texttt{valor\_pm()}}
+
+\texttt{valor\_pm()} es la función \textbf{polivalente} del módulo. Dependiendo del tipo de entrada, cambia su comportamiento:
+
+\begin{definition}
+La función \texttt{valor\_pm()} acepta:
+\begin{itemize}
+    \item \textbf{Escalar}: Devuelve una expresión \LaTeX{} de display math.
+    \item \textbf{Vector 1-D}: Devuelve tabla \LaTeX{} (vertical u horizontal).
+    \item \textbf{Matriz 2-D}: Devuelve tabla \LaTeX{} rectangular.
+\end{itemize}
+\end{definition}
+
+\begin{lstlisting}[caption={Firma de valor\_pm()}]
+valor_pm(
+    valor,
+    sigma=None,
+    *,
+    unidad=None,
+    cifras=2,
+    siunitx=False,
+    caption=None,
+    label=None,
+    centrar=None,
+    tamano=None,
+    lineas=None,
+    envolver=None,
+    posicion=None,
+    orientacion="vertical",
+    headers=None,
+    row_headers=None
+)
+\end{lstlisting}
+
+\textbf{Parámetros clave}:
+\begin{itemize}
+    \item \texttt{valor}: float, array, o \texttt{uncertainties.uarray}.
+    \item \texttt{sigma}: incertidumbre(s). Si es \texttt{None}, \texttt{valor} se interpreta como \texttt{ufloat}.
+    \item \texttt{cifras}: 1 o 2 cifras significativas en $\sigma$.
+    \item \texttt{unidad}: string opcional para la unidad física (ej: \texttt{"m/s\^{}2"}).
+    \item \texttt{siunitx}: si True, activa formato \texttt{\textbackslash{}SI\{\ldots\}\{\ldots\}} (requiere \texttt{unidad}).
+\end{itemize}
+
+\subsection{Caso escalar}
+
+\textbf{Entrada}:
+\begin{lstlisting}
+latex_tools.valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
+\end{lstlisting}
+
+\textbf{Salida}:
+\begin{lstlisting}
+\[(9.81 \pm 0.05)\,\mathrm{m/s^2}\]
+\end{lstlisting}
+
+Cuando se compila en \LaTeX{}, produce una expresión centrada en display math:
+
+\[(9.81 \pm 0.05)\,\mathrm{m/s^2}\]
+
+\textbf{Sin unidad}:
+\begin{lstlisting}
+latex_tools.valor_pm(3.14159, 0.0123, cifras=2)
+# Devuelve: \[(3.14 \pm 0.01)\]
+\end{lstlisting}
+
+\textbf{Con siunitx}:
+\begin{lstlisting}
+latex_tools.valor_pm(
+    9.81, 0.05, 
+    unidad="m/s^2", 
+    cifras=2, 
+    siunitx=True
+)
+# Devuelve: \SI{9.81 \pm 0.05}{m/s^2}
+\end{lstlisting}
+
+(Requiere \texttt{\textbackslash{}usepackage{siunitx}} en el preámbulo \LaTeX{}).
+
+\subsection{Notación científica automática}
+
+Si el valor o la incertidumbre son muy grandes ($\geq 10^5$) o muy pequeños ($< 10^{-4}$), la función activa automáticamente notación científica:
+
+\begin{example}[Notación científica]
+\begin{lstlisting}
+latex_tools.valor_pm(0.000123, 0.000005, cifras=2)
+# Devuelve: \[(1.23 \times 10^{-4} \pm 5.0 \times 10^{-6})\]
+\end{lstlisting}
+
+Que se renderiza como:
+
+\[(1.23 \times 10^{-4} \pm 5.0 \times 10^{-6})\]
+\end{example}
+
+\subsection{Caso vectorial: tablas}
+
+\subsubsection{Vector vertical (por defecto)}
+
+\begin{lstlisting}
+x = np.array([1.0, 2.0, 3.0])
+sx = 0.1
+tex = latex_tools.valor_pm(
+    x, sx, 
+    cifras=1, 
+    caption="Medidas de posicion",
+    label="tab:posicion"
+)
+print(tex)
+\end{lstlisting}
+
+\textbf{Salida}: Tabla \LaTeX{} con estructura:
+
+\begin{verbatim}
+\begin{table}[htbp]
+\centering
+\begin{tabular}{c}
+\hline
+(1.0 \pm 0.1) \\
+(2.0 \pm 0.1) \\
+(3.0 \pm 0.1) \\
+\hline
+\end{tabular}
+\caption{Medidas de posición}
+\label{tab:posicion}
+\end{table}
+\end{verbatim}
+
+\subsubsection{Vector horizontal}
+
+\begin{lstlisting}
+tex = latex_tools.valor_pm(
+    x, sx, 
+    cifras=1, 
+    orientacion="horizontal"
+)
+\end{lstlisting}
+
+Genera tabla de 1 fila $\times$ 3 columnas.
+
+\subsubsection{Con encabezados}
+
+\begin{lstlisting}
+x = np.array([1.0, 2.0, 3.0])
+y = np.array([10.5, 20.3, 30.1])
+sx, sy = 0.1, 0.2
+
+# Combinar en matriz 3x2
+V = np.array([x, y]).T
+sV = np.array([sx, sy])
+
+tex = latex_tools.valor_pm(
+    V, sV,
+    cifras=1,
+    headers=["$x$ (m)", "$y$ (V)"],
+    caption="Datos experimentales"
+)
+\end{lstlisting}
+
+Genera tabla con encabezados de columna.
+
+\section{Configuración global de tablas}
+
+\subsection{El diccionario \texttt{TABLA\_CONFIG}}
+
+La apariencia de todas las tablas puede configurarse globalmente mediante el diccionario \texttt{TABLA\_CONFIG}:
+
+\begin{lstlisting}
+TABLA_CONFIG = {
+    "centrar": True,           # Centra la tabla
+    "tamano": None,            # None, "small", "footnotesize", etc.
+    "lineas": "hline",         # "booktabs", "hline", o None
+    "envolver": True,          # Envuelve en \begin{table}...\end{table}
+    "posicion": "htbp",        # Posicion del flotante
+}
+\end{lstlisting}
+
+\textbf{Parámetros}:
+\begin{itemize}
+    \item \texttt{centrar}: Si True, añade \texttt{\textbackslash{}centering}.
+    \item \texttt{tamano}: Tamaño de fuente (\texttt{\textbackslash{}small}, \texttt{\textbackslash{}footnotesize}, etc.). None = sin cambio.
+    \item \texttt{lineas}: Estilo de líneas:
+    \begin{itemize}
+        \item \texttt{"hline"}: Líneas horizontales (clásico).
+        \item \texttt{"booktabs"}: Líneas elegantes (requiere \texttt{\textbackslash{}usepackage{booktabs}}).
+        \item \texttt{None}: Sin líneas.
+    \end{itemize}
+    \item \texttt{envolver}: Si True, genera \texttt{\textbackslash{}begin\{table\}}.
+    \item \texttt{posicion}: Parámetro de colocación ([H], [htbp], etc.).
+\end{itemize}
+
+\textbf{Cambiar configuración global}:
+\begin{lstlisting}
+from latex_tools import latex_tools, TABLA_CONFIG
+
+# Cambiar estilo global
+TABLA_CONFIG["lineas"] = "booktabs"
+TABLA_CONFIG["tamano"] = "small"
+
+# Ahora todas las nuevas tablas usarán estos estilos
+\end{lstlisting}
+
+\textbf{Sobrescribir localmente}:
+\begin{lstlisting}
+# Esta tabla especifica ignora TABLA_CONFIG
+latex_tools.valor_pm(
+    x, sx,
+    lineas="hline",    # Sobrescribe TABLA_CONFIG["lineas"]
+    tamano="large"     # Sobrescribe TABLA_CONFIG["tamano"]
+)
+\end{lstlisting}
+
+\section{Exportación a archivo}
+
+\subsection{La función \texttt{exportar()}}
+
+\begin{lstlisting}
+exportar(filename, contenido, modo="w")
+\end{lstlisting}
+
+\textbf{Propósito}: Escribir contenido \LaTeX{} generado en Python a un archivo \texttt{.tex}.
+
+\textbf{Parámetros}:
+\begin{itemize}
+    \item \texttt{filename} (str): Ruta del archivo (ej: \texttt{"tablas/resultados.tex"}).
+    \item \texttt{contenido} (str): Código \LaTeX{} a escribir.
+    \item \texttt{modo} (str, default=\texttt{"w"}): \texttt{"w"} (sobrescribir) o \texttt{"a"} (añadir).
+\end{itemize}
+
+\textbf{Ejemplo de flujo reproducible}:
+
+\begin{lstlisting}
+import numpy as np
+from estadistica import estadistica
+from latex_tools import latex_tools
+
+# 1. Adquirir datos
+datos_x = np.array([1.0, 1.1, 0.9, 1.05, 0.95])
+
+# 2. Analisis estadistico
+media_x = estadistica.media(datos_x)
+error_x = estadistica.error_estandar(datos_x)
+
+# 3. Formatear para LaTeX
+tex_resultado = latex_tools.valor_pm(
+    media_x, error_x, 
+    unidad="m", 
+    cifras=2
+)
+
+# 4. Guardar en archivo
+latex_tools.exportar("resultados.tex", tex_resultado)
+\end{lstlisting}
+
+Este flujo es completamente reproducible: dado el mismo código Python, siempre produce el mismo \texttt{.tex}.
+
+\subsection{Nota sobre reproducibilidad}
+
+\begin{remark}[Reproducibilidad científica]
+Exportar resultados a archivos \texttt{.tex} generados automáticamente garantiza:
+\begin{itemize}
+    \item \textbf{Trazabilidad}: El \texttt{.tex} es siempre derivado del código Python, nunca editado manualmente.
+    \item \textbf{Ausencia de errores de transcripción}: Se elimina la copia manual de valores.
+    \item \textbf{Fácil actualización}: Si los datos cambian, regenera el \texttt{.tex} en segundos.
+\end{itemize}
+\end{remark}
+
+\section{Nota de arquitectura: independencia y reutilización}
+
+\begin{quote}
+\textbf{Diseño clave:} \texttt{latex\_tools.py} es deliberadamente \textbf{agnóstico respecto a la fuente de datos}.
+\end{quote}
+
+Cualquier módulo que calcule magnitudes numéricas puede usar \texttt{latex\_tools} para su presentación:
+
+\begin{itemize}
+    \item \textbf{Desde \texttt{estadistica.py}}: Medias, intervalos de confianza, resultados de tests.
+    \item \textbf{Desde \texttt{ajustes.py}}: Parámetros ajustados, matrices de covarianza.
+    \item \textbf{Desde \texttt{incertidumbres.py}}: Magnitudes con Tipo A + Tipo B combinadas.
+    \item \textbf{Desde \texttt{montecarlo.py}}: Valores medios y desviaciones de simulaciones.
+    \item \textbf{Desde \texttt{fft\_tools.py}}: Amplitudes y frecuencias con incertidumbres.
+\end{itemize}
+
+Esta arquitectura modular permite que cada módulo futuro \textbf{contribuya resultados} a \texttt{latex\_tools}, sin que \texttt{latex\_tools} tenga que conocer detalles internos de cálculo de ninguno.
+
+\textbf{Conclusión del capítulo}
+
+El módulo \texttt{latex\_tools.py} cierra el ciclo experimental: desde el análisis en Python hasta la presentación en \LaTeX{}. Su diseño minimalista y separado del cálculo lo hace robusto, mantenible, y extensible. Es la capa de \textbf{presentación} que todos los módulos científicos de la toolbox comparten.
+
+\end{document}

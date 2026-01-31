@@ -2,20 +2,22 @@
 latex_tools.py
 Herramientas para generar LaTeX científico desde Python.
 
-Pensado para workflow:
-Excel -> Python -> LaTeX
+Flujo de trabajo típico: Excel → Python → LaTeX
 
-Incluye:
-- Formateo correcto de resultados con incertidumbres
-- Redondeo metrológico estándar
-- Tablas LaTeX (booktabs / siunitx)
+Funcionalidades:
+- Redondeo metrológico estándar (1-2 cifras significativas en incertidumbre)
+- Formato de valores con incertidumbres: (x ± σ)
+- Generación de tablas LaTeX con estilo configurable
+- Soporte para notación científica y siunitx
+- Exportación a archivos .tex
 """
 
 import math
-import pandas as pd
 from typing import Optional
-import uncertainties.unumpy as unp
+
 import numpy as np
+import pandas as pd
+import uncertainties.unumpy as unp
 
 
 
@@ -104,37 +106,37 @@ import numpy as np
 #   latex_tools.exportar("tablas/medidas.tex", tex)
 #
 #
-# CONFIG GLOBAL (TABLA_CONFIG)
-# ============================================================
-# Configura el estilo de TODAS las tablas generadas por valor_pm():
+# Configuración de tablas (TABLA_CONFIG):
 #   TABLA_CONFIG["lineas"] = "hline"     # o "booktabs" o None
 #   TABLA_CONFIG["centrar"] = True       # centra la tabla
 #   TABLA_CONFIG["tamano"] = "small"     # o None, "footnotesize", etc.
 #   TABLA_CONFIG["envolver"] = True      # activa \begin{table}...\end{table}
 #   TABLA_CONFIG["posicion"] = "htbp"    # posición del flotante
-#
-# ============================================================
 
-# ============================================================
-#  CONFIG GLOBAL DE TABLAS
-# ============================================================
+
+# ============================================================================
+# CONFIGURACIÓN GLOBAL DE TABLAS
+# ============================================================================
 
 TABLA_CONFIG = {
     "centrar": True,
-    "tamano": None,      # None | "small" | "footnotesize" | ...
-    "lineas": "hline",   # "booktabs" | "hline" | None
-    "envolver": True,       # usar entorno table
-    "posicion": "htbp",
+    "tamano": None,          # None | "small" | "footnotesize" | ...
+    "lineas": "hline",       # "booktabs" | "hline" | None
+    "envolver": True,        # Usar entorno table flotante
+    "posicion": "htbp",      # Posición del flotante
 }
 
 
-
-# ============================================================
-#  UTILIDADES DE REDONDEO Y CIFRAS SIGNIFICATIVAS
-# ============================================================
+# ============================================================================
+# UTILIDADES DE REDONDEO Y CIFRAS SIGNIFICATIVAS
+# ============================================================================
 
 def _orden_magnitud(x: float) -> int:
-    """Devuelve el orden de magnitud decimal de x."""
+    """
+    Devuelve el orden de magnitud decimal de x.
+    
+    Ejemplo: _orden_magnitud(0.0123) → -2
+    """
     if x == 0:
         return 0
     return int(math.floor(math.log10(abs(x))))
@@ -146,12 +148,25 @@ def redondeo_incertidumbre(
     cifras: int = 2,
 ):
     """
-    Redondea valor e incertidumbre siguiendo reglas metrológicas:
-
+    Redondea valor e incertidumbre siguiendo reglas metrológicas estándar.
+    
+    Parámetros
+    ----------
+    valor : float
+        Valor central a redondear.
+    sigma : float
+        Incertidumbre (debe ser > 0).
+    cifras : int, default 2
+        Número de cifras significativas para la incertidumbre (1 o 2).
+    
+    Devuelve
+    --------
+    tuple[float, float, int]
+        (valor_redondeado, sigma_redondeada, decimales)
+    
+    Reglas:
     - La incertidumbre se da con 1 o 2 cifras significativas
-    - El valor se redondea al mismo decimal
-
-    Devuelve: (valor_redondeado, sigma_redondeada, decimales)
+    - El valor se redondea al mismo número de decimales que sigma
     """
     if sigma <= 0:
         raise ValueError("La incertidumbre debe ser positiva")
@@ -165,9 +180,9 @@ def redondeo_incertidumbre(
     return valor_r, sigma_r, decimales
 
 
-# ============================================================
-#  FORMATO x ± s(x)
-# ============================================================
+# ============================================================================
+# FORMATO LATEX CON INCERTIDUMBRES
+# ============================================================================
 
 def _to_latex_sci(valor: float, cifras: int = 2) -> str:
     """
@@ -194,13 +209,15 @@ def _valor_pm_escalar(
     siunitx: bool = False,
 ):
     """
-    Devuelve contenido LaTeX del tipo:
-
+    Formatea un valor escalar con incertidumbre en LaTeX.
+    
+    Devuelve string LaTeX del tipo:
         (x ± s)
-    o
+    o con siunitx:
         \\SI{x \\pm s}{unidad}
-
-    SIN delimitadores matemáticos externos.
+    
+    SIN delimitadores matemáticos externos (\\[ \\]).
+    Usa notación científica automáticamente para valores muy grandes o pequeños.
     """
     v, s, d = redondeo_incertidumbre(valor, sigma, cifras)
 
@@ -246,12 +263,68 @@ def valor_pm(
 
     orientacion: str = "vertical",    # solo para vectores 1D
 
-    # --- NUEVO ---
+    # --- encabezados ---
     headers: Optional[list[str]] = None,       # encabezados de columnas
     row_headers: Optional[list[str]] = None,   # encabezados de filas
 ):
     """
-    Fachada única de presentación con incertidumbres.
+    Función principal para formatear valores con incertidumbres en LaTeX.
+    
+    Admite escalares, vectores y matrices. Para escalares devuelve expresión
+    matemática \\[...\\], para vectores/matrices genera tabla LaTeX.
+    
+    Parámetros
+    ----------
+    valor : float, array_like, o uncertainties.uarray
+        Valor(es) a formatear.
+    sigma : float, array_like, o None
+        Incertidumbre(s). Si None, se asume que valor ya es uarray.
+    unidad : str, optional
+        Unidad física en formato LaTeX (ej: "m/s^2").
+    cifras : int, default 2
+        Cifras significativas para la incertidumbre (1 o 2).
+    siunitx : bool, default False
+        Si True, usa formato \\SI{...}{...} (requiere unidad).
+    caption : str, optional
+        Caption para la tabla (solo vectores/matrices).
+    label : str, optional
+        Label LaTeX para referencia cruzada.
+    centrar : bool, optional
+        Si True, centra la tabla. Por defecto usa TABLA_CONFIG.
+    tamano : str, optional
+        Tamaño de fuente ("small", "footnotesize", etc.).
+    lineas : str, optional
+        Estilo de líneas: "booktabs", "hline" o None.
+    envolver : bool, optional
+        Si True, envuelve en entorno table flotante.
+    posicion : str, optional
+        Posición del flotante ("htbp", "H", etc.).
+    orientacion : str, default "vertical"
+        Para vectores 1D: "vertical" (columna) o "horizontal" (fila).
+    headers : list[str], optional
+        Encabezados de columnas.
+    row_headers : list[str], optional
+        Encabezados de filas.
+    
+    Devuelve
+    --------
+    str
+        Código LaTeX formateado.
+    
+    Ejemplos
+    --------
+    >>> # Escalar
+    >>> valor_pm(3.14159, 0.0123, cifras=2)
+    '\\[(3.14 ± 0.01)\\]'
+    
+    >>> # Con unidad
+    >>> valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
+    '\\[(9.81 ± 0.05)\\,\\mathrm{m/s^2}\\]'
+    
+    >>> # Vector (tabla)
+    >>> x = np.array([1.0, 2.0, 3.0])
+    >>> valor_pm(x, 0.1, cifras=1, caption="Medidas")
+    # Genera tabla LaTeX 3×1
     """
 
     # Defaults desde configuración global
@@ -388,9 +461,9 @@ def valor_pm(
     return out
 
 
-# ============================================================
-#  EXPORTACIÓN A ARCHIVO
-# ============================================================
+# ============================================================================
+# EXPORTACIÓN A ARCHIVO
+# ============================================================================
 
 def exportar(
     filename: str,
@@ -398,19 +471,33 @@ def exportar(
     modo: str = "w",
 ):
     """
-    Escribe contenido LaTeX en un archivo .tex
+    Escribe contenido LaTeX en un archivo .tex.
+    
+    Parámetros
+    ----------
+    filename : str
+        Ruta del archivo a crear/modificar.
+    contenido : str
+        Código LaTeX a escribir.
+    modo : str, default "w"
+        Modo de apertura: "w" (sobrescribir) o "a" (añadir).
     """
     with open(filename, modo, encoding="utf-8") as f:
         f.write(contenido)
 
-# ============================================================
-#  FACHADA (MISMO ESTILO QUE `estadistica = _Estadistica()`)
-# ============================================================
+
+# ============================================================================
+# FACHADA (INSTANCIA SINGLETON)
+# ============================================================================
 
 class _LatexTools:
-    """Herramientas LaTeX (fachada estilo objeto, como en tus otros módulos)."""
+    """
+    Fachada de herramientas LaTeX para análisis experimental.
+    
+    Proporciona acceso unificado a funciones de formateo, redondeo
+    y exportación de resultados científicos en LaTeX.
+    """
 
-    # Redondeo / formato
     redondeo_incertidumbre = staticmethod(redondeo_incertidumbre)
     valor_pm = staticmethod(valor_pm)
     exportar = staticmethod(exportar)
