@@ -207,3 +207,6 @@ To use these tools in your local environment, clone the repository:
 
 ```bash
 git clone https://github.com/tu-usuario/python_toolbox.git
+
+Import module
+python -m pip install -e "C:\Users\...\toolbox"    
