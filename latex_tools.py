@@ -16,7 +16,7 @@ import math
 from typing import Optional
 
 import numpy as np
-import pandas as pd
+import sympy as sp
 import uncertainties.unumpy as unp
 
 
@@ -485,6 +485,32 @@ def exportar(
     with open(filename, modo, encoding="utf-8") as f:
         f.write(contenido)
 
+# ============================================================================
+# Conexión Sympy-LaTeX
+# ============================================================================
+
+def expr_to_latex(expr: sp.Expr, *, simplify: bool = True) -> str:
+    """
+    Convierte una expresión simbólica de SymPy a LaTeX.
+
+    Parámetros
+    ----------
+    expr : sympy.Expr
+        Expresión simbólica.
+    simplify : bool, default True
+        Si True, simplifica antes de convertir.
+
+    Devuelve
+    --------
+    str
+        Cadena LaTeX.
+    """
+    if simplify:
+        expr = sp.simplify(expr)
+
+    return sp.latex(expr)
+
+
 
 # ============================================================================
 # FACHADA (INSTANCIA SINGLETON)
@@ -501,6 +527,7 @@ class _LatexTools:
     redondeo_incertidumbre = staticmethod(redondeo_incertidumbre)
     valor_pm = staticmethod(valor_pm)
     exportar = staticmethod(exportar)
+    expr_to_latex = staticmethod(expr_to_latex)
 
 
 latex_tools = _LatexTools()

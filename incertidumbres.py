@@ -1,56 +1,38 @@
 """
-incertidumbres.py
-Herramientas prácticas para trabajar con magnitudes con incertidumbre
-de forma cómoda y consistente con el flujo Excel → Python → LaTeX.
+RESUMEN RÁPIDO (Funciones públicas)
+----------------------------------
+u
+    INPUT:
+        x: number | array-like -> valores nominales
+        sigmax: number | array-like -> incertidumbre(s) (desviación típica)
+    OUTPUT:
+        ufloat | unp.uarray -> magnitud con incertidumbre
+    ERRORES:
+        ValueError -> sigmax incompatible con forma de x
+    NOTAS:
+        si x es escalar devuelve ufloat; si es array devuelve unp.uarray
 
-Supuesto clave: la librería `uncertainties` SIEMPRE está instalada.
-Puedes usar NumPy directamente (`np.sqrt`, `np.cos`, etc.) sobre ufloats
-o arrays de ufloats (dtype=object) y la propagación se aplicará vía
-`__array_ufunc__` de uncertainties.
-
-Diseño:
-- Fachada estilo objeto (singleton exportado: `incertidumbres`)
-- Integra con `latex_tools` para salida metrológica en LaTeX
-- Usa siempre la librería `uncertainties` (dependencia obligatoria)
-
-GUÍA RÁPIDA DE USO
-===================
-
-from mi_toolbox.incertidumbres import incertidumbres
-from mi_toolbox.latex_tools import latex_tools
-
-# 1) Crear magnitudes con incertidumbre
-uL = incertidumbres.u(1.250, 0.020)
-ug = incertidumbres.u(9.81, 0.05)
-
-# 2) Formatear para LaTeX con redondeo metrológico
-tex_g = incertidumbres.pm(ug, unidad="m/s^2", cifras=2)
-# → "(9.81 ± 0.05) \mathrm{m/s^2}" (según reglas de latex_tools)
-
-# 3) Construir una tabla de datos a partir de arrays de ufloat/tuplas
-#    (ajusta a latex_tools.tabla_datos_con_incertidumbres)
-#    x_u y V_u son listas/arrays de ufloat/tuplas (valor, sigma)
-tex_tabla = incertidumbres.tabla_desde_u(
-    ["x (cm)", "V (V)"],
-    [x_u, V_u],
-    cifras=1,
-    caption="Medidas",
-    label="tab:medidas"
-)
-
-# 4) Propagación analítica (sin uncertainties):
-res = incertidumbres.propagacion(
-    "x*y",
-    valores={"x": 2.0, "y": 3.5},
-    incertidumbres={"x": 0.05, "y": 0.10}
-)
-# res → {"valor": 7.0, "incertidumbre": ...}
-
+propagacion_incertidumbre_sympy
+    INPUT:
+        f: sympy.Expr -> expresión simbólica
+        vars_: list[sympy.Symbol] -> variables
+        valores: dict[Symbol, object] -> valores nominales
+        sigmas: dict[Symbol, float] -> incertidumbres
+        cov: sympy.Matrix | None -> covarianzas (opcional)
+        simplify: bool -> simplificar expresiones
+    OUTPUT:
+        dict -> expresiones simbólicas, valores numéricos y LaTeX
+        claves: f, grad, Sigma, var_f, sigma_f, valor, incertidumbre
+    ERRORES:
+        ValueError -> datos faltantes, tamaños incompatibles, sigma negativa
+        TypeError -> cov no es sympy.Matrix
+    NOTAS:
+        devuelve expr simbólica, valores numéricos y representación LaTeX si aplica
 """
 
 from __future__ import annotations
 
-from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 # Dependencia obligatoria: uncertainties SIEMPRE instalada
@@ -58,8 +40,10 @@ from uncertainties import ufloat
 from uncertainties.core import AffineScalarFunc
 import uncertainties.unumpy as unp
 
-from .latex_tools import latex_tools
+from .latex_tools import expr_to_latex, latex_tools
 from .estadistica import estadistica
+import sympy as sp
+
 
 
 
@@ -79,6 +63,15 @@ class _Incertidumbres:
     def u(x, sigmax=0.0):
         """
         Construye una magnitud con incertidumbre (caso escalar o array) usando `uncertainties`.
+        INPUT:
+            x: number | array-like -> valores nominales
+            sigmax: number | array-like -> incertidumbre(s) (desviación típica)
+        OUTPUT:
+            ufloat | unp.uarray -> magnitud con incertidumbre
+        ERRORES:
+            ValueError -> sigmax incompatible con forma de x
+        NOTAS:
+            si x es escalar devuelve ufloat; si es array devuelve unp.uarray
 
         Reglas:
         - Si x es escalar (0-D) -> devuelve `ufloat(x, sigmax)`.
@@ -127,6 +120,139 @@ class _Incertidumbres:
                     ) from e
 
         return unp.uarray(x_arr, s_arr)
+    
+    @staticmethod
+    def propagacion_incertidumbre_sympy(
+        f: sp.Expr,
+        vars_: List[sp.Symbol],
+        valores: Dict[sp.Symbol, object],
+        sigmas: Dict[sp.Symbol, float],
+        cov: Optional[sp.Matrix] = None,
+        simplify: bool = True
+    ) -> Dict[str, object]:
+        """
+        Propagación simbólica de incertidumbres con SymPy.
+        INPUT:
+            f: sympy.Expr -> expresión simbólica
+            vars_: list[sympy.Symbol] -> variables
+            valores: dict[Symbol, object] -> valores nominales
+            sigmas: dict[Symbol, float] -> incertidumbres
+            cov: sympy.Matrix | None -> covarianzas (opcional)
+            simplify: bool -> simplificar expresiones
+        OUTPUT:
+            dict -> expresiones simbólicas, valores numéricos y LaTeX
+            claves: f, grad, Sigma, var_f, sigma_f, valor, incertidumbre
+        ERRORES:
+            ValueError -> datos faltantes, tamaños incompatibles, sigma negativa
+            TypeError -> cov no es sympy.Matrix
+        NOTAS:
+            devuelve expr simbólica, valores numéricos y representación LaTeX si aplica
+        """
+        import numpy as np
+        import sympy as sp
+
+        # --------------------------------------------------
+        # Validaciones
+        # --------------------------------------------------
+        n = len(vars_)
+        if n == 0:
+            raise ValueError("vars_ no puede estar vacío.")
+
+        for v in vars_:
+            if v not in valores:
+                raise ValueError(f"Falta valor nominal para {v}.")
+            if v not in sigmas:
+                raise ValueError(f"Falta sigma para {v}.")
+            if sigmas[v] < 0:
+                raise ValueError(f"Sigma negativa para {v}.")
+
+        # --------------------------------------------------
+        # Gradiente simbólico
+        # --------------------------------------------------
+        grad = sp.Matrix([sp.diff(f, v) for v in vars_])
+
+        # --------------------------------------------------
+        # Matriz de covarianzas
+        # --------------------------------------------------
+        if cov is None:
+            sigma_syms = [sp.Symbol(f"sigma_{v}") for v in vars_]
+            Sigma = sp.diag(*[s**2 for s in sigma_syms])
+            sigma_vals = {s: float(sigmas[v]) for s, v in zip(sigma_syms, vars_)}
+        else:
+            if not isinstance(cov, sp.MatrixBase):
+                raise TypeError("cov debe ser sympy.Matrix (o None).")
+            if cov.shape != (n, n):
+                raise ValueError(f"cov debe ser de tamaño {n}x{n}.")
+            Sigma = cov
+            sigma_syms = []
+            sigma_vals = {}
+
+        # --------------------------------------------------
+        # Varianza propagada
+        # --------------------------------------------------
+        var_f = (grad.T * Sigma * grad)[0, 0]
+
+        if simplify:
+            grad_s = sp.simplify(grad)
+            var_f_s = sp.simplify(var_f)
+        else:
+            grad_s, var_f_s = grad, var_f
+
+        sigma_f_s = sp.sqrt(var_f_s)
+        if simplify:
+            sigma_f_s = sp.simplify(sigma_f_s)
+
+        # --------------------------------------------------
+        # Evaluación numérica (ESCALAR O VECTORIAL)
+        # --------------------------------------------------
+        f_num = sp.lambdify(vars_, f, modules="numpy")
+        sigma_f_num = sp.lambdify(
+            [*vars_, *sigma_syms],
+            sigma_f_s,
+            modules="numpy"
+        )
+
+        args_vals = [valores[v] for v in vars_]
+        args_sigmas = [sigma_vals[s] for s in sigma_syms]
+
+        f_val = f_num(*args_vals)
+        sigma_f_val = sigma_f_num(*args_vals, *args_sigmas)
+
+        # --------------------------------------------------
+        # LaTeX (solo simbólico + valores escalares)
+        # --------------------------------------------------
+        latex = {
+            "f": expr_to_latex(f, simplify=simplify),
+            "grad": expr_to_latex(grad_s, simplify=False),
+            "Sigma": expr_to_latex(Sigma, simplify=False),
+            "var_f": expr_to_latex(var_f_s, simplify=simplify),
+            "sigma_f": expr_to_latex(sigma_f_s, simplify=simplify),
+        }
+
+        latex_vals = None
+        if np.isscalar(f_val):
+            latex_vals = {
+                "f_val": sp.latex(sp.N(f_val)),
+                "sigma_f_val": sp.latex(sp.N(sigma_f_val)),
+            }
+
+        # --------------------------------------------------
+        # Return
+        # --------------------------------------------------
+        return {
+            "f": {"expr": f, "latex": latex["f"]},
+            "grad": {"expr": grad_s, "latex": latex["grad"]},
+            "Sigma": {"expr": Sigma, "latex": latex["Sigma"]},
+            "var_f": {"expr": var_f_s, "latex": latex["var_f"]},
+            "sigma_f": {"expr": sigma_f_s, "latex": latex["sigma_f"]},
+            "valor": {"value": f_val, "latex": latex_vals["f_val"] if latex_vals else None},
+            "incertidumbre": {
+                "value": sigma_f_val,
+                "latex": latex_vals["sigma_f_val"] if latex_vals else None,
+            },
+        }
+
+
     # --------- Accesores ---------
     
 
