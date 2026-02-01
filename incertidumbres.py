@@ -251,6 +251,68 @@ class _Incertidumbres:
                 "latex": latex_vals["sigma_f_val"] if latex_vals else None,
             },
         }
+def propagar(expr, valores, sigmas, simplify=True):
+    """
+    Propagación de incertidumbres directa y minimalista.
+
+    expr     : expresión simbólica f(x1, x2, ..., xk)
+    valores  : tupla (x1, x2, ..., xk)  [arrays o escalares]
+    sigmas   : tupla (sx1, sx2, ..., sxk)
+
+    Devuelve:
+      dict con:
+        - valor
+        - sigma
+        - expr
+        - sigma_expr
+        - sigma_latex
+    """
+    import numpy as np
+    import sympy as sp
+
+    symbols = sorted(expr.free_symbols, key=lambda s: s.name)
+
+    if len(symbols) != len(valores):
+        raise ValueError("Número de variables y valores no coincide")
+
+    if len(sigmas) < len(valores):
+        sigmas = list(sigmas) + [0.0] * (len(valores) - len(sigmas))
+
+    first = valores[0]
+    vectorial = np.ndim(first) > 0
+    N = len(first) if vectorial else 1
+
+    f_vals = []
+    s_vals = []
+
+    for i in range(N):
+        vals_i = {
+            s: v[i] if vectorial else v
+            for s, v in zip(symbols, valores)
+        }
+        sigs_i = {
+            s: sig
+            for s, sig in zip(symbols, sigmas)
+        }
+
+        res = incertidumbres.propagacion_incertidumbre_sympy(
+            expr,
+            symbols,
+            vals_i,
+            sigs_i,
+            simplify=simplify
+        )
+
+        f_vals.append(res["valor"])
+        s_vals.append(res["incertidumbre"])
+
+    return {
+        "valor": np.array(f_vals) if vectorial else f_vals[0],
+        "sigma": np.array(s_vals) if vectorial else s_vals[0],
+        "expr": expr,
+        "sigma_expr": res["sigma_f"]["expr"],
+        "sigma_latex": res["sigma_f"]["latex"],
+    }
 
 
     # --------- Accesores ---------
