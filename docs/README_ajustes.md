@@ -40,3 +40,41 @@ Ajuste de curvas por mínimos cuadrados ponderados (WLS) con cálculo de covaria
 
 ## Salida
 Los resultados siempre se devuelven como diccionarios con claves estables para facilitar su uso posterior.
+
+## Ejemplos
+```python
+import numpy as np
+from ajustes import ajustes
+
+x = np.linspace(0, 10, 40)
+y = 1.5 + 2.0*x
+sy = 0.5*np.ones_like(x)
+
+res = ajustes.ajuste_lineal(x, y, sy=sy)
+print(res["parametros"], res["chi2_red"], res["p"])
+
+pred = ajustes.incertidumbre_prediccion(res, lambda xv, a, b: a + b*xv, x0=7.5)
+print(pred["y"], pred["sigma_modelo"])
+```
+
+## Mini ejemplos (por función)
+```python
+from ajustes import ajustes
+
+# ajuste_lineal
+res_lin = ajustes.ajuste_lineal(x, y, sy=sy)
+
+# ajuste_polinomico
+res_poly = ajustes.ajuste_polinomico(x, y, grado=2, sy=sy)
+
+# ajuste (modelo callable)
+def modelo(xv, a, b):
+  return a + b*xv
+res_gen = ajustes.ajuste(modelo, x, y, sy=sy, p0=[1, 1])
+
+# intervalo_confianza_parametros
+ic = ajustes.intervalo_confianza_parametros(res_gen, nivel=0.95)
+
+# incertidumbre_prediccion
+pred = ajustes.incertidumbre_prediccion(res_gen, modelo, x0=5.0)
+```

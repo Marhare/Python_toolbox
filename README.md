@@ -39,6 +39,14 @@ A collection of utilities and tools for Python, designed to simplify common task
 
 **Errores típicos:** longitudes incompatibles, `sy` no positivo, modelo inválido.
 
+**Ejemplo rápido:**
+```python
+from ajustes import ajustes
+
+res = ajustes.ajuste_lineal(x, y, sy=sy)
+print(res["parametros"], res["chi2_red"], res["p"])
+```
+
 ---
 
 ### animaciones.py
@@ -55,6 +63,16 @@ A collection of utilities and tools for Python, designed to simplify common task
 
 **Notas:** en notebooks con backend inline puede verse un frame estático; se recomienda guardar a GIF/MP4.
 
+**Ejemplo rápido:**
+```python
+from graficos import graficos
+from animaciones import animaciones
+
+serie = graficos.Serie(x, y)
+scene = graficos.Scene(serie, title="Demo")
+anim = animaciones.animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0)
+```
+
 ---
 
 ### estadistica.py
@@ -70,6 +88,14 @@ A collection of utilities and tools for Python, designed to simplify common task
 - `test_media` (z/t, Poisson exacto, Binomial exacto)
 - `test_ks` (normal o uniforme)
 
+**Ejemplo rápido:**
+```python
+from estadistica import estadistica
+
+res = estadistica.test_media(x, mu0=0.0, distribucion="normal")
+print(res["estadistico"], res["p_valor"])
+```
+
 ---
 
 ### incertidumbres.py
@@ -81,6 +107,12 @@ A collection of utilities and tools for Python, designed to simplify common task
 
 **Notas:** integra con `latex_tools` para LaTeX.
 
+**Ejemplo rápido:**
+```python
+from incertidumbres import incertidumbres
+u = incertidumbres.u(10.0, 0.2)
+```
+
 ---
 
 ### fft_tools.py
@@ -89,6 +121,12 @@ A collection of utilities and tools for Python, designed to simplify common task
 **API:**
 - `fft(signal, dt)`
 - `espectro_potencia(signal, dt)`
+
+**Ejemplo rápido:**
+```python
+from fft_tools import fft_tools
+spec = fft_tools.espectro_potencia(signal, dt)
+```
 
 ---
 
@@ -99,6 +137,13 @@ A collection of utilities and tools for Python, designed to simplify common task
 
 **Motor:** `plot(*objetos, layout=None, dims="2D", show=True, ...)`
 
+**Ejemplo rápido:**
+```python
+from graficos import graficos
+serie = graficos.Serie(x, y, label="Datos")
+graficos.plot(serie)
+```
+
 ---
 
 ### montecarlo.py
@@ -108,6 +153,12 @@ A collection of utilities and tools for Python, designed to simplify common task
 - `integral_1d(f, a, b, n=10000)`
 - `propagacion(fun, generadores, n=10000)`
 
+**Ejemplo rápido:**
+```python
+from montecarlo import montecarlo
+res = montecarlo.integral_1d(lambda t: t**2, 0, 1, n=5000)
+```
+
 ---
 
 ### numericos.py
@@ -116,6 +167,14 @@ A collection of utilities and tools for Python, designed to simplify common task
 **API principal:**
 - `derivar`, `integrar_indefinida`, `integrar_definida`
 - `raiz_numerica`, `evaluar`, `rk4`
+
+**Ejemplo rápido (EDO con RK4):**
+```python
+from numericos import numericos
+def f(t, y):
+	return -0.8*y
+rk = numericos.rk4(f, (0, 5), y0=1.0, dt=0.1)
+```
 
 ---
 
@@ -127,6 +186,12 @@ A collection of utilities and tools for Python, designed to simplify common task
 - `valor_pm`
 - `expr_to_latex`
 - `exportar`
+
+**Ejemplo rápido:**
+```python
+from latex_tools import latex_tools
+tex = latex_tools.valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
+```
 
 ## 🛠️ Requirements
 

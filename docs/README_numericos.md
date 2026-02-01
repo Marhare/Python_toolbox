@@ -27,3 +27,37 @@ Calculadora numérico‑simbólica con auto‑detección: derivación, integraci
 ## Notas
 - Mezcla entradas `sympy.Expr`, `str` o `callable`.
 - Mantiene compatibilidad con funciones legacy (`derivada`).
+
+## Ejemplos
+```python
+from numericos import numericos
+
+# EDO con RK4
+def f(t, y):
+  return -0.8*y
+rk = numericos.rk4(f, (0, 5), y0=1.0, dt=0.1)
+print(rk["y"][-1])
+```
+
+## Mini ejemplos (por función)
+```python
+from numericos import numericos
+
+# derivar (simbólico)
+dx = numericos.derivar("sin(x) + x**2", "x")
+
+# derivar (numérico)
+df = numericos.derivar(lambda t: t**2, "x", metodo="numerico")
+
+# integrar_indefinida (simbólica)
+F = numericos.integrar_indefinida("exp(-x)", "x")
+
+# integrar_definida (numérica si no hay primitiva cerrada)
+I = numericos.integrar_definida(lambda t: t**2, "x", 0, 1)
+
+# raiz_numerica
+r = numericos.raiz_numerica(lambda t: t**2 - 2, 1.0)
+
+# evaluar
+val = numericos.evaluar("sin(x) + x**2", {"x": 1.2})
+```

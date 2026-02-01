@@ -31,3 +31,16 @@ Devuelve un `matplotlib.animation.FuncAnimation`. Si `show=True`, muestra la ani
 - `scene` no válido.
 - Objetos en `evolve` no presentes en la escena.
 - Formato de datos devuelto por `f(t)` incompatible.
+
+## Ejemplo
+```python
+import numpy as np
+from graficos import graficos
+from animaciones import animaciones
+
+x = np.linspace(0, 2*np.pi, 200)
+y = np.sin(x)
+serie = graficos.Serie(x, y, label="sin")
+scene = graficos.Scene(serie, title="Animación")
+anim = animaciones.animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0)
+```
