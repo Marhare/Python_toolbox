@@ -460,6 +460,19 @@ def valor_pm(
         out += "\n" + unidad_global
     return out
 
+def tabla_pm(
+    columnas,
+    valores,
+    sigmas,
+    **kw
+):
+    valores = np.column_stack(valores)
+    sigmas = np.column_stack(
+        [np.full_like(valores[:, i], s) if np.isscalar(s) else s
+         for i, s in enumerate(sigmas)]
+    )
+    return valor_pm(valores, sigmas, headers=columnas, **kw)
+
 
 # ============================================================================
 # EXPORTACIÓN A ARCHIVO

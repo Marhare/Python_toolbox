@@ -287,7 +287,7 @@ def propagar(expr, valores, sigmas, simplify=True):
 
     for i in range(N):
         vals_i = {
-            s: v[i] if vectorial else v
+            s: v[i] if np.ndim(v) > 0 else v
             for s, v in zip(symbols, valores)
         }
         sigs_i = {
