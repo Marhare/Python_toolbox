@@ -541,6 +541,7 @@ class _LatexTools:
     valor_pm = staticmethod(valor_pm)
     exportar = staticmethod(exportar)
     expr_to_latex = staticmethod(expr_to_latex)
+    tabla_pm = staticmethod(tabla_pm)
 
 
 latex_tools = _LatexTools()
