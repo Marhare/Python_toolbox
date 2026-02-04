@@ -212,5 +212,5 @@ git clone https://github.com/Marhare/Python_toolbox
 ```
 Import module
 ```bash
-python -m pip install -e "C:\Users\...\toolbox"    
+python -m pip install -e "C:\Users\...\Python_toolbox"    
 ```

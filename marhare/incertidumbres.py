@@ -120,199 +120,115 @@ class _Incertidumbres:
                     ) from e
 
         return unp.uarray(x_arr, s_arr)
-    
+    # --------- Propagación de incertidumbres ---------
     @staticmethod
     def propagacion_incertidumbre_sympy(
         f: sp.Expr,
-        vars_: List[sp.Symbol],
-        valores: Dict[sp.Symbol, object],
-        sigmas: Dict[sp.Symbol, float],
-        cov: Optional[sp.Matrix] = None,
+        vars_: list[sp.Symbol],
+        valores: dict[sp.Symbol, object],
+        sigmas: dict[sp.Symbol, float],
+        cov: sp.Matrix | None = None,
         simplify: bool = True
-    ) -> Dict[str, object]:
-        """
-        Propagación simbólica de incertidumbres con SymPy.
-        INPUT:
-            f: sympy.Expr -> expresión simbólica
-            vars_: list[sympy.Symbol] -> variables
-            valores: dict[Symbol, object] -> valores nominales
-            sigmas: dict[Symbol, float] -> incertidumbres
-            cov: sympy.Matrix | None -> covarianzas (opcional)
-            simplify: bool -> simplificar expresiones
-        OUTPUT:
-            dict -> expresiones simbólicas, valores numéricos y LaTeX
-            claves: f, grad, Sigma, var_f, sigma_f, valor, incertidumbre
-        ERRORES:
-            ValueError -> datos faltantes, tamaños incompatibles, sigma negativa
-            TypeError -> cov no es sympy.Matrix
-        NOTAS:
-            devuelve expr simbólica, valores numéricos y representación LaTeX si aplica
-        """
-        import numpy as np
+    ) -> dict:
         import sympy as sp
-
-        # --------------------------------------------------
-        # Validaciones
-        # --------------------------------------------------
-        n = len(vars_)
-        if n == 0:
-            raise ValueError("vars_ no puede estar vacío.")
+        import numpy as np
 
         for v in vars_:
             if v not in valores:
-                raise ValueError(f"Falta valor nominal para {v}.")
+                raise ValueError(f"Falta valor para {v}")
             if v not in sigmas:
-                raise ValueError(f"Falta sigma para {v}.")
+                raise ValueError(f"Falta sigma para {v}")
             if sigmas[v] < 0:
-                raise ValueError(f"Sigma negativa para {v}.")
+                raise ValueError(f"Sigma negativa para {v}")
 
-        # --------------------------------------------------
-        # Gradiente simbólico
-        # --------------------------------------------------
+        # Gradiente
         grad = sp.Matrix([sp.diff(f, v) for v in vars_])
 
-        # --------------------------------------------------
-        # Matriz de covarianzas
-        # --------------------------------------------------
+        # Covarianzas
         if cov is None:
-            sigma_syms = [sp.Symbol(f"sigma_{v}") for v in vars_]
-            Sigma = sp.diag(*[s**2 for s in sigma_syms])
-            sigma_vals = {s: float(sigmas[v]) for s, v in zip(sigma_syms, vars_)}
+            Sigma = sp.diag(*[sigmas[v]**2 for v in vars_])
         else:
-            if not isinstance(cov, sp.MatrixBase):
-                raise TypeError("cov debe ser sympy.Matrix (o None).")
-            if cov.shape != (n, n):
-                raise ValueError(f"cov debe ser de tamaño {n}x{n}.")
+            if cov.shape != (len(vars_), len(vars_)):
+                raise ValueError("Dimensiones incorrectas de cov")
             Sigma = cov
-            sigma_syms = []
-            sigma_vals = {}
 
-        # --------------------------------------------------
-        # Varianza propagada
-        # --------------------------------------------------
-        var_f = (grad.T * Sigma * grad)[0, 0]
+        var_f = (grad.T * Sigma * grad)[0]
+        sigma_f = sp.sqrt(var_f)
 
         if simplify:
-            grad_s = sp.simplify(grad)
-            var_f_s = sp.simplify(var_f)
-        else:
-            grad_s, var_f_s = grad, var_f
+            var_f = sp.simplify(var_f)
+            sigma_f = sp.simplify(sigma_f)
 
-        sigma_f_s = sp.sqrt(var_f_s)
-        if simplify:
-            sigma_f_s = sp.simplify(sigma_f_s)
+        f_num = sp.lambdify(vars_, f, "numpy")
+        s_num = sp.lambdify(vars_, sigma_f, "numpy")
 
-        # --------------------------------------------------
-        # Evaluación numérica (ESCALAR O VECTORIAL)
-        # --------------------------------------------------
-        f_num = sp.lambdify(vars_, f, modules="numpy")
-        sigma_f_num = sp.lambdify(
-            [*vars_, *sigma_syms],
-            sigma_f_s,
-            modules="numpy"
-        )
+        args = [valores[v] for v in vars_]
 
-        args_vals = [valores[v] for v in vars_]
-        args_sigmas = [sigma_vals[s] for s in sigma_syms]
-
-        f_val = f_num(*args_vals)
-        sigma_f_val = sigma_f_num(*args_vals, *args_sigmas)
-
-        # --------------------------------------------------
-        # LaTeX (solo simbólico + valores escalares)
-        # --------------------------------------------------
-        latex = {
-            "f": expr_to_latex(f, simplify=simplify),
-            "grad": expr_to_latex(grad_s, simplify=False),
-            "Sigma": expr_to_latex(Sigma, simplify=False),
-            "var_f": expr_to_latex(var_f_s, simplify=simplify),
-            "sigma_f": expr_to_latex(sigma_f_s, simplify=simplify),
-        }
-
-        latex_vals = None
-        if np.isscalar(f_val):
-            latex_vals = {
-                "f_val": sp.latex(sp.N(f_val)),
-                "sigma_f_val": sp.latex(sp.N(sigma_f_val)),
-            }
-
-        # --------------------------------------------------
-        # Return
-        # --------------------------------------------------
         return {
-            "f": {"expr": f, "latex": latex["f"]},
-            "grad": {"expr": grad_s, "latex": latex["grad"]},
-            "Sigma": {"expr": Sigma, "latex": latex["Sigma"]},
-            "var_f": {"expr": var_f_s, "latex": latex["var_f"]},
-            "sigma_f": {"expr": sigma_f_s, "latex": latex["sigma_f"]},
-            "valor": {"value": f_val, "latex": latex_vals["f_val"] if latex_vals else None},
-            "incertidumbre": {
-                "value": sigma_f_val,
-                "latex": latex_vals["sigma_f_val"] if latex_vals else None,
-            },
+            "valor": f_num(*args),
+            "sigma": s_num(*args),
+            "expr_latex": sp.latex(f),
+            "sigma_latex": sp.latex(sigma_f),
         }
-def propagar(expr, valores, sigmas, simplify=True):
+
+def propagar(expr, valores: dict, sigmas: dict, simplify=True):
     """
-    Propagación de incertidumbres directa y minimalista.
+    Propagación de incertidumbres ROBUSTA (sin errores de orden).
 
-    expr     : expresión simbólica f(x1, x2, ..., xk)
-    valores  : tupla (x1, x2, ..., xk)  [arrays o escalares]
-    sigmas   : tupla (sx1, sx2, ..., sxk)
-
-    Devuelve:
-      dict con:
-        - valor
-        - sigma
-        - expr
-        - sigma_expr
-        - sigma_latex
+    expr     : sympy.Expr
+    valores  : dict {Symbol: array | escalar}
+    sigmas   : dict {Symbol: float}
     """
     import numpy as np
-    import sympy as sp
 
-    symbols = sorted(expr.free_symbols, key=lambda s: s.name)
+    symbols = list(expr.free_symbols)
 
-    if len(symbols) != len(valores):
-        raise ValueError("Número de variables y valores no coincide")
+    # Validaciones
+    for s in symbols:
+        if s not in valores:
+            raise ValueError(f"Falta valor para {s}")
+        if s not in sigmas:
+            raise ValueError(f"Falta sigma para {s}")
 
-    if len(sigmas) < len(valores):
-        sigmas = list(sigmas) + [0.0] * (len(valores) - len(sigmas))
-
-    first = valores[0]
-    vectorial = np.ndim(first) > 0
-    N = len(first) if vectorial else 1
+    # Vectorialidad: si alguna entrada es array
+    vectorial = any(np.ndim(v) > 0 for v in valores.values())
+    if vectorial:
+        longitudes = [len(v) for v in valores.values() if np.ndim(v) > 0]
+        N = max(longitudes) if longitudes else 1
+    else:
+        N = 1
 
     f_vals = []
     s_vals = []
 
+    # Bucle principal (aquí vive i)
     for i in range(N):
-        vals_i = {
-            s: v[i] if np.ndim(v) > 0 else v
-            for s, v in zip(symbols, valores)
-        }
-        sigs_i = {
-            s: sig
-            for s, sig in zip(symbols, sigmas)
-        }
+        vals_i = {}
+        for s in symbols:
+            v = valores[s]
+            if vectorial and np.ndim(v) > 0:
+                vals_i[s] = v[i]
+            else:
+                vals_i[s] = v
 
         res = incertidumbres.propagacion_incertidumbre_sympy(
             expr,
             symbols,
             vals_i,
-            sigs_i,
+            sigmas,
             simplify=simplify
         )
 
         f_vals.append(res["valor"])
-        s_vals.append(res["incertidumbre"])
+        s_vals.append(res["sigma"])
 
     return {
         "valor": np.array(f_vals) if vectorial else f_vals[0],
         "sigma": np.array(s_vals) if vectorial else s_vals[0],
-        "expr": expr,
-        "sigma_expr": res["sigma_f"]["expr"],
-        "sigma_latex": res["sigma_f"]["latex"],
+        "expr_latex": res["expr_latex"],
+        "sigma_latex": res["sigma_latex"],
     }
+
 
 
     # --------- Accesores ---------
