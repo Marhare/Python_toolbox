@@ -2,201 +2,201 @@
 ajustes.py
 ==========
 
-PROPÓSITO Y DIFERENCIAS:
-- Módulo de AJUSTE DE CURVAS por mínimos cuadrados ponderados (WLS).
-- ajustes.py: ajusta modelos a datos (lineal, polinómico, genérico, simbólico).
-- estadistica.py: test de hipótesis, p-valores, intervalos de confianza sobre distribuciones.
-- incertidumbres.py: propaga incertidumbres de parámetros hacia observables (derivadas, etc.).
-- Este módulo COMBINA WLS + matriz de covarianzas para permitir posterior propagación via incertidumbres.py.
+PURPOSE AND DIFFERENCES:
+- Curve fitting module using weighted least squares (WLS).
+- ajustes.py: fits models to data (linear, polynomial, generic, symbolic).
+- estadistica.py: hypothesis tests, p‑values, confidence intervals for distributions.
+- incertidumbres.py: propagates parameter uncertainties to observables (derivatives, etc.).
+- This module COMBINES WLS + a covariance matrix to allow later propagation via incertidumbres.py.
 
-HIPÓTESIS POR DEFECTO:
-- Los errores sy se interpretan como incertidumbres absolutas conocidas en y.
-- Se asume absolute_sigma=True (no reescalar errores automáticamente).
-- Los residuos se asumen independientes y gaussianos.
-- Validez estadística (normalidad, homocedasticidad) es responsabilidad del usuario.
+DEFAULT ASSUMPTIONS:
+- sy errors are interpreted as known absolute uncertainties in y.
+- absolute_sigma=True is assumed (no automatic error rescaling).
+- residuals are assumed independent and Gaussian.
+- statistical validity (normality, homoscedasticity) is the user's responsibility.
 
 
-FUNCIONES PÚBLICAS
-==================
+PUBLIC FUNCTIONS
+================
 
 1) ajuste_lineal(x, y, sy=None)
-   Ajuste y = a + b·x por WLS analítico exacto.
+   Exact analytic WLS fit for y = a + b·x.
    
    INPUT:
-       x: array_like (n,) -> variable independiente
-       y: array_like (n,) -> variable dependiente
-       sy: array_like (n,) | None -> incertidumbre absoluta de y; si None → sy=1 (todas iguales)
+       x: array_like (n,) -> independent variable
+       y: array_like (n,) -> dependent variable
+       sy: array_like (n,) | None -> absolute uncertainty of y; if None → sy=1 (all equal)
    
-   OUTPUT: dict con
-       "parametros": {"a": float, "b": float}  -> intercepto y pendiente
-       "errores": {"sa": float, "sb": float}   -> err. estándar de parámetros
-       "covarianza": array (2,2)               -> matriz covarianzas(a,b)
-       "yfit": array (n,)                      -> valores ajustados
-       "chi2": float                           -> suma residuos²/sy²
-       "ndof": int                             -> grados libertad = n - 2
+   OUTPUT: dict with
+       "parametros": {"a": float, "b": float}  -> intercept and slope
+       "errores": {"sa": float, "sb": float}   -> parameter standard errors
+       "covarianza": array (2,2)               -> covariance matrix (a,b)
+       "yfit": array (n,)                      -> fitted values
+       "chi2": float                           -> sum of residuals²/sy²
+       "ndof": int                             -> degrees of freedom = n - 2
        "chi2_red": float                       -> chi2 / ndof
-       "p": float                              -> p-valor (1 - CDF_chi2(chi2,ndof))
+       "p": float                              -> p‑value (1 - CDF_chi2(chi2,ndof))
    
-   NOTAS:
-       - Usa formulación analítica (no optimización numérica).
-       - absolute_sigma=True implícito.
+   NOTES:
+       - Uses an analytic formulation (no numeric optimization).
+       - absolute_sigma=True implied.
    
-   ERRORES:
-       - ValueError si len(x) != len(y)
-       - ValueError si sy contiene valores <= 0 o forma distinta a y
-       - ValueError si x,y no son arrays 1D
+   ERRORS:
+       - ValueError if len(x) != len(y)
+       - ValueError if sy contains values <= 0 or shape differs from y
+       - ValueError if x,y are not 1D arrays
 
 2) ajuste_polinomico(x, y, grado, sy=None)
-   Ajuste polinómico y = p0·x^n + ... + pn por WLS.
+   Polynomial fit y = p0·x^n + ... + pn by WLS.
    
    INPUT:
-       x: array_like (n,) -> variable independiente
-       y: array_like (n,) -> variable dependiente
-       grado: int         -> grado del polinomio (grado >= 0)
-       sy: array_like (n,) | None -> incertidumbre absoluta de y; si None → sy=1
+       x: array_like (n,) -> independent variable
+       y: array_like (n,) -> dependent variable
+       grado: int         -> polynomial degree (grado >= 0)
+       sy: array_like (n,) | None -> absolute uncertainty of y; if None → sy=1
    
-   OUTPUT: dict con
-       "coeficientes": array (grado+1,)       -> coef. en orden descendente (x^n, ..., x^0)
-       "errores": array (grado+1,)            -> err. estándar de cada coef.
-       "covarianza": array (grado+1,grado+1)  -> matriz covarianzas
-       "yfit": array (n,)                     -> valores ajustados
-       "chi2": float                          -> suma residuos²/sy²
-       "ndof": int                            -> grados libertad = n - (grado+1)
+   OUTPUT: dict with
+       "coeficientes": array (grado+1,)       -> coefficients in descending order (x^n, ..., x^0)
+       "errores": array (grado+1,)            -> standard error of each coefficient
+       "covarianza": array (grado+1,grado+1)  -> covariance matrix
+       "yfit": array (n,)                     -> fitted values
+       "chi2": float                          -> sum of residuals²/sy²
+       "ndof": int                            -> degrees of freedom = n - (grado+1)
        "chi2_red": float                      -> chi2 / ndof
-       "p": float                             -> p-valor
+       "p": float                             -> p‑value
    
-   NOTAS:
-       - Basado en np.polyfit con pesos 1/sy².
-       - Coeficientes en orden descendente (polinomio estándar).
-       - absolute_sigma=True implícito (covarianza sin reescalar).
+   NOTES:
+       - Based on np.polyfit with weights 1/sy².
+       - Coefficients in descending order (standard polynomial).
+       - absolute_sigma=True implied (unscaled covariance).
    
-   ERRORES:
-       - ValueError si len(x) != len(y)
-       - ValueError si sy <= 0 o forma distinta a y
-       - ValueError si x,y no son arrays 1D
-       - Error si grado < 0 o grado >= n
+   ERRORS:
+       - ValueError if len(x) != len(y)
+       - ValueError if sy <= 0 or shape differs from y
+       - ValueError if x,y are not 1D arrays
+       - Error if grado < 0 or grado >= n
 
 3) ajuste(modelo, x, y, sy=None, p0=None, *, variable="x")
-   Ajuste genérico unificado: acepta callable O expresión sympy.
+   Unified generic fit: accepts callable OR sympy expression.
    
    INPUT:
        modelo: callable f(x, *params) | sympy.Expr
-               Si callable: función que devuelve f(x, p1, p2, ...).
-               Si sympy.Expr: expresión simbólica en "x" y parámetros (p, a, k, etc.).
-       x: array_like (n,)  -> variable independiente
-       y: array_like (n,)  -> variable dependiente
-       sy: array_like (n,) | None -> incertidumbre absoluta de y
-       p0: array_like (m,) | None -> valores iniciales de m parámetros
-       variable: str -> nombre de variable independiente en expr (por defecto "x")
+               If callable: function that returns f(x, p1, p2, ...).
+               If sympy.Expr: symbolic expression in "x" and parameters (p, a, k, etc.).
+       x: array_like (n,)  -> independent variable
+       y: array_like (n,)  -> dependent variable
+       sy: array_like (n,) | None -> absolute uncertainty of y
+       p0: array_like (m,) | None -> initial values for m parameters
+       variable: str -> independent variable name in expr (default "x")
    
-   OUTPUT: dict con
-       "parametros": array (m,)                -> valores ajustados de parámetros
-       "errores": array (m,)                   -> err. estándar de cada parámetro
-       "covarianza": array (m,m)               -> matriz covarianzas
-       "yfit": array (n,)                      -> valores ajustados
-       "chi2": float                           -> suma residuos²/sy²
-       "ndof": int                             -> grados libertad = n - m
+   OUTPUT: dict with
+       "parametros": array (m,)                -> fitted parameter values
+       "errores": array (m,)                   -> standard error of each parameter
+       "covarianza": array (m,m)               -> covariance matrix
+       "yfit": array (n,)                      -> fitted values
+       "chi2": float                           -> sum of residuals²/sy²
+       "ndof": int                             -> degrees of freedom = n - m
        "chi2_red": float                       -> chi2 / ndof
-       "p": float                              -> p-valor
-       [si modelo es sympy.Expr, añade:]
-       "expresion": sympy.Expr                 -> expresión original
-       "parametros_simbolicos": list[sympy.Symbol] -> símbolos parámetros ordenados por nombre
+       "p": float                              -> p‑value
+       [if modelo is sympy.Expr, adds:]
+       "expresion": sympy.Expr                 -> original expression
+       "parametros_simbolicos": list[sympy.Symbol] -> parameter symbols ordered by name
    
-   NOTAS:
-       - Basado en scipy.optimize.curve_fit con absolute_sigma=True.
-       - Si modelo es sympy.Expr: se lambdifica automáticamente.
-       - Parámetros simbólicos detectados y ordenados alfabéticamente.
-       - Si p0 es None: se intenta con p0=ones(m) (puede fallar si inicial pobre).
+   NOTES:
+       - Based on scipy.optimize.curve_fit with absolute_sigma=True.
+       - If modelo is sympy.Expr: automatically lambdified.
+       - Symbolic parameters detected and ordered alphabetically.
+       - If p0 is None: tries p0=ones(m) (may fail with poor initialization).
    
-   ERRORES:
-       - TypeError si modelo no es callable ni sympy.Expr
-       - ValueError si variable no está en expr
-       - ValueError si len(p0) != número de parámetros
-       - ValueError si len(x) != len(y) o forma/valores de sy inválidos
-       - RuntimeError si curve_fit no converge
+   ERRORS:
+       - TypeError if modelo is neither callable nor sympy.Expr
+       - ValueError if variable is not in expr
+       - ValueError if len(p0) != number of parameters
+       - ValueError if len(x) != len(y) or sy shape/values are invalid
+       - RuntimeError if curve_fit does not converge
 
 4) intervalo_confianza_parametros(resultado_ajuste, nivel=0.95)
-   Calcula intervalos de confianza (IC) para los parámetros ajustados.
+   Computes confidence intervals (CI) for fitted parameters.
    
    INPUT:
-       resultado_ajuste: dict -> salida de ajuste()/ajuste_lineal()/ajuste_polinomico()
-       nivel: float in (0,1) -> nivel de confianza (por defecto 0.95 → 95%)
+       resultado_ajuste: dict -> output of ajuste()/ajuste_lineal()/ajuste_polinomico()
+       nivel: float in (0,1) -> confidence level (default 0.95 → 95%)
    
-   OUTPUT: dict con
-       "parametros": list[dict] con una entrada por parámetro:
+   OUTPUT: dict with
+       "parametros": list[dict] with one entry per parameter:
            {
-               "nombre": str,           -> nombre del parámetro
-               "estimacion": float,     -> valor ajustado
-               "error": float,          -> err. estándar
-               "inferior": float,       -> límite inferior del IC
-               "superior": float,       -> límite superior del IC
-               "nivel": float,          -> nivel de confianza usado
-               "distribucion": "t" | "normal" -> cuantil empleado
+               "nombre": str,           -> parameter name
+               "estimacion": float,     -> fitted value
+               "error": float,          -> standard error
+               "inferior": float,       -> lower CI bound
+               "superior": float,       -> upper CI bound
+               "nivel": float,          -> confidence level used
+               "distribucion": "t" | "normal" -> quantile used
            }
    
-   NOTAS:
-       - Usa dist. t-Student si ndof<=30, normal si ndof>30 o no existe.
-       - IC = parametro ± cuantil * error
-       - NO modifica el ajuste original.
-       - NO es intervalo de predicción (eso incluiría sy del experimento).
+   NOTES:
+       - Uses Student‑t if ndof<=30, normal if ndof>30 or missing.
+       - CI = parameter ± quantile * error
+       - DOES NOT modify the original fit.
+       - NOT a prediction interval (that would include experimental sy).
    
-   ERRORES:
-       - ValueError si nivel no está en (0,1)
-       - ValueError si resultado_ajuste no tiene 'parametros' o 'errores'
+   ERRORS:
+       - ValueError if nivel is not in (0,1)
+       - ValueError if resultado_ajuste lacks 'parametros' or 'errores'
 
 5) incertidumbre_prediccion(resultado_ajuste, modelo, x0)
-   Calcula la incertidumbre estadística de la predicción del modelo en x0.
+   Computes statistical uncertainty of the model prediction at x0.
    
    INPUT:
-       resultado_ajuste: dict -> salida de ajuste()/ajuste_lineal()/ajuste_polinomico()
-       modelo: callable f(x, *params) | sympy.Expr -> mismo modelo usado en ajuste
-       x0: float | array_like -> punto(s) donde evaluar la predicción
+       resultado_ajuste: dict -> output of ajuste()/ajuste_lineal()/ajuste_polinomico()
+       modelo: callable f(x, *params) | sympy.Expr -> same model used in fit
+       x0: float | array_like -> point(s) to evaluate the prediction
    
-   OUTPUT: dict con
-       "x": float | array -> punto(s) de evaluación
-       "y": float | array -> predicción del modelo
-       "sigma_modelo": float | array -> incertidumbre estadística de la predicción
-       (x y sigma_modelo escalares si x0 es escalar, arrays si x0 es array)
+   OUTPUT: dict with
+       "x": float | array -> evaluation point(s)
+       "y": float | array -> model prediction
+       "sigma_modelo": float | array -> statistical uncertainty of the prediction
+       (x and sigma_modelo are scalars if x0 is scalar, arrays if x0 is array)
    
-   NOTAS:
-       - Calcula SOLO la incertidumbre propagada de parámetros.
-       - NO incluye el error experimental sy del instrumento.
-       - Fórmula: Var(f) = ∇f^T · Cov · ∇f
-       - Gradiente simbólico si modelo es sympy.Expr, numérico si es callable.
-       - ADVERTENCIA: esto es "confidence band" (incertidumbre de la media).
-         Para "prediction band" (intervalo de predicción), hay que sumar sy experimental.
+   NOTES:
+       - Computes ONLY parameter‑propagated uncertainty.
+       - DOES NOT include experimental instrument error sy.
+       - Formula: Var(f) = ∇f^T · Cov · ∇f
+       - Symbolic gradient if modelo is sympy.Expr, numeric if callable.
+       - WARNING: this is a confidence band (uncertainty of the mean).
+         For a prediction band, you must add experimental sy.
    
-   ERRORES:
-       - ValueError si resultado_ajuste no tiene 'parametros' o 'covarianza'
-       - ValueError si modelo es sympy.Expr pero falta 'parametros_simbolicos'
-       - RuntimeError si hay problemas en lambdify o derivación
+   ERRORS:
+       - ValueError if resultado_ajuste lacks 'parametros' or 'covarianza'
+       - ValueError if modelo is sympy.Expr but 'parametros_simbolicos' is missing
+       - RuntimeError if lambdify or differentiation fails
 
 
-CONVENCIONES Y FLUJO TÍPICO
+CONVENTIONS AND TYPICAL FLOW
 ============================
 
-1. Ajustar datos:
+1. Fit data:
    res = ajustes.ajuste_lineal(x, y, sy=sy_data)
-   o
+   or
    res = ajustes.ajuste(modelo, x, y, sy=sy_data, p0=p0_inicial)
 
-2. Interpretar resultados:
+2. Interpret results:
    params = res["parametros"]
-   p_valor = res["p"]  -> si p > 0.05, ajuste es "aceptable"
-   chi2_red = res["chi2_red"]  -> si ~1, ajuste es bueno
+   p_valor = res["p"]  -> if p > 0.05, fit is "acceptable"
+   chi2_red = res["chi2_red"]  -> if ~1, fit is good
 
-3. Construir IC sobre parámetros:
+3. Build CI for parameters:
    ic = ajustes.intervalo_confianza_parametros(res, nivel=0.95)
    for param_ic in ic["parametros"]:
        print(f"{param_ic['nombre']}: {param_ic['inferior']} - {param_ic['superior']}")
 
-4. Evaluar incertidumbre en predicción:
+4. Evaluate prediction uncertainty:
    pred = ajustes.incertidumbre_prediccion(res, modelo, x_nuevo)
    print(f"y({x_nuevo}) = {pred['y']} ± {pred['sigma_modelo']}")
 
-5. Propagar a otros observables (usar incertidumbres.py):
-   # Combinar parámetros ajustados + covarianzas → observable nuevo
-   # (Ver módulo incertidumbres.py para detalles)
+5. Propagate to other observables (use incertidumbres.py):
+   # Combine fitted parameters + covariances → new observable
+   # (See incertidumbres.py module for details)
 """
 
 import numpy as np
@@ -210,17 +210,17 @@ class _Ajustes:
         x = np.asarray(x)
         y = np.asarray(y)
         if x.shape != y.shape:
-            raise ValueError("x e y deben tener la misma forma")
+            raise ValueError("x and y must have the same shape")
         if x.ndim != 1:
-            raise ValueError("x e y deben ser arreglos 1D")
+            raise ValueError("x and y must be 1D arrays")
         if sy is None:
             sy = np.ones_like(y)
         else:
             sy = np.asarray(sy)
             if sy.shape != y.shape:
-                raise ValueError("sy debe tener la misma forma que y")
+                raise ValueError("sy must have the same shape as y")
             if np.any(sy <= 0):
-                raise ValueError("sy debe ser positivo en todos los puntos")
+                raise ValueError("sy must be positive at all points")
         return x, y, sy
 
     @staticmethod
@@ -247,24 +247,24 @@ class _Ajustes:
             "p": p,
         }
 
-    # ---------- Lineal ----------
+    # ---------- Linear ----------
     @staticmethod
     def ajuste_lineal(x, y, sy=None):
         """
         INPUT:
             x: array_like (n,)
             y: array_like (n,)
-            sy: array_like (n,) | None  -> errores absolutos en y
+            sy: array_like (n,) | None  -> absolute errors in y
         OUTPUT:
-            dict con:
-                - parametros: {"a": intercepto, "b": pendiente}
+            dict with:
+                - parametros: {"a": intercept, "b": slope}
                 - errores: {"sa": error_a, "sb": error_b}
-                - covarianza: matriz 2x2
+                - covarianza: 2x2 matrix
                 - chi2, ndof, chi2_red, p
                 - yfit
         NOTAS:
-            - Ajuste lineal ponderado (WLS) analítico
-            - Se asume sigma absoluta conocida (no reescalar errores)
+            - Analytic weighted linear fit (WLS)
+            - Assumes absolute sigma is known (no error rescaling)
         """
         x, y, sy = _Ajustes._validar_datos(x, y, sy)
         w = 1 / sy**2
@@ -279,8 +279,8 @@ class _Ajustes:
         a = (Sxx * Sy - Sx * Sxy) / denom
         b = (S * Sxy - Sx * Sy) / denom
 
-        # Incertidumbres (covarianza) en el caso de sigma absoluta conocida
-        # Varianzas de los parámetros en ajuste lineal ponderado:
+        # Uncertainties (covariance) when absolute sigma is known
+        # Parameter variances in weighted linear fit:
         # var(a) = Sxx / denom, var(b) = S / denom, cov(a,b) = -Sx / denom
         var_a = Sxx / denom
         var_b = S / denom
@@ -305,7 +305,7 @@ class _Ajustes:
             "yfit": yfit,
         }
 
-    # ---------- Polinómico ----------
+    # ---------- Polynomial ----------
     @staticmethod
     def ajuste_polinomico(x, y, grado, sy=None):
         """
@@ -313,17 +313,17 @@ class _Ajustes:
             x: array_like (n,)
             y: array_like (n,)
             grado: int
-            sy: array_like (n,) | None  -> errores absolutos en y
+            sy: array_like (n,) | None  -> absolute errors in y
         OUTPUT:
-            dict con:
-                - coeficientes (orden descendente)
+            dict with:
+                - coeficientes (descending order)
                 - errores (sqrt(diag(cov)))
                 - covarianza
                 - chi2, ndof, chi2_red, p
                 - yfit
         NOTAS:
-            - Basado en np.polyfit con pesos
-            - Se asume sigma absoluta conocida (no reescalar errores)
+            - Based on np.polyfit with weights
+            - Assumes absolute sigma is known (no error rescaling)
         """
         x, y, sy = _Ajustes._validar_datos(x, y, sy)
         coef, cov = np.polyfit(x, y, grado, w=1 / sy, cov="unscaled")
@@ -343,7 +343,7 @@ class _Ajustes:
             "p": p,
         }
 
-    # ---------- Unificado ----------
+    # ---------- Unified ----------
     @staticmethod
     def ajuste(modelo, x, y, sy=None, p0=None, *, variable="x"):
         """
@@ -351,19 +351,19 @@ class _Ajustes:
             modelo: callable f(x, *params) | sympy.Expr
             x: array_like (n,)
             y: array_like (n,)
-            sy: array_like (n,) | None  -> errores absolutos en y
-            p0: valores iniciales | None
-            variable: str -> nombre de la variable independiente
+            sy: array_like (n,) | None  -> absolute errors in y
+            p0: initial values | None
+            variable: str -> independent variable name
         OUTPUT:
-            dict con:
+            dict with:
                 - parametros, errores, covarianza, yfit
                 - chi2, ndof, chi2_red, p
-            Si el modelo es simbólico, añade:
+            If the model is symbolic, adds:
                 - expresion
                 - parametros_simbolicos
         NOTAS:
-            - Ajuste por mínimos cuadrados ponderados (curve_fit)
-            - absolute_sigma=True siempre
+            - Weighted least squares fit (curve_fit)
+            - absolute_sigma=True always
         """
         if callable(modelo) and not isinstance(modelo, sp.Expr):
             return _Ajustes._ajuste_curvefit(modelo, x, y, sy, p0)
@@ -380,13 +380,13 @@ class _Ajustes:
                     var_symbol = list(expr.free_symbols)[0]
                 else:
                     raise ValueError(
-                        "No se pudo identificar la variable independiente; "
-                        "especifique el nombre con 'variable'"
+                        "Could not identify the independent variable; "
+                        "specify the name with 'variable'"
                     )
 
             params = sorted(expr.free_symbols - {var_symbol}, key=lambda s: s.name)
             if p0 is not None and len(p0) != len(params):
-                raise ValueError("p0 debe tener la misma longitud que los parámetros")
+                raise ValueError("p0 must have the same length as the parameters")
             if p0 is None:
                 p0 = np.ones(len(params))
 
@@ -400,20 +400,20 @@ class _Ajustes:
             res["parametros_simbolicos"] = params
             return res
 
-        raise TypeError("modelo debe ser callable o sympy.Expr")
+        raise TypeError("modelo must be callable or sympy.Expr")
 
-    # ---------- A.1 Intervalos de confianza de parámetros ----------
+    # ---------- A.1 Parameter confidence intervals ----------
     @staticmethod
     def intervalo_confianza_parametros(resultado_ajuste, nivel=0.95):
         """
-        Calcula intervalos de confianza para los parámetros ajustados.
+        Compute confidence intervals for fitted parameters.
         
         INPUT:
-            resultado_ajuste: dict resultado de ajuste()/ajuste_lineal()/ajuste_polinomico()
-            nivel: float [0, 1] -> nivel de confianza (por defecto 0.95)
+            resultado_ajuste: dict result from ajuste()/ajuste_lineal()/ajuste_polinomico()
+            nivel: float [0, 1] -> confidence level (default 0.95)
         
         OUTPUT:
-            dict con lista de intervalos:
+            dict with interval list:
             {
                 "parametros": [
                     {
@@ -430,13 +430,13 @@ class _Ajustes:
             }
         
         NOTAS:
-            - Usa distribución t-Student si ndof está disponible y es pequeño
-            - Usa distribución normal si ndof es muy grande (>30) o no existe
-            - NO modifica el ajuste
-            - IC de los parámetros, NO intervalo de predicción
+            - Uses Student‑t if ndof is available and small
+            - Uses normal distribution if ndof is large (>30) or missing
+            - Does NOT modify the fit
+            - Parameter CI, NOT a prediction interval
         """
         if nivel <= 0 or nivel >= 1:
-            raise ValueError("nivel debe estar en (0, 1)")
+            raise ValueError("nivel must be in (0, 1)")
         
         params = resultado_ajuste.get("parametros")
         errores = resultado_ajuste.get("errores")
@@ -444,10 +444,10 @@ class _Ajustes:
         
         if params is None or errores is None:
             raise ValueError(
-                "resultado_ajuste debe contener 'parametros' y 'errores'"
+                "resultado_ajuste must contain 'parametros' and 'errores'"
             )
         
-        # Extraer valores según estructura (dict o array)
+        # Extract values according to structure (dict or array)
         if isinstance(params, dict):
             param_names = list(params.keys())
             param_vals = np.array([params[k] for k in param_names])
@@ -459,7 +459,7 @@ class _Ajustes:
         
         alpha = 1 - nivel
         
-        # Determinar cuantil (t-Student o normal)
+        # Determine quantile (Student‑t or normal)
         if ndof is not None and ndof > 0 and ndof <= 30:
             cuantil = stats.t.ppf(1 - alpha / 2, ndof)
             dist = "t"
@@ -482,46 +482,46 @@ class _Ajustes:
         
         return {"parametros": ic_list}
 
-    # ---------- A.2 Incertidumbre de predicción del modelo ----------
+    # ---------- A.2 Model prediction uncertainty ----------
     @staticmethod
     def incertidumbre_prediccion(resultado_ajuste, modelo, x0):
         """
-        Calcula la incertidumbre estadística de la predicción del modelo en x0.
+        Compute the statistical uncertainty of the model prediction at x0.
         
         INPUT:
-            resultado_ajuste: dict resultado de ajuste()/ajuste_lineal()/ajuste_polinomico()
+            resultado_ajuste: dict result from ajuste()/ajuste_lineal()/ajuste_polinomico()
             modelo: callable f(x, *params) | sympy.Expr
-            x0: float | array_like -> punto(s) de predicción
+            x0: float | array_like -> prediction point(s)
         
         OUTPUT:
-            Si x0 es escalar:
-                dict con:
+            If x0 is scalar:
+                dict with:
                     "x": float,
                     "y": float,
                     "sigma_modelo": float,
-            Si x0 es array:
-                dict con:
+            If x0 is array:
+                dict with:
                     "x": array,
                     "y": array,
                     "sigma_modelo": array
         
         NOTAS:
-            - Calcula SOLO la incertidumbre de los parámetros
-            - NO incluye error experimental (sy) del instrumento
-            - Usa propagación de errores: Var(f) = grad_f^T · Cov · grad_f
-            - El gradiente se calcula simbólicamente (si hay expr) o numéricamente
-            - ADVERTENCIA: esto es incertidumbre de la MEDIA (confidence band),
-              NO intervalo de predicción (prediction band)
+                        - Computes ONLY parameter uncertainty
+                        - DOES NOT include experimental instrument error (sy)
+                        - Uses error propagation: Var(f) = grad_f^T · Cov · grad_f
+                        - Gradient is computed symbolically (if expr) or numerically
+                        - WARNING: this is uncertainty of the MEAN (confidence band),
+                            NOT a prediction interval (prediction band)
         """
         params = resultado_ajuste.get("parametros")
         covarianza = resultado_ajuste.get("covarianza")
         
         if params is None or covarianza is None:
             raise ValueError(
-                "resultado_ajuste debe contener 'parametros' y 'covarianza'"
+                "resultado_ajuste must contain 'parametros' and 'covarianza'"
             )
         
-        # Convertir params a array si es dict
+        # Convert params to array if dict
         if isinstance(params, dict):
             param_vals = np.array([params[k] for k in sorted(params.keys())])
         else:
@@ -534,19 +534,19 @@ class _Ajustes:
         else:
             x0_arr = x0
         
-        # Calcular predicción y gradiente
+        # Compute prediction and gradient
         if isinstance(modelo, sp.Expr):
-            # Caso simbólico: derivada analítica
+            # Symbolic case: analytic derivative
             expr = modelo
             param_symbols = resultado_ajuste.get("parametros_simbolicos")
             
             if param_symbols is None:
                 raise ValueError(
-                    "resultado_ajuste debe contener 'parametros_simbolicos' "
-                    "si el modelo es simbólico"
+                    "resultado_ajuste must contain 'parametros_simbolicos' "
+                    "if the model is symbolic"
                 )
             
-            # Detectar variable independiente
+            # Detect independent variable
             var_symbol = None
             for s in expr.free_symbols:
                 if s.name == "x":
@@ -556,11 +556,11 @@ class _Ajustes:
                 if len(expr.free_symbols) == 1:
                     var_symbol = list(expr.free_symbols)[0]
             
-            # Lambdify para predicción
+            # Lambdify for prediction
             f_eval = sp.lambdify((var_symbol, *param_symbols), expr, "numpy")
             y_pred = f_eval(x0_arr, *param_vals)
             
-            # Gradiente respecto a parámetros
+            # Gradient with respect to parameters
             grad_f = np.array([
                 sp.lambdify((var_symbol, *param_symbols), sp.diff(expr, p), "numpy")
                 for p in param_symbols
@@ -569,10 +569,10 @@ class _Ajustes:
                 grad_f[i](x0_arr, *param_vals) for i in range(len(param_symbols))
             ])
         else:
-            # Caso numérico: derivada numérica
+            # Numeric case: numerical derivative
             y_pred = modelo(x0_arr, *param_vals)
             
-            # Gradiente numérico por diferencias finitas
+            # Numerical gradient by finite differences
             eps = np.sqrt(np.finfo(float).eps)
             grad_vals = np.zeros((len(param_vals), len(x0_arr)))
             
@@ -586,7 +586,7 @@ class _Ajustes:
                     modelo(x0_arr, *p_plus) - modelo(x0_arr, *p_minus)
                 ) / (2 * eps)
         
-        # Propagación de errores: Var(f) = grad_f^T · Cov · grad_f
+        # Error propagation: Var(f) = grad_f^T · Cov · grad_f
         sigma_modelo = np.sqrt(
             np.sum(grad_vals * (covarianza @ grad_vals), axis=0)
         )

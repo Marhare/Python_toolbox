@@ -1,18 +1,18 @@
 """
 animaciones.py
 ============================================================
-Motor temporal declarativo para graficos.py
+Declarative time engine for graficos.py
 
-FILOSOFÍA:
-- Scene define QUÉ se dibuja (estructura estática)
-- evolve define CÓMO evoluciona en el tiempo (leyes temporales)
-- animate traduce tiempo físico t -> frames y actualiza artistas
+PHILOSOPHY:
+- Scene defines WHAT is drawn (static structure)
+- evolve defines HOW it evolves in time (time laws)
+- animate maps physical time t -> frames and updates artists
 
-NO CALCULA NADA. Solo anima resultados ya calculados.
+DOES NOT COMPUTE DATA. It only animates already computed results.
 
-SEPARACIÓN ESTRICTA:
-- graficos.py: motor estático (plot, Scene, objetos semánticos)
-- animaciones.py: motor temporal (animate)
+STRICT SEPARATION:
+- graficos.py: static engine (plot, Scene, semantic objects)
+- animaciones.py: time engine (animate)
 
 ============================================================
 """
@@ -34,7 +34,7 @@ except ImportError:
 
 
 # ============================================================
-#  HELPERS DE MATCHING ENTRE OBJETOS Y ARTISTAS
+#  MATCHING HELPERS BETWEEN OBJECTS AND ARTISTS
 # ============================================================
 
 def _es_serie_like(obj) -> bool:
@@ -123,7 +123,7 @@ def _collect_scene_objects(scene: Scene):
 
 
 # ============================================================
-#  MOTOR DE ANIMACIÓN (API DECLARATIVA)
+#  ANIMATION ENGINE (DECLARATIVE API)
 # ============================================================
 
 def animate(
@@ -137,59 +137,59 @@ def animate(
     show: bool = True
 ) -> animation.FuncAnimation:
     """
-    Motor temporal declarativo.
+    Declarative time engine.
 
     INPUT:
-        scene: Scene -> estructura gráfica a animar (define QUÉ)
-        evolve: dict {objeto_semantico: f(t)} -> leyes temporales
-            - Serie -> f(t) devuelve y(t)
-            - Serie3D -> f(t) devuelve (x, y, z)
-            - Banda -> f(t) devuelve (y_low, y_high)
-            - Ajuste -> f(t) devuelve yfit(t)
-        duration: duración total en segundos
-        fps: frames por segundo
-        speed: factor de escala temporal (t = speed * frame / fps)
-        loop: repetir animación al finalizar
-        show: mostrar animación interactiva
+        scene: Scene -> graphic structure to animate (defines WHAT)
+        evolve: dict {semantic_object: f(t)} -> time laws
+            - Serie -> f(t) returns y(t)
+            - Serie3D -> f(t) returns (x, y, z)
+            - Banda -> f(t) returns (y_low, y_high)
+            - Ajuste -> f(t) returns yfit(t)
+        duration: total duration in seconds
+        fps: frames per second
+        speed: time scale factor (t = speed * frame / fps)
+        loop: repeat animation when finished
+        show: display interactive animation
 
     OUTPUT:
         matplotlib.animation.FuncAnimation
 
-    ERRORES:
-        - evolve referencia objeto no presente en scene -> ValueError
-        - datos devueltos incompatibles -> TypeError
+    ERRORS:
+        - evolve references object not present in scene -> ValueError
+        - incompatible data returned -> TypeError
     """
     if not isinstance(scene, Scene):
-        # Aceptar escenas equivalentes (p.ej., importadas desde otro namespace)
+        # Accept equivalent scenes (e.g., imported from another namespace)
         if not (hasattr(scene, "paneles") and hasattr(scene, "layout")):
-            raise TypeError(f"scene debe ser Scene, recibido: {type(scene).__name__}")
+            raise TypeError(f"scene must be Scene, received: {type(scene).__name__}")
     if not isinstance(evolve, dict):
-        raise TypeError("evolve debe ser dict {obj: funcion(t)}")
+        raise TypeError("evolve must be dict {obj: function(t)}")
     if duration <= 0:
-        raise ValueError("duration debe ser > 0")
+        raise ValueError("duration must be > 0")
     if fps <= 0:
-        raise ValueError("fps debe ser > 0")
+        raise ValueError("fps must be > 0")
     if speed <= 0:
-        raise ValueError("speed debe ser > 0")
+        raise ValueError("speed must be > 0")
 
-    # Validar que los objetos en evolve estén en la escena
+    # Validate that evolve objects are in the scene
     scene_objects = _collect_scene_objects(scene)
     for obj in evolve.keys():
         if obj not in scene_objects:
-            raise ValueError(f"evolve contiene objeto no presente en scene: {type(obj).__name__}")
+            raise ValueError(f"evolve contains object not present in scene: {type(obj).__name__}")
 
-    # Render inicial
+    # Initial render
     fig, axs = graficos.plot(scene, show=False)
     if not isinstance(axs, np.ndarray):
         axs = np.array([axs])
     
-    # Fijar posición de leyenda para evitar que se mueva durante animación
+    # Fix legend position to avoid moving during animation
     for ax in axs.flat if isinstance(axs, np.ndarray) else [axs]:
         handles, labels = ax.get_legend_handles_labels()
         if len(labels) > 0:
             ax.legend(loc='upper left', frameon=False)
 
-    # Crear mapping objeto -> artist
+    # Create mapping object -> artist
     obj_to_artist: Dict[Any, Any] = {}
     for panel_idx, panel in enumerate(scene.paneles):
         ax = axs[panel_idx]
@@ -211,12 +211,12 @@ def animate(
                 if artist is not None:
                     obj_to_artist[obj] = artist
 
-    # Validar soporte para objetos en evolve
+    # Validate support for objects in evolve
     for obj in evolve.keys():
         if obj not in obj_to_artist:
             raise TypeError(
-                f"No se pudo asociar un artist para {type(obj).__name__}. "
-                "Verifica que el objeto sea Serie, Serie3D, Banda o Ajuste."
+                f"Could not associate an artist for {type(obj).__name__}. "
+                "Verify that the object is Serie, Serie3D, Banda, or Ajuste."
             )
 
     total_frames = int(np.ceil(duration * fps))
@@ -230,47 +230,47 @@ def animate(
             try:
                 new_data = func(t)
             except Exception as exc:
-                raise TypeError(f"Error al evaluar evolve para {type(obj).__name__}: {exc}") from exc
+                raise TypeError(f"Error evaluating evolve for {type(obj).__name__}: {exc}") from exc
 
             if isinstance(obj, Serie) or _es_serie_like(obj):
                 y = np.asarray(new_data, dtype=float)
                 if y.shape != obj.y.shape:
-                    raise TypeError("Serie: evolve debe devolver y con misma longitud que x")
+                    raise TypeError("Serie: evolve must return y with the same length as x")
                 obj.y = y
                 artist.set_offsets(np.column_stack([obj.x, obj.y]))
                 modified.append(artist)
             elif isinstance(obj, Serie3D) or _es_serie3d_like(obj):
                 if not isinstance(new_data, Tuple) and not isinstance(new_data, list):
-                    raise TypeError("Serie3D: evolve debe devolver (x, y, z)")
+                    raise TypeError("Serie3D: evolve must return (x, y, z)")
                 if len(new_data) != 3:
-                    raise TypeError("Serie3D: evolve debe devolver (x, y, z)")
+                    raise TypeError("Serie3D: evolve must return (x, y, z)")
                 x, y, z = [np.asarray(v, dtype=float) for v in new_data]
                 if x.shape != y.shape or x.shape != z.shape:
-                    raise TypeError("Serie3D: x, y, z deben tener la misma longitud")
+                    raise TypeError("Serie3D: x, y, z must have the same length")
                 obj.x, obj.y, obj.z = x, y, z
                 artist.set_data(x, y)
                 artist.set_3d_properties(z)
                 modified.append(artist)
             elif isinstance(obj, Banda) or _es_banda_like(obj):
                 if not isinstance(new_data, Tuple) and not isinstance(new_data, list):
-                    raise TypeError("Banda: evolve debe devolver (y_low, y_high)")
+                    raise TypeError("Banda: evolve must return (y_low, y_high)")
                 if len(new_data) != 2:
-                    raise TypeError("Banda: evolve debe devolver (y_low, y_high)")
+                    raise TypeError("Banda: evolve must return (y_low, y_high)")
                 y_low, y_high = [np.asarray(v, dtype=float) for v in new_data]
                 if y_low.shape != obj.y_low.shape or y_high.shape != obj.y_high.shape:
-                    raise TypeError("Banda: y_low/y_high deben tener la misma longitud que x")
+                    raise TypeError("Banda: y_low/y_high must have the same length as x")
                 obj.y_low, obj.y_high = y_low, y_high
                 artist.set_verts([_build_band_verts(obj.x, obj.y_low, obj.y_high)])
                 modified.append(artist)
             elif isinstance(obj, Ajuste) or _es_ajuste_like(obj):
                 yfit = np.asarray(new_data, dtype=float)
                 if yfit.shape != obj.yfit.shape:
-                    raise TypeError("Ajuste: evolve debe devolver yfit con misma longitud que x")
+                    raise TypeError("Ajuste: evolve must return yfit with the same length as x")
                 obj.yfit = yfit
                 artist.set_ydata(obj.yfit)
                 modified.append(artist)
             else:
-                raise TypeError(f"Tipo no soportado en evolve: {type(obj).__name__}")
+                raise TypeError(f"Unsupported type in evolve: {type(obj).__name__}")
         return modified
 
     anim = animation.FuncAnimation(
@@ -289,11 +289,11 @@ def animate(
 
 
 # ============================================================
-#  FACHADA (consistencia con graficos.py)
+#  FACADE (consistency with graficos.py)
 # ============================================================
 
 class _Animaciones:
-    """Fachada: animaciones.animate(...)"""
+    """Facade: animaciones.animate(...)"""
 
     animate = staticmethod(animate)
 

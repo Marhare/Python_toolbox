@@ -1,97 +1,97 @@
 """
-RESUMEN RÁPIDO (Funciones públicas)
-----------------------------------
+QUICK SUMMARY (Public functions)
+--------------------------------
 media
     INPUT:
-        x: array_like (n,) -> datos numéricos (list/np.ndarray)
+        x: array_like (n,) -> numeric data (list/np.ndarray)
     OUTPUT:
-        float -> media aritmética
-    ERRORES:
-        ValueError -> array vacío
+        float -> arithmetic mean
+    ERRORS:
+        ValueError -> empty array
 
 varianza
     INPUT:
-        x: array_like (n,) -> datos numéricos
-        ddof: int -> grados de libertad
+        x: array_like (n,) -> numeric data
+        ddof: int -> degrees of freedom
     OUTPUT:
-        float -> varianza muestral
-    ERRORES:
-        ValueError -> array vacío, n <= ddof
+        float -> sample variance
+    ERRORS:
+        ValueError -> empty array, n <= ddof
 
 desviacion_tipica
     INPUT:
-        x: array_like (n,) -> datos numéricos
-        ddof: int -> grados de libertad
+        x: array_like (n,) -> numeric data
+        ddof: int -> degrees of freedom
     OUTPUT:
-        float -> desviación típica muestral
-    ERRORES:
-        ValueError -> array vacío, n <= ddof
+        float -> sample standard deviation
+    ERRORS:
+        ValueError -> empty array, n <= ddof
 
 error_estandar
     INPUT:
-        x: array_like (n,) -> datos numéricos
+        x: array_like (n,) -> numeric data
     OUTPUT:
-        float -> error estándar de la media
-    ERRORES:
-        ValueError -> array vacío
+        float -> standard error of the mean
+    ERRORS:
+        ValueError -> empty array
 
 media_ponderada
     INPUT:
-        x: array_like (n,) -> datos numéricos
-        w: array_like (n,) | None -> pesos positivos
-        sigma: array_like (n,) | None -> incertidumbres positivas (w=1/sigma^2)
+        x: array_like (n,) -> numeric data
+        w: array_like (n,) | None -> positive weights
+        sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
     OUTPUT:
-        float -> media ponderada
-    ERRORES:
-        ValueError -> array vacío, longitudes no coinciden, valores no finitos
+        float -> weighted mean
+    ERRORS:
+        ValueError -> empty array, mismatched lengths, non‑finite values
 
 varianza_ponderada
     INPUT:
-        x: array_like (n,) -> datos numéricos
-        w: array_like (n,) | None -> pesos positivos
-        sigma: array_like (n,) | None -> incertidumbres positivas (w=1/sigma^2)
-        ddof: int -> grados de libertad (solo tipo="frecuentista")
+        x: array_like (n,) -> numeric data
+        w: array_like (n,) | None -> positive weights
+        sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
+        ddof: int -> degrees of freedom (only tipo="frecuentista")
         tipo: str -> "frecuentista" | "mle"
     OUTPUT:
-        float -> varianza ponderada
-    ERRORES:
-        ValueError -> array vacío, n_eff <= ddof, tipo no soportado, pesos inválidos
+        float -> weighted variance
+    ERRORS:
+        ValueError -> empty array, n_eff <= ddof, unsupported tipo, invalid weights
 
 intervalo_confianza
     INPUT:
-        x: array_like (n,) -> datos numéricos
-        nivel: float -> nivel de confianza (0,1)
+        x: array_like (n,) -> numeric data
+        nivel: float -> confidence level (0,1)
         distribucion: str -> "normal" | "poisson" | "binomial"
-        sigma: float | None -> σ conocida (solo normal)
+        sigma: float | None -> known σ (normal only)
     OUTPUT:
         dict -> limite_inferior, limite_superior, nivel, metodo, parametro_estimado, n
-    NOTAS:
-        incluye grados_libertad si aplica
-    ERRORES:
-        ValueError -> supuestos no válidos, datos incompatibles
+    NOTES:
+        includes grados_libertad if applicable
+    ERRORS:
+        ValueError -> invalid assumptions, incompatible data
 
 test_media
     INPUT:
-        x: array_like (n,) -> datos numéricos
-        mu0: float -> valor bajo H0
+        x: array_like (n,) -> numeric data
+        mu0: float -> value under H0
         alternativa: str -> "dos_colas" | "mayor" | "menor"
         distribucion: str -> "normal" | "poisson" | "binomial"
-        sigma: float | None -> σ conocida (solo normal)
+        sigma: float | None -> known σ (normal only)
     OUTPUT:
         dict -> estadistico, p_valor, metodo, parametro_nulo, parametro_estimado, n
-    NOTAS:
-        incluye grados_libertad si aplica
-    ERRORES:
-        ValueError -> supuestos no válidos, datos incompatibles
+    NOTES:
+        includes grados_libertad if applicable
+    ERRORS:
+        ValueError -> invalid assumptions, incompatible data
 
 test_ks
     INPUT:
-        x: array_like (n,) -> datos numéricos
+        x: array_like (n,) -> numeric data
         distribucion: str -> "normal" | "uniforme"
     OUTPUT:
         dict -> estadistico (float), p_valor (float)
-    ERRORES:
-        ValueError -> n < 2, distribución no soportada
+    ERRORS:
+        ValueError -> n < 2, unsupported distribution
 """
 
 import numpy as np
@@ -100,141 +100,137 @@ from typing import Union, Tuple, Dict
 
 
 # ============================================================================
-# CLASE PRINCIPAL: ESTADISTICA
+# MAIN CLASS: ESTADISTICA
 # ============================================================================
 
 class _Estadistica:
     """
-    Para hacer análisis estadístico de datos. Primero es necesario responder a las siguientes preguntas:
+    To perform statistical analysis of data, first answer:
     
-    - ¿Qué tipo de datos tengo? (Correspondientes al mismo observable A) o a distintas medidas B))
-    
-    - ¿Hay algún error en las mediciones? (Errores sistemáticos o del instrumento)
-    
-    - ¿Qué distribución tienen los datos? (Normal, Poisson, Binomial, etc.)
-    
-    - ¿Quiero estimar parámetros o contrastar hipótesis?
-    
+    - What type of data do I have? (Same observable A or different measurements B)
+    - Are there measurement errors? (Systematic or instrument errors)
+    - What distribution do the data have? (Normal, Poisson, Binomial, etc.)
+    - Do I want to estimate parameters or test hypotheses?
     
     """
 
     # ========================================================================
-    # SECCIÓN 1: ESTADÍSTICA DESCRIPTIVA
+    # SECTION 1: DESCRIPTIVE STATISTICS
     # ========================================================================
     
     @staticmethod
     def media(x: Union[list, np.ndarray]) -> float:
         """
-        Calcula la media aritmética muestral.
+        Compute the sample arithmetic mean.
         INPUT:
-            x: array_like (n,) -> datos numéricos (list/np.ndarray)
+            x: array_like (n,) -> numeric data (list/np.ndarray)
         OUTPUT:
-            float -> media aritmética
-        ERRORES:
-            ValueError -> array vacío
+            float -> arithmetic mean
+        ERRORS:
+            ValueError -> empty array
         
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
+            Data sample.
         
-        Devuelve
-        --------
+        Returns
+        -------
         float
-            Media aritmética.
+            Arithmetic mean.
         """
         x = np.asarray(x, dtype=float)
         if len(x) == 0:
-            raise ValueError("Array vacío")
+            raise ValueError("Empty array")
         return float(np.mean(x))
 
     @staticmethod
     def varianza(x: Union[list, np.ndarray], ddof: int = 1) -> float:
         """
-        Calcula la varianza muestral (s^2).
+        Compute the sample variance (s^2).
         INPUT:
-            x: array_like (n,) -> datos numéricos
-            ddof: int -> grados de libertad
+            x: array_like (n,) -> numeric data
+            ddof: int -> degrees of freedom
         OUTPUT:
-            float -> varianza muestral
-        ERRORES:
-            ValueError -> array vacío, n <= ddof
+            float -> sample variance
+        ERRORS:
+            ValueError -> empty array, n <= ddof
         
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
+            Data sample.
         ddof : int, default 1
-            Grados de libertad (1 para muestra, 0 para población).
+            Degrees of freedom (1 for sample, 0 for population).
         
-        Devuelve
-        --------
+        Returns
+        -------
         float
-            Varianza muestral.
+            Sample variance.
         """
         x = np.asarray(x, dtype=float)
         if len(x) == 0:
-            raise ValueError("Array vacío")
+            raise ValueError("Empty array")
         if len(x) <= ddof:
-            raise ValueError(f"Tamaño de muestra ({len(x)}) debe ser > ddof ({ddof})")
+            raise ValueError(f"Sample size ({len(x)}) must be > ddof ({ddof})")
         return float(np.var(x, ddof=ddof))
 
     @staticmethod
     def desviacion_tipica(x: Union[list, np.ndarray], ddof: int = 1) -> float:
         """
-        Calcula la desviación típica (estándar) muestral (s).
+        Compute the sample standard deviation (s).
         INPUT:
-            x: array_like (n,) -> datos numéricos
-            ddof: int -> grados de libertad
+            x: array_like (n,) -> numeric data
+            ddof: int -> degrees of freedom
         OUTPUT:
-            float -> desviación típica muestral
-        ERRORES:
-            ValueError -> array vacío, n <= ddof
+            float -> sample standard deviation
+        ERRORS:
+            ValueError -> empty array, n <= ddof
         
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
+            Data sample.
         ddof : int, default 1
-            Grados de libertad (1 para muestra, 0 para población).
+            Degrees of freedom (1 for sample, 0 for population).
         
-        Devuelve
-        --------
+        Returns
+        -------
         float
-            Desviación típica muestral.
+            Sample standard deviation.
         """
         x = np.asarray(x, dtype=float)
         if len(x) == 0:
-            raise ValueError("Array vacío")
+            raise ValueError("Empty array")
         if len(x) <= ddof:
-            raise ValueError(f"Tamaño de muestra ({len(x)}) debe ser > ddof ({ddof})")
+            raise ValueError(f"Sample size ({len(x)}) must be > ddof ({ddof})")
         return float(np.std(x, ddof=ddof))
 
     @staticmethod
     def error_estandar(x: Union[list, np.ndarray]) -> float:
         """
-        Calcula el error estándar de la media: σ / sqrt(n).
+        Compute the standard error of the mean: σ / sqrt(n).
         INPUT:
-            x: array_like (n,) -> datos numéricos
+            x: array_like (n,) -> numeric data
         OUTPUT:
-            float -> error estándar de la media
-        ERRORES:
-            ValueError -> array vacío
+            float -> standard error of the mean
+        ERRORS:
+            ValueError -> empty array
         
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
+            Data sample.
         
-        Devuelve
-        --------
+        Returns
+        -------
         float
-            Error estándar de la media.
+            Standard error of the mean.
         """
         x = np.asarray(x, dtype=float)
         n = len(x)
         if n == 0:
-            raise ValueError("Array vacío")
+            raise ValueError("Empty array")
         sigma = float(np.std(x, ddof=1))
         return sigma / np.sqrt(n)
 
@@ -245,53 +241,53 @@ class _Estadistica:
         sigma: Union[list, np.ndarray, None]
     ) -> np.ndarray:
         """
-        Helper interno: calcula pesos a partir de w o sigma (mutuamente excluyentes).
+        Internal helper: compute weights from w or sigma (mutually exclusive).
         
-        Parámetros
+        Parameters
         ----------
         x : np.ndarray
-            Array de valores.
-        w : array_like o None
-            Pesos explícitos.
-        sigma : array_like o None
-            Incertidumbres (se convierte a w = 1/sigma^2).
+            Array of values.
+        w : array_like or None
+            Explicit weights.
+        sigma : array_like or None
+            Uncertainties (converted to w = 1/sigma^2).
         
-        Devuelve
-        --------
-        np.ndarray
-            Array de pesos (normalizado internamente si procede).
-        
-        Errores
+        Returns
         -------
+        np.ndarray
+            Weight array (normalized internally if needed).
+        
+        Errors
+        ------
         ValueError
-            Si se pasan w y sigma a la vez, o si hay problemas de validación.
+            If w and sigma are both provided, or validation fails.
         """
         n = len(x)
         
         if w is not None and sigma is not None:
-            raise ValueError("No se pueden especificar w y sigma simultáneamente")
+            raise ValueError("w and sigma cannot be specified simultaneously")
         
         if w is None and sigma is None:
-            # Pesos uniformes
+            # Uniform weights
             return np.ones(n, dtype=float)
         
         if sigma is not None:
             sigma = np.asarray(sigma, dtype=float)
             if len(sigma) != n:
-                raise ValueError(f"Longitud de sigma ({len(sigma)}) no coincide con x ({n})")
+                raise ValueError(f"Length of sigma ({len(sigma)}) does not match x ({n})")
             if np.any(sigma <= 0):
-                raise ValueError("Todas las incertidumbres (sigma) deben ser positivas")
+                raise ValueError("All uncertainties (sigma) must be positive")
             if not np.all(np.isfinite(sigma)):
-                raise ValueError("sigma contiene valores no finitos (inf/nan)")
+                raise ValueError("sigma contains non‑finite values (inf/nan)")
             w = 1.0 / (sigma ** 2)
         else:
             w = np.asarray(w, dtype=float)
             if len(w) != n:
-                raise ValueError(f"Longitud de w ({len(w)}) no coincide con x ({n})")
+                raise ValueError(f"Length of w ({len(w)}) does not match x ({n})")
             if np.any(w <= 0):
-                raise ValueError("Todos los pesos (w) deben ser positivos")
+                raise ValueError("All weights (w) must be positive")
             if not np.all(np.isfinite(w)):
-                raise ValueError("w contiene valores no finitos (inf/nan)")
+                raise ValueError("w contains non‑finite values (inf/nan)")
         
         return w
 
@@ -302,57 +298,57 @@ class _Estadistica:
         sigma: Union[list, np.ndarray, None] = None
     ) -> float:
         """
-        Calcula la media ponderada: μ_w = Σ(w_i·x_i) / Σ(w_i)
+        Compute the weighted mean: μ_w = Σ(w_i·x_i) / Σ(w_i)
         INPUT:
-            x: array_like (n,) -> datos numéricos
-            w: array_like (n,) | None -> pesos positivos
-            sigma: array_like (n,) | None -> incertidumbres positivas (w=1/sigma^2)
+            x: array_like (n,) -> numeric data
+            w: array_like (n,) | None -> positive weights
+            sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
         OUTPUT:
-            float -> media ponderada
-        ERRORES:
-            ValueError -> array vacío, longitudes no coinciden, valores no finitos
+            float -> weighted mean
+        ERRORS:
+            ValueError -> empty array, mismatched lengths, non‑finite values
         
-        Si no se especifican pesos, devuelve la media aritmética simple.
-        Si se proporciona sigma, los pesos se calculan como w_i = 1/σ_i².
+        If no weights are specified, returns the simple arithmetic mean.
+        If sigma is provided, weights are computed as w_i = 1/σ_i².
         
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
-        w : array_like, opcional
-            Pesos asociados a cada dato. Deben ser positivos y finitos.
-        sigma : array_like, opcional
-            Incertidumbres de cada dato. Se convierten a pesos w = 1/σ².
-            No se puede especificar w y sigma simultáneamente.
+            Data sample.
+        w : array_like, optional
+            Weights for each data point. Must be positive and finite.
+        sigma : array_like, optional
+            Uncertainties for each data point. Converted to weights w = 1/σ².
+            w and sigma cannot be specified simultaneously.
         
-        Devuelve
-        --------
-        float
-            Media ponderada.
-        
-        Errores
+        Returns
         -------
-        ValueError
-            Si el array está vacío, las longitudes no coinciden, se pasan w y sigma
-            a la vez, o los pesos/sigmas no son válidos.
+        float
+            Weighted mean.
         
-        Ejemplos
+        Errors
+        ------
+        ValueError
+            If the array is empty, lengths mismatch, w and sigma are both provided,
+            or weights/sigmas are invalid.
+        
+        Examples
         --------
         >>> x = [1.0, 2.0, 3.0]
-        >>> estadistica.media_ponderada(x)  # Media simple
+        >>> estadistica.media_ponderada(x)  # Simple mean
         2.0
-        >>> estadistica.media_ponderada(x, w=[1, 2, 1])  # Media ponderada
+        >>> estadistica.media_ponderada(x, w=[1, 2, 1])  # Weighted mean
         2.0
-        >>> estadistica.media_ponderada(x, sigma=[0.1, 0.2, 0.1])  # Pesos por incertidumbre
+        >>> estadistica.media_ponderada(x, sigma=[0.1, 0.2, 0.1])  # Uncertainty weights
         2.0
         """
         x = np.asarray(x, dtype=float)
         n = len(x)
         
         if n == 0:
-            raise ValueError("Array vacío")
+            raise ValueError("Empty array")
         if not np.all(np.isfinite(x)):
-            raise ValueError("x contiene valores no finitos (inf/nan)")
+            raise ValueError("x contains non‑finite values (inf/nan)")
         
         w = _Estadistica._calcular_pesos(x, w, sigma)
         
@@ -367,63 +363,63 @@ class _Estadistica:
         tipo: str = "frecuentista"
     ) -> float:
         """
-        Calcula la varianza ponderada de una muestra.
+        Compute the weighted variance of a sample.
         INPUT:
-            x: array_like (n,) -> datos numéricos
-            w: array_like (n,) | None -> pesos positivos
-            sigma: array_like (n,) | None -> incertidumbres positivas (w=1/sigma^2)
-            ddof: int -> grados de libertad (solo tipo="frecuentista")
+            x: array_like (n,) -> numeric data
+            w: array_like (n,) | None -> positive weights
+            sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
+            ddof: int -> degrees of freedom (only tipo="frecuentista")
             tipo: str -> "frecuentista" | "mle"
         OUTPUT:
-            float -> varianza ponderada
-        ERRORES:
-            ValueError -> array vacío, n_eff <= ddof, tipo no soportado, pesos inválidos
+            float -> weighted variance
+        ERRORS:
+            ValueError -> empty array, n_eff <= ddof, unsupported tipo, invalid weights
         
-        Dos tipos de estimación:
-        - "frecuentista": varianza muestral no sesgada con corrección por tamaño
-          efectivo de muestra (n_eff = (Σw)²/Σw²). Usa ddof para corrección.
-        - "mle": varianza tipo máxima verosimilitud sin corrección de sesgo.
+        Two estimation types:
+        - "frecuentista": unbiased sample variance with effective‑size correction
+          (n_eff = (Σw)²/Σw²). Uses ddof for correction.
+        - "mle": maximum‑likelihood‑type variance without bias correction.
         
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
-        w : array_like, opcional
-            Pesos asociados a cada dato. Deben ser positivos y finitos.
-        sigma : array_like, opcional
-            Incertidumbres de cada dato. Se convierten a pesos w = 1/σ².
-            No se puede especificar w y sigma simultáneamente.
+            Data sample.
+        w : array_like, optional
+            Weights for each data point. Must be positive and finite.
+        sigma : array_like, optional
+            Uncertainties for each data point. Converted to weights w = 1/σ².
+            w and sigma cannot be specified simultaneously.
         ddof : int, default 1
-            Grados de libertad para corrección de sesgo (solo en tipo="frecuentista").
-            Típicamente 1 para varianza muestral, 0 para poblacional.
+            Degrees of freedom for bias correction (only tipo="frecuentista").
+            Typically 1 for sample variance, 0 for population.
         tipo : str, default "frecuentista"
-            Tipo de estimación: "frecuentista" (con corrección) o "mle" (MLE sin corrección).
+            Estimation type: "frecuentista" (with correction) or "mle" (MLE without correction).
         
-        Devuelve
-        --------
-        float
-            Varianza ponderada.
-        
-        Errores
+        Returns
         -------
-        ValueError
-            Si el array está vacío, n_eff <= ddof (tipo frecuentista), tipo no soportado,
-            o problemas de validación de pesos/sigmas.
+        float
+            Weighted variance.
         
-        Notas
+        Errors
+        ------
+        ValueError
+            If the array is empty, n_eff <= ddof (frecuentista), tipo unsupported,
+            or weight/sigma validation fails.
+        
+        Notes
         -----
-        Para tipo="frecuentista":
+        For tipo="frecuentista":
             n_eff = (Σw)² / Σ(w²)
             s²_w = Σ(w_i·(x_i - μ_w)²) / Σw
             var = s²_w · n_eff / (n_eff - ddof)
         
-        Para tipo="mle":
+        For tipo="mle":
             var = Σ(w_i·(x_i - μ_w)²) / Σw
         
-        Ejemplos
+        Examples
         --------
         >>> x = [1.0, 2.0, 3.0]
-        >>> estadistica.varianza_ponderada(x)  # Varianza simple (ddof=1)
+        >>> estadistica.varianza_ponderada(x)  # Simple variance (ddof=1)
         1.0
         >>> estadistica.varianza_ponderada(x, w=[1, 2, 1], tipo="mle")
         0.5
@@ -432,34 +428,34 @@ class _Estadistica:
         n = len(x)
         
         if n == 0:
-            raise ValueError("Array vacío")
+            raise ValueError("Empty array")
         if not np.all(np.isfinite(x)):
-            raise ValueError("x contiene valores no finitos (inf/nan)")
+            raise ValueError("x contains non‑finite values (inf/nan)")
         
         tipo = tipo.lower()
         if tipo not in ["frecuentista", "mle"]:
-            raise ValueError('tipo debe ser "frecuentista" o "mle"')
+            raise ValueError('tipo must be "frecuentista" or "mle"')
         
         w = _Estadistica._calcular_pesos(x, w, sigma)
         
-        # Media ponderada
+        # Weighted mean
         mu_w = np.sum(w * x) / np.sum(w)
         
-        # Varianza ponderada base
+        # Base weighted variance
         sum_w = np.sum(w)
         s2_w = np.sum(w * (x - mu_w) ** 2) / sum_w
         
         if tipo == "mle":
             return float(s2_w)
         
-        # tipo == "frecuentista": corrección por tamaño efectivo
+        # tipo == "frecuentista": effective‑size correction
         sum_w2 = np.sum(w ** 2)
         n_eff = (sum_w ** 2) / sum_w2
         
         if n_eff <= ddof:
             raise ValueError(
-                f"Tamaño efectivo de muestra ({n_eff:.2f}) debe ser > ddof ({ddof}). "
-                f"Considera ddof=0 o tipo='mle'."
+                f"Effective sample size ({n_eff:.2f}) must be > ddof ({ddof}). "
+                f"Consider ddof=0 or tipo='mle'."
             )
         
         var_unbiased = s2_w * n_eff / (n_eff - ddof)
@@ -468,7 +464,7 @@ class _Estadistica:
     
 
     # ========================================================================
-    # SECCIÓN 2: ESTIMACIÓN DE PARÁMETROS Y CONSTRUCCIÓN DE INTERVALOS
+    # SECTION 2: PARAMETER ESTIMATION AND INTERVAL CONSTRUCTION
     # ========================================================================
     
     
@@ -481,67 +477,66 @@ class _Estadistica:
         sigma: float = None
     ) -> Dict[str, Union[float, int, str]]:
         """
-        Estimación por intervalo (frecuentista) de un parámetro poblacional.
+        Interval (frequentist) estimation of a population parameter.
         INPUT:
-            x: array_like (n,) -> datos numéricos
-            nivel: float -> nivel de confianza (0,1)
+            x: array_like (n,) -> numeric data
+            nivel: float -> confidence level (0,1)
             distribucion: str -> "normal" | "poisson" | "binomial"
-            sigma: float | None -> σ conocida (solo normal)
+            sigma: float | None -> known σ (normal only)
         OUTPUT:
             dict -> limite_inferior, limite_superior, nivel, metodo, parametro_estimado, n
-        NOTAS:
-            incluye grados_libertad si aplica
-        ERRORES:
-            ValueError -> supuestos no válidos, datos incompatibles
+        NOTES:
+            includes grados_libertad if applicable
+        ERRORS:
+            ValueError -> invalid assumptions, incompatible data
 
-        La cobertura se refiere al método, no al parámetro: el intervalo es
-        aleatorio y, en repetición de muestreos, contiene al verdadero valor
-        con probabilidad aproximadamente igual a ``nivel`` bajo las hipótesis
-        asumidas.
+        Coverage refers to the method, not the parameter: the interval is
+        random and, under repeated sampling, contains the true value with
+        probability approximately equal to ``nivel`` under the assumptions.
 
-        Hipótesis estadísticas según ``distribucion``
-        -----------------------------------------------
+        Statistical assumptions by ``distribucion``
+        -------------------------------------------
         - ``"normal"``:
-          * Si ``sigma`` está definido: población normal con desviación típica
-            conocida, se usa intervalo z exacto.
-          * Si ``sigma`` es ``None``: población normal con σ desconocida,
-            se usa intervalo t-Student exacto.
+          * If ``sigma`` is defined: normal population with known standard
+            deviation, use exact z interval.
+          * If ``sigma`` is ``None``: normal population with unknown σ,
+            use exact Student‑t interval.
 
         - ``"poisson"``:
-          * ``x`` se interpreta como conteos Poisson independientes.
-          * Se estima el parámetro de tasa λ por intervalo exacto (chi-cuadrado).
+          * ``x`` is interpreted as independent Poisson counts.
+          * Estimate rate parameter λ by exact interval (chi‑square).
 
         - ``"binomial"``:
-          * ``x`` se interpreta como observaciones Bernoulli (0/1).
-          * Se usa intervalo exacto de Clopper–Pearson para p.
+          * ``x`` is interpreted as Bernoulli observations (0/1).
+          * Use exact Clopper–Pearson interval for p.
 
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
+            Data sample.
         nivel : float, default 0.95
-            Nivel de confianza (entre 0 y 1).
+            Confidence level (between 0 and 1).
         distribucion : str, default "normal"
-            Distribución asumida: "normal", "poisson", o "binomial".
+            Assumed distribution: "normal", "poisson", or "binomial".
         sigma : float, optional
-            Desviación típica poblacional (solo para distribucion="normal").
-            Si se proporciona, se usa intervalo z.
-            Si es None, se usa intervalo t-Student.
+            Population standard deviation (only for distribucion="normal").
+            If provided, use z interval.
+            If None, use Student‑t interval.
 
-        Devuelve
-        --------
+        Returns
+        -------
         Dict[str, Union[float, int, str]]
-            Diccionario con claves:
-            - "limite_inferior": límite inferior del intervalo (float)
-            - "limite_superior": límite superior del intervalo (float)
-            - "nivel": nivel de confianza (float)
-            - "metodo": método utilizado ("z", "t", "poisson_exacto", "binomial_exacto")
-            - "parametro_estimado": estimación puntual (float)
-            - "n": tamaño de muestra (int)
-            - "grados_libertad": df si aplica (int)
+            Dictionary with keys:
+            - "limite_inferior": lower interval bound (float)
+            - "limite_superior": upper interval bound (float)
+            - "nivel": confidence level (float)
+            - "metodo": method used ("z", "t", "poisson_exacto", "binomial_exacto")
+            - "parametro_estimado": point estimate (float)
+            - "n": sample size (int)
+            - "grados_libertad": df if applicable (int)
 
-        Ejemplos de uso
-        ---------------
+        Usage examples
+        -------------
         >>> x = [2.1, 2.4, 2.0, 2.3]
         >>> # Normal con σ desconocida (t-Student exacto)
         >>> resultado = estadistica.intervalo_confianza(x, distribucion="normal")
@@ -558,31 +553,31 @@ class _Estadistica:
         >>> ensayos = [1, 0, 1, 1, 0, 1]
         >>> resultado = estadistica.intervalo_confianza(ensayos, distribucion="binomial")
 
-        Notas
+        Notes
         -----
-        - Esta función NO adivina supuestos a partir de los datos.
-        - Si falta un supuesto necesario, se lanza ``ValueError`` con mensaje claro.
-        - Todos los métodos son exactos, no asintóticos.
+        - This function does NOT infer assumptions from the data.
+        - If a required assumption is missing, raises ``ValueError`` with a clear message.
+        - All methods are exact, not asymptotic.
         """
         x = np.asarray(x, dtype=float)
         n = len(x)
 
         # Validaciones generales
         if n == 0:
-            raise ValueError("Array vacío")
+            raise ValueError("Empty array")
         if not (0 < nivel < 1):
-            raise ValueError("nivel debe estar entre 0 y 1")
+            raise ValueError("nivel must be between 0 and 1")
 
-        # Normalización case-insensitive
+        # Case-insensitive normalization
         distribucion = distribucion.lower()
 
         if distribucion == "normal":
             mu = float(np.mean(x))
             
-            # Caso: σ conocida (z exacto)
+            # Case: known σ (exact z)
             if sigma is not None:
                 if sigma <= 0:
-                    raise ValueError("sigma debe ser positivo")
+                    raise ValueError("sigma must be positive")
                 z = stats.norm.ppf(1 - (1 - nivel) / 2)
                 delta = z * sigma / np.sqrt(n)
                 return {
@@ -595,9 +590,9 @@ class _Estadistica:
                     "sigma_conocida": float(sigma)
                 }
 
-            # Caso: σ desconocida (t-Student exacto)
+            # Case: unknown σ (exact Student‑t)
             if n < 2:
-                raise ValueError("Se necesitan al menos 2 observaciones para estimar σ")
+                raise ValueError("At least 2 observations are required to estimate σ")
             s = float(np.std(x, ddof=1))
             tcrit = stats.t.ppf(1 - (1 - nivel) / 2, n - 1)
             delta = tcrit * s / np.sqrt(n)
@@ -614,9 +609,9 @@ class _Estadistica:
 
         elif distribucion == "poisson":
             if np.any(x < 0):
-                raise ValueError("Para Poisson, los conteos deben ser no negativos")
+                raise ValueError("For Poisson, counts must be non‑negative")
             if not np.all(np.isclose(x, np.round(x))):
-                raise ValueError("Para Poisson, x debe contener conteos enteros")
+                raise ValueError("For Poisson, x must contain integer counts")
 
             k = float(np.sum(x))
             lambda_est = k / n
@@ -625,10 +620,10 @@ class _Estadistica:
             if k == 0:
                 li = 0.0
             else:
-                # Límite inferior usando chi-cuadrado
+                # Lower bound using chi‑square
                 li = 0.5 * stats.chi2.ppf(alpha / 2, 2 * k) / n
             
-            # Límite superior usando chi-cuadrado
+            # Upper bound using chi‑square
             ls = 0.5 * stats.chi2.ppf(1 - alpha / 2, 2 * k + 2) / n
             
             return {
@@ -642,26 +637,26 @@ class _Estadistica:
 
         elif distribucion == "binomial":
             if np.any((x < 0) | (x > 1)):
-                raise ValueError("Para binomial, x debe estar en el rango [0, 1]")
+                raise ValueError("For binomial, x must be in the range [0, 1]")
 
-            # Número de éxitos en n ensayos Bernoulli
+            # Number of successes in n Bernoulli trials
             k = int(np.round(np.sum(x)))
             p_est = k / n
             
-            # Intervalo exacto de Clopper-Pearson usando distribución F
+            # Exact Clopper‑Pearson interval using F distribution
             alpha = 1 - nivel
             
             if k == 0:
                 li = 0.0
             else:
-                # Límite inferior: k / (k + (n-k+1)*F_{α/2}(2(n-k+1), 2k))
+                # Lower bound: k / (k + (n-k+1)*F_{α/2}(2(n-k+1), 2k))
                 F_lower = stats.f.ppf(alpha / 2, 2 * (n - k + 1), 2 * k)
                 li = k / (k + (n - k + 1) * F_lower)
             
             if k == n:
                 ls = 1.0
             else:
-                # Límite superior: (k+1)*F_{1-α/2}(2(k+1), 2(n-k)) / (n-k + (k+1)*F_{1-α/2}(2(k+1), 2(n-k)))
+                # Upper bound: (k+1)*F_{1-α/2}(2(k+1), 2(n-k)) / (n-k + (k+1)*F_{1-α/2}(2(k+1), 2(n-k)))
                 F_upper = stats.f.ppf(1 - alpha / 2, 2 * (k + 1), 2 * (n - k))
                 ls = (k + 1) * F_upper / (n - k + (k + 1) * F_upper)
             
@@ -676,7 +671,7 @@ class _Estadistica:
             }
 
         else:
-            raise ValueError(f"Distribución '{distribucion}' no soportada")
+            raise ValueError(f"Distribution '{distribucion}' is not supported")
 
 
     @staticmethod
@@ -685,26 +680,26 @@ class _Estadistica:
         nivel: float = 0.95
     ) -> Tuple[float, float]:
         """
-        Intervalo de confianza para la varianza (distribución chi-cuadrado).
+        Confidence interval for variance (chi‑square distribution).
         
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
+            Data sample.
         nivel : float, default 0.95
-            Nivel de confianza (entre 0 y 1).
+            Confidence level (between 0 and 1).
         
-        Devuelve
-        --------
+        Returns
+        -------
         Tuple[float, float]
-            (límite_inferior, límite_superior)
+            (lower_bound, upper_bound)
         """
         x = np.asarray(x, dtype=float)
         n = len(x)
         if n < 2:
-            raise ValueError("Se necesitan al menos 2 observaciones")
+            raise ValueError("At least 2 observations are required")
         if not (0 < nivel < 1):
-            raise ValueError("nivel debe estar entre 0 y 1")
+            raise ValueError("nivel must be between 0 and 1")
 
         s2 = float(np.var(x, ddof=1))
         alpha = 1 - nivel
@@ -713,7 +708,7 @@ class _Estadistica:
         return float((n - 1) * s2 / chi2_inf), float((n - 1) * s2 / chi2_sup)
 
     # ========================================================================
-    # SECCIÓN 3: TESTS ESTADÍSTICOS
+    # SECTION 3: STATISTICAL TESTS
     # ========================================================================
 
     @staticmethod
@@ -726,86 +721,86 @@ class _Estadistica:
         sigma: float = None
     ) -> Dict[str, Union[float, int, str]]:
         """
-        Test frecuentista exacto para la media de una población.
+        Exact frequentist test for a population mean.
         INPUT:
-            x: array_like (n,) -> datos numéricos
-            mu0: float -> valor bajo H0
+            x: array_like (n,) -> numeric data
+            mu0: float -> value under H0
             alternativa: str -> "dos_colas" | "mayor" | "menor"
             distribucion: str -> "normal" | "poisson" | "binomial"
-            sigma: float | None -> σ conocida (solo normal)
+            sigma: float | None -> known σ (normal only)
         OUTPUT:
             dict -> estadistico, p_valor, metodo, parametro_nulo, parametro_estimado, n
-        NOTAS:
-            incluye grados_libertad si aplica
-        ERRORES:
-            ValueError -> supuestos no válidos, datos incompatibles
+        NOTES:
+            includes grados_libertad if applicable
+        ERRORS:
+            ValueError -> invalid assumptions, incompatible data
 
-        El test contrastea H₀: μ = μ₀ contra una hipótesis alternativa especificada.
-        Se usa SIEMPRE el método exacto (no asintótico) disponible para la distribución.
+        The test contrasts H₀: μ = μ₀ against the specified alternative hypothesis.
+        It ALWAYS uses the exact (non‑asymptotic) method available for the distribution.
 
-        Hipótesis estadísticas según ``distribucion``
+        Statistical assumptions by ``distribucion``
         -----------------------------------------------
         - ``"normal"``:
-          * Si ``sigma`` está definido: población normal con σ conocida → z-test exacto.
-          * Si ``sigma`` es ``None``: población normal con σ desconocida → t-test exacto.
+          * If ``sigma`` is defined: normal population with known σ → exact z-test.
+          * If ``sigma`` is ``None``: normal population with unknown σ → exact t-test.
 
         - ``"poisson"``:
-          * ``x`` se interpreta como conteos Poisson independientes.
-          * Se realiza test exacto sobre la tasa λ (media Poisson).
-          * Bajo H₀: λ = μ₀, se usa distribución chi-cuadrado.
+                    * ``x`` is interpreted as independent Poisson counts.
+                    * Exact test on the rate λ (Poisson mean).
+          * Under H₀: λ = μ₀, uses chi‑square distribution.
 
         - ``"binomial"``:
-          * ``x`` se interpreta como ensayos Bernoulli (0/1).
-          * Se realiza test exacto sobre la probabilidad p = μ₀ ∈ [0, 1].
-          * Usa distribución binomial exacta bajo H₀.
+                    * ``x`` is interpreted as Bernoulli trials (0/1).
+                    * Exact test on probability p = μ₀ ∈ [0, 1].
+          * Uses exact binomial distribution under H₀.
 
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
+            Data sample.
         mu0 : float
-            Media (o tasa λ, o probabilidad p) hipotética bajo H₀.
+            Hypothetical mean (or rate λ, or probability p) under H₀.
         alternativa : str, default "dos_colas"
-            Tipo de test: "dos_colas" (μ ≠ μ₀), "mayor" (μ > μ₀), o "menor" (μ < μ₀).
+            Test type: "dos_colas" (μ ≠ μ₀), "mayor" (μ > μ₀), or "menor" (μ < μ₀).
         distribucion : str, default "normal"
-            Distribución asumida: "normal", "poisson", o "binomial".
+            Assumed distribution: "normal", "poisson", or "binomial".
         sigma : float, optional
-            Desviación típica poblacional conocida (solo para distribucion="normal").
-            Si se proporciona, se usa z-test.
-            Si es None, se usa t-test estimando σ de la muestra.
+            Known population standard deviation (only for distribucion="normal").
+            If provided, uses z-test.
+            If None, uses t-test estimating σ from the sample.
 
-        Devuelve
-        --------
+        Returns
+        -------
         Dict[str, Union[float, int, str]]
-            Diccionario con claves:
-            - "estadistico": valor del estadístico (z, t, o binomial count)
-            - "p_valor": p-valor del test bilateral o unilateral (float)
-            - "metodo": tipo de test ("z", "t", "poisson_exacto", "binomial_exacto")
-            - "parametro_nulo": valor de H₀ (μ₀)
-            - "parametro_estimado": estimación puntual del parámetro (float)
-            - "n": tamaño de muestra (int)
-            - "grados_libertad": df (int, solo si aplica)
+            Dictionary with keys:
+            - "estadistico": value of the statistic (z, t, or binomial count)
+            - "p_valor": p-value of the two‑sided or one‑sided test (float)
+            - "metodo": test type ("z", "t", "poisson_exacto", "binomial_exacto")
+            - "parametro_nulo": value under H₀ (μ₀)
+            - "parametro_estimado": point estimate of the parameter (float)
+            - "n": sample size (int)
+            - "grados_libertad": df (int, only if applicable)
 
-        Validaciones y errores
+        Validations and errors
         ----------------------
-        - Lanza ValueError si se proporcionan supuestos contradictorios.
-        - Lanza ValueError si los datos no cumplen las hipótesis (ej: negativos en Poisson).
-        - NO infiere automáticamente la distribución a partir de los datos.
+        - Raises ValueError if contradictory assumptions are provided.
+        - Raises ValueError if data do not meet assumptions (e.g., negatives in Poisson).
+        - Does NOT infer the distribution automatically from data.
 
-        Ejemplos
+        Examples
         --------
         >>> x = [2.1, 2.4, 2.0, 2.3]
-        >>> # z-test con σ conocida = 0.2
+        >>> # z-test with known σ = 0.2
         >>> resultado = estadistica.test_media(x, mu0=2.0, distribucion="normal", sigma=0.2)
 
-        >>> # t-test con σ desconocida
+        >>> # t-test with unknown σ
         >>> resultado = estadistica.test_media(x, mu0=2.0, distribucion="normal")
 
-        >>> # Test exacto Poisson: ¿es λ = 2?
+        >>> # Exact Poisson test: is λ = 2?
         >>> conteos = [3, 1, 4, 2, 0]
         >>> resultado = estadistica.test_media(conteos, mu0=2.0, distribucion="poisson")
 
-        >>> # Test exacto Binomial: ¿es p = 0.5?
+        >>> # Exact Binomial test: is p = 0.5?
         >>> ensayos = [1, 0, 1, 1, 0, 1]
         >>> resultado = estadistica.test_media(ensayos, mu0=0.5, distribucion="binomial")
         """
@@ -814,22 +809,22 @@ class _Estadistica:
 
         # Validaciones generales
         if n == 0:
-            raise ValueError("Array vacío")
+            raise ValueError("Empty array")
         if alternativa not in ["dos_colas", "mayor", "menor"]:
-            raise ValueError('alternativa debe ser "dos_colas", "mayor" o "menor"')
+            raise ValueError('alternativa must be "dos_colas", "mayor" or "menor"')
 
         distribucion = distribucion.lower()
 
         if distribucion == "normal":
             if n < 2 and sigma is None:
-                raise ValueError("Se necesitan al menos 2 observaciones para estimar σ en t-test")
+                raise ValueError("At least 2 observations are required to estimate σ for t-test")
 
             mu = float(np.mean(x))
             
             if sigma is not None:
-                # z-test con σ conocida
+                # z-test with known σ
                 if sigma <= 0:
-                    raise ValueError("sigma debe ser positivo")
+                    raise ValueError("sigma must be positive")
                 z_stat = (mu - mu0) / (sigma / np.sqrt(n))
                 
                 if alternativa == "dos_colas":
@@ -849,7 +844,7 @@ class _Estadistica:
                     "sigma_conocida": float(sigma)
                 }
             else:
-                # t-test con σ desconocida
+                # t-test with unknown σ
                 s = float(np.std(x, ddof=1))
                 t_stat = (mu - mu0) / (s / np.sqrt(n))
                 df = n - 1
@@ -873,29 +868,29 @@ class _Estadistica:
                 }
 
         elif distribucion == "poisson":
-            # Validar que x contiene conteos no-negativos enteros
+            # Validate that x contains non‑negative integer counts
             if np.any(x < 0):
-                raise ValueError("Para Poisson, los conteos deben ser no negativos")
+                raise ValueError("For Poisson, counts must be non‑negative")
             if not np.all(np.isclose(x, np.round(x))):
-                raise ValueError("Para Poisson, x debe contener conteos enteros")
+                raise ValueError("For Poisson, x must contain integer counts")
             
             if mu0 <= 0:
-                raise ValueError("Para Poisson, μ₀ (λ) debe ser positivo")
+                raise ValueError("For Poisson, μ₀ (λ) must be positive")
             
-            # Conteo total K = sum(x_i) es el estadístico suficiente
+            # Total count K = sum(x_i) is the sufficient statistic
             K = int(np.round(np.sum(x)))
             lambda_est = float(np.mean(x))
             
-            # Test exacto Poisson: bajo H₀ cada x_i ~ Poisson(μ₀)
+            # Exact Poisson test: under H₀ each x_i ~ Poisson(μ₀)
             # K ~ Poisson(n·μ₀)
-            # Calculamos p-valor usando la distribución Poisson exacta
-            lambda_total = n * mu0  # parámetro Poisson para K bajo H₀
+            # Compute p-value using exact Poisson distribution
+            lambda_total = n * mu0  # Poisson parameter for K under H₀
             
             if alternativa == "dos_colas":
-                # Dos colas: acumular probabilidades tan extremas o más que K observado
+                # Two-tailed: accumulate probabilities as extreme or more than observed K
                 prob_K = stats.poisson.pmf(K, lambda_total)
                 
-                # Valores de X con probabilidad ≤ prob(K)
+                # X values with probability ≤ prob(K)
                 p_valor = 0.0
                 max_x = max(K + 50, int(lambda_total + 10 * np.sqrt(lambda_total)))
                 for i in range(max_x + 1):
@@ -920,37 +915,37 @@ class _Estadistica:
             }
 
         elif distribucion == "binomial":
-            # Validar que x contiene Bernoulli (0/1)
+            # Validate that x contains Bernoulli (0/1)
             if np.any((x < 0) | (x > 1)):
-                raise ValueError("Para binomial, x debe estar en el rango [0, 1]")
+                raise ValueError("For binomial, x must be in the range [0, 1]")
             
             if not (0 <= mu0 <= 1):
-                raise ValueError("Para binomial, μ₀ (p) debe estar en [0, 1]")
+                raise ValueError("For binomial, μ₀ (p) must be in [0, 1]")
             
-            # Número de éxitos
+            # Number of successes
             k = int(np.round(np.sum(x)))
             p_est = float(np.mean(x))
             
-            # Test exacto binomial usando la distribución binomial
+            # Exact binomial test using the binomial distribution
             if alternativa == "dos_colas":
-                # Dos colas: probabilidad de observar k o más extremo bajo H₀
+                # Two-tailed: probability of observing k or more extreme under H₀
                 prob_k = stats.binom.pmf(k, n, mu0)
                 
-                # Para dos colas, considerar valores con probabilidad ≤ prob_k
+                # For two-tailed, consider values with probability ≤ prob_k
                 p_lower = stats.binom.cdf(k, n, mu0)
                 p_upper = 1 - stats.binom.cdf(k - 1, n, mu0) if k > 0 else 1.0
                 
-                # Acumular probabilidades desde ambas colas
+                # Accumulate probabilities from both tails
                 p_valor = 0.0
                 for i in range(n + 1):
                     if stats.binom.pmf(i, n, mu0) <= prob_k:
                         p_valor += stats.binom.pmf(i, n, mu0)
                 
             elif alternativa == "mayor":
-                # Una cola derecha: P(X ≥ k | H₀)
+                # Right tail: P(X ≥ k | H₀)
                 p_valor = 1 - stats.binom.cdf(k - 1, n, mu0) if k > 0 else 1.0
             else:  # "menor"
-                # Una cola izquierda: P(X ≤ k | H₀)
+                # Left tail: P(X ≤ k | H₀)
                 p_valor = stats.binom.cdf(k, n, mu0)
             
             return {
@@ -964,37 +959,37 @@ class _Estadistica:
             }
 
         else:
-            raise ValueError(f"Distribución '{distribucion}' no soportada para test_media")
+            raise ValueError(f"Distribution '{distribucion}' not supported for test_media")
 
     @staticmethod
     def test_ks(x: Union[list, np.ndarray], distribucion: str = "normal") -> Dict[str, float]:
         """
-        Test de Kolmogórov-Smirnov para bondad de ajuste.
+        Kolmogorov‑Smirnov test for goodness of fit.
         INPUT:
-            x: array_like (n,) -> datos numéricos
+            x: array_like (n,) -> numeric data
             distribucion: str -> "normal" | "uniforme"
         OUTPUT:
             dict -> estadistico (float), p_valor (float)
-        ERRORES:
-            ValueError -> n < 2, distribución no soportada
+        ERRORS:
+            ValueError -> n < 2, unsupported distribution
         
-        Parámetros
+        Parameters
         ----------
         x : array_like
-            Muestra de datos.
+            Data sample.
         distribucion : str, default "normal"
-            Distribución a contrastar: "normal" (estima μ y σ) o "uniforme".
+            Distribution to test: "normal" (estimates μ and σ) or "uniforme".
         
-        Devuelve
-        --------
+        Returns
+        -------
         Dict[str, float]
-            Diccionario con claves:
-            - "estadistico": estadístico D de K-S (float)
-            - "p_valor": p-valor del test (float)
+            Dictionary with keys:
+            - "estadistico": K‑S D statistic (float)
+            - "p_valor": test p‑value (float)
         """
         x = np.asarray(x, dtype=float)
         if len(x) < 2:
-            raise ValueError("Se necesitan al menos 2 observaciones")
+            raise ValueError("At least 2 observations are required")
         
         if distribucion == "normal":
             mu, sigma = float(np.mean(x)), float(np.std(x, ddof=0))
@@ -1002,7 +997,7 @@ class _Estadistica:
         elif distribucion == "uniforme":
             d, p = stats.kstest(x, "uniform")
         else:
-            raise ValueError(f"Distribución {distribucion} no soportada")
+            raise ValueError(f"Distribution {distribucion} not supported")
         
         return {"estadistico": float(d), "p_valor": float(p)}
 

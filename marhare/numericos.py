@@ -6,27 +6,27 @@ from scipy.optimize import newton
 
 class _Numericos:
     """
-    Calculadora científica unificada con API auto-detectable.
+    Unified scientific calculator with an auto‑detectable API.
 
-    Proporciona operaciones matemáticas básicas (derivación, integración,
-    resolución de ecuaciones) que automáticamente eligen entre métodos
-    simbólicos y numéricos según el tipo de entrada.
+    Provides basic mathematical operations (differentiation, integration,
+    equation solving) that automatically choose between symbolic and numeric
+    methods depending on the input type.
     """
 
     # =========================================================================
-    # HELPERS PRIVADOS
+    # PRIVATE HELPERS
     # =========================================================================
 
     @staticmethod
     def _to_symbol(var):
-        """Convierte var a sympy.Symbol si es necesario."""
+        """Convert var to sympy.Symbol if needed."""
         if isinstance(var, sp.Symbol):
             return var
         return sp.Symbol(str(var))
 
     @staticmethod
     def _to_expr(expr):
-        """Convierte expr a sympy.Expr si es posible, None si es callable."""
+        """Convert expr to sympy.Expr when possible; None if callable."""
         if isinstance(expr, sp.Lambda):
             return expr.expr
         if isinstance(expr, sp.Expr):
@@ -43,64 +43,64 @@ class _Numericos:
     @staticmethod
     def _derivada_numerica(f, x, h=1e-5):
         """
-        Derivada numérica centrada (diferencias finitas de orden 2).
+        Centered numerical derivative (second‑order finite differences).
 
         INPUT:
-            f (callable): función evaluable.
-            x (float): punto de evaluación.
-            h (float): paso de derivación.
+            f (callable): evaluable function.
+            x (float): evaluation point.
+            h (float): differentiation step.
 
         OUTPUT:
-            float: derivada aproximada en x.
+            float: approximate derivative at x.
         """
         return (f(x + h) - f(x - h)) / (2 * h)
 
     @staticmethod
     def _integral_numerica(f, a, b):
         """
-        Integración numérica definida mediante scipy.integrate.quad.
+        Definite numerical integration via scipy.integrate.quad.
 
         INPUT:
-            f (callable): función a integrar.
-            a (float): límite inferior.
-            b (float): límite superior.
+            f (callable): function to integrate.
+            a (float): lower limit.
+            b (float): upper limit.
 
         OUTPUT:
-            float: valor de la integral definida.
+            float: value of the definite integral.
         """
         val, _ = quad(f, a, b)
         return val
 
     # =========================================================================
-    # DERIVACIÓN (UNIFICADA)
+    # DIFFERENTIATION (UNIFIED)
     # =========================================================================
 
     @staticmethod
     def derivar(expr, var, *, metodo="auto", h=1e-5):
         """
-        Derivada con auto-detección de método (simbólico o numérico).
+        Derivative with auto‑detected method (symbolic or numeric).
 
         INPUT:
-            expr (sympy.Expr | str | callable): expresión, string o función.
-            var (sympy.Symbol | str): variable de derivación.
+            expr (sympy.Expr | str | callable): expression, string, or function.
+            var (sympy.Symbol | str): differentiation variable.
             metodo (str): "auto" | "simbolico" | "numerico" (default: "auto").
-            h (float): paso para derivación numérica (default: 1e-5).
+            h (float): step for numerical differentiation (default: 1e-5).
 
         OUTPUT:
-            sympy.Expr (simbólico) | callable (numérico).
+            sympy.Expr (symbolic) | callable (numeric).
 
-        NOTAS:
+        NOTES:
             metodo="auto":
-            - Si expr es sympy.Expr o str → derivada simbólica.
-            - Si expr es callable → derivada numérica (retorna callable).
+            - If expr is sympy.Expr or str → symbolic derivative.
+            - If expr is callable → numerical derivative (returns callable).
 
             metodo="simbolico":
-            - Usa exclusivamente sympy.diff.
-            - Lanza error si expr no es simbólica.
+            - Uses sympy.diff exclusively.
+            - Raises error if expr is not symbolic.
 
             metodo="numerico":
-            - Usa exclusivamente derivación numérica.
-            - Requiere expr callable.
+            - Uses numerical differentiation only.
+            - Requires expr callable.
         """
         var_sym = _Numericos._to_symbol(var)
         expr_sym = _Numericos._to_expr(expr)
@@ -112,76 +112,76 @@ class _Numericos:
                 return lambda x: _Numericos._derivada_numerica(expr, x, h)
             else:
                 raise TypeError(
-                    "expr debe ser sympy.Expr, str o callable"
+                    "expr must be sympy.Expr, str, or callable"
                 )
 
         elif metodo == "simbolico":
             if expr_sym is None:
                 raise ValueError(
-                    f"metodo='simbolico' requiere expr simbólica, "
-                    f"pero expr es {type(expr).__name__}"
+                    f"metodo='simbolico' requires a symbolic expr, "
+                    f"but expr is {type(expr).__name__}"
                 )
             return sp.diff(expr_sym, var_sym)
 
         elif metodo == "numerico":
             if not callable(expr):
                 raise ValueError(
-                    f"metodo='numerico' requiere expr callable, "
-                    f"pero expr es {type(expr).__name__}"
+                    f"metodo='numerico' requires callable expr, "
+                    f"but expr is {type(expr).__name__}"
                 )
             return lambda x: _Numericos._derivada_numerica(expr, x, h)
 
         else:
             raise ValueError(
-                f"metodo debe ser 'auto', 'simbolico' o 'numerico', "
+                f"metodo must be 'auto', 'simbolico' or 'numerico', "
                 f"no {metodo}"
             )
 
     @staticmethod
     def derivada(f, x, h=1e-5):
         """
-        [DEPRECATED] Usa derivar(f, "x", metodo="numerico") en su lugar.
+        [DEPRECATED] Use derivar(f, "x", metodo="numerico") instead.
 
-        Derivada numérica centrada en un punto.
+        Centered numerical derivative at a point.
 
         INPUT:
-            f (callable): función a derivar.
-            x (float): punto de evaluación.
-            h (float): paso de derivación.
+            f (callable): function to differentiate.
+            x (float): evaluation point.
+            h (float): differentiation step.
 
         OUTPUT:
-            float: derivada aproximada en x.
+            float: approximate derivative at x.
 
-        NOTAS:
-            Método de diferencias centradas de orden O(h²).
-            Mantiene compatibilidad con código legado.
+        NOTES:
+            Centered finite‑difference method of order O(h²).
+            Keeps compatibility with legacy code.
         """
         return _Numericos._derivada_numerica(f, x, h)
 
     # =========================================================================
-    # INTEGRACIÓN
+    # INTEGRATION
     # =========================================================================
 
     @staticmethod
     def integrar_indefinida(expr, var):
         """
-        Integral indefinida: simbólica si es posible, acumulada si numérica.
+        Indefinite integral: symbolic if possible, accumulated if numeric.
 
         INPUT:
-            expr (sympy.Expr | str | callable): expresión, string o función.
-            var (sympy.Symbol | str): variable de integración.
+            expr (sympy.Expr | str | callable): expression, string, or function.
+            var (sympy.Symbol | str): integration variable.
 
         OUTPUT:
-            sympy.Expr (simbólica) | callable (numérica).
+            sympy.Expr (symbolic) | callable (numeric).
 
-        NOTAS:
-            Si expr es sympy.Expr o str:
-            - Retorna la primitiva simbólica F(var).
+                NOTES:
+                        If expr is sympy.Expr or str:
+                        - Returns the symbolic antiderivative F(var).
 
-            Si expr es callable:
-            - Retorna una función F(x) = ∫₀ˣ f(t) dt (integral acumulada desde 0).
-            - ADVERTENCIA: esto NO es una primitiva general, sino una integral
-              definida desde 0. Para una primitiva real, usa integrar_definida.
+                        If expr is callable:
+                        - Returns a function F(x) = ∫₀ˣ f(t) dt (accumulated integral from 0).
+                        - WARNING: this is NOT a general antiderivative, but a definite
+                            integral from 0. For a true antiderivative, use integrar_definida.
         """
         var_sym = _Numericos._to_symbol(var)
         expr_sym = _Numericos._to_expr(expr)
@@ -192,29 +192,29 @@ class _Numericos:
             return lambda x: _Numericos._integral_numerica(expr, 0.0, x)
         else:
             raise TypeError(
-                "expr debe ser sympy.Expr, str o callable"
+                "expr must be sympy.Expr, str, or callable"
             )
 
     @staticmethod
     def integrar_definida(expr, var, a, b):
         """
-        Integral definida: simbólica si es posible, numérica en caso contrario.
+        Definite integral: symbolic if possible, numeric otherwise.
 
         INPUT:
-            expr (sympy.Expr | str | callable): expresión, string o función.
-            var (sympy.Symbol | str): variable de integración.
-            a (float | sympy.Expr): límite inferior (debe ser evaluable numéricamente).
-            b (float | sympy.Expr): límite superior (debe ser evaluable numéricamente).
+            expr (sympy.Expr | str | callable): expression, string, or function.
+            var (sympy.Symbol | str): integration variable.
+            a (float | sympy.Expr): lower limit (must be numerically evaluable).
+            b (float | sympy.Expr): upper limit (must be numerically evaluable).
 
         OUTPUT:
-            float | sympy.Expr: valor de la integral.
+            float | sympy.Expr: integral value.
 
-        NOTAS:
-            Si expr es simbólica y la integral es resoluble → retorna sympy.Expr.
-            Si la integral simbólica no converge:
-            - Si a, b son numéricamente evaluables → usa integración numérica.
-            - Si a, b contienen símbolos → retorna sp.Integral sin resolver.
-            Si expr es callable → usa integración numérica directamente.
+        NOTES:
+            If expr is symbolic and the integral is solvable → returns sympy.Expr.
+            If the symbolic integral does not converge:
+            - If a, b are numerically evaluable → use numerical integration.
+            - If a, b contain symbols → return unresolved sp.Integral.
+            If expr is callable → use numerical integration directly.
         """
         var_sym = _Numericos._to_symbol(var)
         expr_sym = _Numericos._to_expr(expr)
@@ -222,7 +222,7 @@ class _Numericos:
         if expr_sym is not None:
             res = sp.integrate(expr_sym, (var_sym, a, b))
             if isinstance(res, sp.Integral):
-                # Solo fallback numérico si a y b son números evaluables
+                # Only numeric fallback if a and b are evaluable numbers
                 a_is_evaluable = (a.is_number if isinstance(a, sp.Expr) else True)
                 b_is_evaluable = (b.is_number if isinstance(b, sp.Expr) else True)
                 
@@ -233,69 +233,69 @@ class _Numericos:
                         f_num = sp.lambdify(var_sym, expr_sym, "numpy")
                         return _Numericos._integral_numerica(f_num, a_num, b_num)
                     except (TypeError, ValueError):
-                        # Si la evaluación falla, retorna la Integral simbólica
+                        # If evaluation fails, return the symbolic Integral
                         return res
-                # Si a o b son simbólicos no-evaluables, retorna Integral sin resolver
+                # If a or b are non‑evaluable symbols, return unresolved Integral
                 return res
             return res
         elif callable(expr):
             return _Numericos._integral_numerica(expr, a, b)
         else:
             raise TypeError(
-                "expr debe ser sympy.Expr, str o callable"
+                "expr must be sympy.Expr, str, or callable"
             )
 
     @staticmethod
     def integrar(f, a, b):
         """
-        [DEPRECATED] Usa integrar_definida(f, "x", a, b) en su lugar.
+        [DEPRECATED] Use integrar_definida(f, "x", a, b) instead.
 
-        Integración numérica definida.
+        Definite numerical integration.
 
         INPUT:
-            f (callable): función a integrar.
-            a (float): límite inferior.
-            b (float): límite superior.
+            f (callable): function to integrate.
+            a (float): lower limit.
+            b (float): upper limit.
 
         OUTPUT:
-            float: valor de la integral.
+            float: value of the integral.
 
-        NOTAS:
-            Envoltorio de scipy.integrate.quad.
-            Mantiene compatibilidad con código legado.
+        NOTES:
+            Wrapper around scipy.integrate.quad.
+            Keeps compatibility with legacy code.
         """
         return _Numericos._integral_numerica(f, a, b)
 
     # =========================================================================
-    # RESOLUCIÓN DE ECUACIONES
+    # EQUATION SOLVING
     # =========================================================================
 
     @staticmethod
     def resolver_ecuacion(expr, var, x0=0.0):
         """
-        Resuelve expr(var) = 0 simbólicamente o numéricamente.
+        Solve expr(var) = 0 symbolically or numerically.
 
         INPUT:
-            expr (sympy.Expr | sympy.Eq | str | callable): ecuación.
-            var (sympy.Symbol | str): variable principal.
-            x0 (float): aproximación inicial para métodos numéricos (default: 0.0).
+            expr (sympy.Expr | sympy.Eq | str | callable): equation.
+            var (sympy.Symbol | str): main variable.
+            x0 (float): initial guess for numeric methods (default: 0.0).
 
         OUTPUT:
-            list (simbólica) | float (numérica): solución(es).
+            list (symbolic) | float (numeric): solution(s).
 
-        NOTAS:
-            Jerarquía de métodos:
-            1. sympy.solve → soluciones simbólicas exactas.
-            2. sympy.nsolve → numérica simbólica desde x0.
-            3. Método de Newton numérico → fallback.
+        NOTES:
+            Method hierarchy:
+            1. sympy.solve → exact symbolic solutions.
+            2. sympy.nsolve → symbolic numeric from x0.
+            3. Numeric Newton method → fallback.
 
-            Si expr es callable, usa únicamente método de Newton.
+            If expr is callable, uses Newton only.
         """
         var_sym = _Numericos._to_symbol(var)
         expr_sym = _Numericos._to_expr(expr)
 
         if expr_sym is not None:
-            # Intenta solución simbólica exacta
+            # Try exact symbolic solution
             try:
                 sols = sp.solve(expr_sym, var_sym)
                 if sols:
@@ -303,42 +303,42 @@ class _Numericos:
             except Exception:
                 pass
 
-            # Intenta solución simbólica numérica
+            # Try symbolic numeric solution
             try:
                 return float(sp.nsolve(expr_sym, x0))
             except Exception:
                 pass
 
-            # Fallback a método de Newton
+            # Fallback to Newton method
             try:
                 return _Numericos.raiz_numerica(expr_sym, x0)
             except Exception as exc:
                 raise ValueError(
-                    f"No se pudo resolver la ecuación con x0={x0}"
+                    f"Could not solve the equation with x0={x0}"
                 ) from exc
 
         elif callable(expr):
             return _Numericos.raiz_numerica(expr, x0)
         else:
             raise TypeError(
-                "expr debe ser sympy.Expr, sympy.Eq, str o callable"
+                "expr must be sympy.Expr, sympy.Eq, str, or callable"
             )
 
     @staticmethod
     def raiz_numerica(f, x0):
         """
-        Raíz numérica mediante método de Newton con derivada numérica.
+        Numeric root via Newton's method with numerical derivative.
 
         INPUT:
-            f (callable | sympy.Expr | str): función o expresión.
-            x0 (float): aproximación inicial.
+            f (callable | sympy.Expr | str): function or expression.
+            x0 (float): initial guess.
 
         OUTPUT:
-            float: raíz encontrada.
+            float: root found.
 
-        NOTAS:
-            Usa scipy.optimize.newton.
-            Derivada calculada numéricamente.
+        NOTES:
+            Uses scipy.optimize.newton.
+            Derivative computed numerically.
         """
         expr_sym = _Numericos._to_expr(f)
 
@@ -346,47 +346,47 @@ class _Numericos:
             symbols = sorted(expr_sym.free_symbols, key=lambda s: s.name)
             if len(symbols) != 1:
                 raise ValueError(
-                    "La expresión debe ser univariada (una única variable)"
+                    "The expression must be univariate (a single variable)"
                 )
             f_num = sp.lambdify(symbols[0], expr_sym, "numpy")
         elif callable(f):
             f_num = f
         else:
             raise TypeError(
-                "f debe ser sympy.Expr, str o callable"
+                "f must be sympy.Expr, str, or callable"
             )
 
         fprime = lambda x: _Numericos._derivada_numerica(f_num, x)
         return float(newton(f_num, x0, fprime=fprime))
 
     # =========================================================================
-    # EVALUACIÓN Y UTILIDADES
+    # EVALUATION AND UTILITIES
     # =========================================================================
 
     @staticmethod
     def evaluar(expr, valores):
         """
-        Evalúa una expresión o función con valores específicos.
+        Evaluate an expression or function with specific values.
 
         INPUT:
-            expr (sympy.Expr | str | callable): expresión, string o función.
-            valores (dict | tuple | list): valores para variables.
-                - Para sympy.Expr: dict con claves Symbol o str.
-                - Para callable: dict (por nombre) o tuple/list (posicional).
+            expr (sympy.Expr | str | callable): expression, string, or function.
+            valores (dict | tuple | list): values for variables.
+                - For sympy.Expr: dict with Symbol or str keys.
+                - For callable: dict (by name) or tuple/list (positional).
 
         OUTPUT:
-            float | ndarray: valor evaluado.
+            float | ndarray: evaluated value.
 
-        NOTAS:
-            Para expresiones simbólicas sin variables, retorna float.
-            Para callables, intenta interpretación por nombre o posición.
+        NOTES:
+            For symbolic expressions with no variables, returns float.
+            For callables, attempts name‑based or positional interpretation.
         """
         expr_sym = _Numericos._to_expr(expr)
 
         if expr_sym is not None:
             if not isinstance(valores, dict):
                 raise TypeError(
-                    "Para expresiones sympy, valores debe ser dict"
+                    "For sympy expressions, valores must be a dict"
                 )
             mapping = {}
             for k, v in valores.items():
@@ -406,8 +406,8 @@ class _Numericos:
                     return expr(**valores)
                 except TypeError as exc:
                     raise TypeError(
-                        "No se pudo evaluar el callable con kwargs. "
-                        "Pasa una lista/tupla posicional en 'valores'."
+                        "Could not evaluate the callable with kwargs. "
+                        "Pass a positional list/tuple in 'valores'."
                     ) from exc
             elif isinstance(valores, (list, tuple)):
                 return expr(*valores)
@@ -415,30 +415,30 @@ class _Numericos:
                 return expr(valores)
         else:
             raise TypeError(
-                "expr debe ser sympy.Expr, str o callable"
+                "expr must be sympy.Expr, str, or callable"
             )
 
     # =========================================================================
-    # ECUACIONES DIFERENCIALES ORDINARIAS
+    # ORDINARY DIFFERENTIAL EQUATIONS
     # =========================================================================
 
     @staticmethod
     def rk4(f, t_span, y0, dt):
         """
-        Integrador explícito de Runge-Kutta orden 4 para sistemas EDOs.
+        Explicit 4th‑order Runge‑Kutta integrator for ODE systems.
 
         INPUT:
-            f (callable): función derivada f(t, y).
-            t_span (tuple): (t_inicial, t_final).
-            y0 (array-like): condición inicial (escalar o vector).
-            dt (float): paso de tiempo.
+            f (callable): derivative function f(t, y).
+            t_span (tuple): (t_start, t_end).
+            y0 (array-like): initial condition (scalar or vector).
+            dt (float): time step.
 
         OUTPUT:
-            dict: {"t": array de tiempos, "y": array de estados}.
+            dict: {"t": time array, "y": state array}.
 
-        NOTAS:
+        NOTES:
             dy/dt = f(t, y)
-            Método de orden 4 con error local O(dt⁵).
+            4th‑order method with local error O(dt⁵).
         """
         t0, tf = t_span
         t_vals = np.arange(t0, tf + dt, dt)
@@ -457,13 +457,13 @@ class _Numericos:
 
 
 # =============================================================================
-# INTERFAZ PÚBLICA
+# PUBLIC INTERFACE
 # =============================================================================
 
 numericos = _Numericos()
 
-# Aliases de módulo: permiten "from numericos import derivar" sin fricción
-# Todos estos son métodos estáticos de _Numericos expuestos a nivel de módulo
+# Module aliases: allow "from numericos import derivar" without friction
+# All of these are static methods of _Numericos exposed at module level
 derivar = _Numericos.derivar
 derivada = _Numericos.derivada
 
@@ -477,21 +477,21 @@ raiz_numerica = _Numericos.raiz_numerica
 evaluar = _Numericos.evaluar
 rk4 = _Numericos.rk4
 
-# Aliases claros para el usuario
+# Clear aliases for the user
 __all__ = [
     "numericos",
-    # Derivación
+    # Differentiation
     "derivar",
     "derivada",
-    # Integración
+    # Integration
     "integrar_definida",
     "integrar_indefinida",
     "integrar",
-    # Resolución
+    # Solving
     "resolver_ecuacion",
     "raiz_numerica",
-    # Evaluación
+    # Evaluation
     "evaluar",
-    # EDOs
+    # ODEs
     "rk4",
 ]

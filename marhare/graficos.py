@@ -1,26 +1,26 @@
 """
 graficos.py
 ============================================================
-Módulo de visualización científica de ALTO NIVEL y BAJA FRICCIÓN.
+High‑level, low‑friction scientific visualization module.
 
-FILOSOFÍA:
-- El usuario declara INTENCIÓN (qué tiene: datos, errores, ajustes, bandas)
-- El módulo decide automáticamente CÓMO dibujarlo
+PHILOSOPHY:
+- The user declares INTENT (what they have: data, errors, fits, bands)
+- The module automatically decides HOW to draw it
 
-NO CALCULA NADA. Solo grafica resultados ya calculados.
+DOES NOT COMPUTE DATA. It only plots already computed results.
 
-DISEÑO POR CAPAS:
-  1. Objetos semánticos (Serie, SerieConError, Histograma, Ajuste, Banda, Serie3D, Panel, Scene)
-  2. Motor central: plot(*objetos, layout=None, dims="2D", show=True)
-  3. Layout automático
-  4. Extensibilidad futura (animaciones)
+LAYERED DESIGN:
+    1. Semantic objects (Serie, SerieConError, Histograma, Ajuste, Banda, Serie3D, Panel, Scene)
+    2. Core engine: plot(*objetos, layout=None, dims="2D", show=True)
+    3. Automatic layout
+    4. Future extensibility (animations)
 
-PREPARACIÓN PARA ANIMACIONES:
-  - Scene encapsula estructura gráfica completa (paneles + metadatos)
-  - Motor temporal futuro: animate(scene, updater, frames) [NO implementado]
-  - Scene es la unidad natural para animaciones: define QUÉ se dibuja
-  - updater define CÓMO evoluciona la escena en el tiempo
-  - Separación limpia: graficos.py (estático) + animaciones.py (temporal)
+ANIMATION PREPARATION:
+    - Scene encapsulates the full graphic structure (panels + metadata)
+    - Future time engine: animate(scene, updater, frames) [NOT implemented]
+    - Scene is the natural unit for animations: defines WHAT is drawn
+    - updater defines HOW the scene evolves over time
+    - Clean separation: graficos.py (static) + animaciones.py (temporal)
 
 ============================================================
 """
@@ -37,33 +37,33 @@ from dataclasses import dataclass, field
 
 
 # ============================================================
-#  CONFIG GLOBAL
+#  GLOBAL CONFIG
 # ============================================================
 
 PLOT_DEFAULTS = {
-    # Tamaños típicos para LaTeX (aprox): 1 columna ~ 3.3in, 2 columnas ~ 6.9in
-    "figsize": (4.8, 3.2),     # (ancho, alto) en pulgadas
+    # Typical sizes for LaTeX (approx): 1 column ~ 3.3in, 2 columns ~ 6.9in
+    "figsize": (4.8, 3.2),     # (width, height) in inches
     "dpi": 160,
 
     "grid": True,
     "grid_alpha": 0.14,
     "grid_lw": 0.6,
 
-    "lw": 1.8,                 # grosor de líneas
-    "ms": 5.0,                 # tamaño de markers
-    "capsize": 2.8,            # capsize en errorbars
+    "lw": 1.8,                 # line width
+    "ms": 5.0,                 # marker size
+    "capsize": 2.8,            # capsize in errorbars
 
     "legend": True,
     "legend_frame": False,
 
     "tight": True,
     "minor_ticks": True,
-    "spines": ("left", "bottom"),  # ejes visibles
+    "spines": ("left", "bottom"),  # visible spines
 
-    "save_formats": ("pdf",),      # recomendado: pdf; añade "png" si quieres
+    "save_formats": ("pdf",),      # recommended: pdf; add "png" if desired
     "transparent": False,
 
-    # Tipografía/Math: estilo clásico científico sin depender de TeX instalado
+    # Typography/Math: classic scientific style without depending on installed TeX
     "font_family": "STIXGeneral",
     "math_fontset": "stix",
     "font_size": 11,
@@ -71,43 +71,43 @@ PLOT_DEFAULTS = {
     "title_size": 12,
     "tick_size": 10,
 
-    # Si activas usetex=True necesitas LaTeX instalado en el sistema
+    # If you enable usetex=True you need LaTeX installed on the system
     "usetex": False,
 
-    # -------- Paleta sobria (sin naranja/azul "tab" por defecto) --------
-    # idea: datos en gris oscuro, ajuste/interpolación en casi negro o azul muy profundo
+    # -------- Subdued palette (no default "tab" orange/blue) --------
+    # idea: data in dark gray, fit/interpolation in near‑black or deep blue
     "palette": {
-        "ink":   "#1b1f24",   # casi negro (líneas principales)
+        "ink":   "#1b1f24",   # near black (main lines)
         "data":  "#2f343a",   # gris oscuro (puntos)
         "error": "#7a828a",   # gris medio (barras de error)
         "accent":"#1f4e79",   # azul muy profundo (si quieres destacar algo)
     },
-    # ciclo de colores serio si dibujas varias curvas
+    # sober color cycle if you draw multiple curves
     "cycle": ("#1b1f24", "#1f4e79", "#2d6a4f", "#6c2c2c", "#5b5f97"),
 
-    # datos con marcador hueco por defecto (más “paper”)
+    # hollow markers by default (more “paper‑like”)
     "hollow_markers": True,
 }
 
 
 # ============================================================
-#  CAPA 1: OBJETOS SEMÁNTICOS (NO cálculos, NO gráficos)
+#  LAYER 1: SEMANTIC OBJECTS (NO calculations, NO plotting)
 # ============================================================
 
 @dataclass
 class Serie:
     """
-    Representa una serie de datos simple: x, y.
+    Represents a simple data series: x, y.
     
     INPUT:
-        x: array_like -> variable independiente
-        y: array_like -> variable dependiente
-        label: str | None -> etiqueta para leyenda
-        marker: str | None -> tipo de punto ('o', 's', '^', 'D', etc.) o None para hollow circles
+        x: array_like -> independent variable
+        y: array_like -> dependent variable
+        label: str | None -> legend label
+        marker: str | None -> marker type ('o', 's', '^', 'D', etc.) or None for hollow circles
     
-    PROPÓSITO:
-        Almacenar intención "quiero graficar estos puntos"
-        Sin cálculos ni decoraciones.
+    PURPOSE:
+        Store intent: "I want to plot these points"
+        No calculations or decorations.
     """
     x: np.ndarray = field(default_factory=lambda: np.array([]))
     y: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -118,7 +118,7 @@ class Serie:
         self.x = np.asarray(self.x, dtype=float)
         self.y = np.asarray(self.y, dtype=float)
         if self.x.shape[0] != self.y.shape[0]:
-            raise ValueError("Serie: 'x' e 'y' deben tener la misma longitud")
+            raise ValueError("Serie: 'x' and 'y' must have the same length")
     
     def __hash__(self):
         return id(self)
@@ -127,18 +127,18 @@ class Serie:
 @dataclass
 class SerieConError:
     """
-    Serie con barras de error (simétricas).
+    Series with (symmetric) error bars.
     
     INPUT:
-        x: array_like -> variable independiente
-        y: array_like -> variable dependiente
-        sy: array_like | None -> error en y (opcional)
-        sx: array_like | None -> error en x (opcional)
-        label: str | None -> etiqueta para leyenda
+        x: array_like -> independent variable
+        y: array_like -> dependent variable
+        sy: array_like | None -> error in y (optional)
+        sx: array_like | None -> error in x (optional)
+        label: str | None -> legend label
     
-    PROPÓSITO:
-        "Tengo puntos experimentales con incertidumbres"
-        Motor dibuja automáticamente errorbar.
+    PURPOSE:
+        "I have experimental points with uncertainties"
+        The engine draws error bars automatically.
     """
     x: np.ndarray = field(default_factory=lambda: np.array([]))
     y: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -154,11 +154,11 @@ class SerieConError:
         if self.sx is not None:
             self.sx = np.asarray(self.sx, dtype=float)
         if self.x.shape[0] != self.y.shape[0]:
-            raise ValueError("SerieConError: 'x' e 'y' deben tener la misma longitud")
+            raise ValueError("SerieConError: 'x' and 'y' must have the same length")
         if self.sy is not None and self.sy.shape[0] != self.y.shape[0]:
-            raise ValueError("SerieConError: 'sy' debe tener la misma longitud que 'y'")
+            raise ValueError("SerieConError: 'sy' must have the same length as 'y'")
         if self.sx is not None and self.sx.shape[0] != self.x.shape[0]:
-            raise ValueError("SerieConError: 'sx' debe tener la misma longitud que 'x'")
+            raise ValueError("SerieConError: 'sx' must have the same length as 'x'")
     
     def __hash__(self):
         return id(self)
@@ -167,16 +167,16 @@ class SerieConError:
 @dataclass
 class Histograma:
     """
-    Histograma de una variable.
+    Histogram of a variable.
     
     INPUT:
-        data: array_like -> datos brutos
-        bins: int | array_like -> número de bins o bordes (Matplotlib standard)
-        label: str | None -> etiqueta
+        data: array_like -> raw data
+        bins: int | array_like -> number of bins or edges (Matplotlib standard)
+        label: str | None -> label
     
-    PROPÓSITO:
-        "Quiero ver la distribución de estos datos"
-        Motor dibuja automáticamente con estilo limpio.
+    PURPOSE:
+        "I want to see the distribution of these data"
+        The engine draws automatically with a clean style.
     """
     data: np.ndarray = field(default_factory=lambda: np.array([]))
     bins: Union[int, np.ndarray] = 30
@@ -192,16 +192,16 @@ class Histograma:
 @dataclass
 class Ajuste:
     """
-    Curva ajustada (ya calculada en otro módulo).
+    Fitted curve (already computed in another module).
     
     INPUT:
-        x: array_like -> puntos donde evaluar el ajuste
-        yfit: array_like -> valores del ajuste
-        label: str | None -> etiqueta (ej: "Ajuste lineal", "Spline")
+        x: array_like -> points where the fit is evaluated
+        yfit: array_like -> fitted values
+        label: str | None -> label (e.g., "Linear fit", "Spline")
     
-    PROPÓSITO:
-        "Aquí está la curva de ajuste, dibújala sobre los datos"
-        No calcula nada, solo dibuja la línea.
+    PURPOSE:
+        "Here is the fitted curve, draw it over the data"
+        Does not compute anything, only draws the line.
     """
     x: np.ndarray = field(default_factory=lambda: np.array([]))
     yfit: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -211,7 +211,7 @@ class Ajuste:
         self.x = np.asarray(self.x, dtype=float)
         self.yfit = np.asarray(self.yfit, dtype=float)
         if self.x.shape[0] != self.yfit.shape[0]:
-            raise ValueError("Ajuste: 'x' e 'yfit' deben tener la misma longitud")
+            raise ValueError("Ajuste: 'x' and 'yfit' must have the same length")
     
     def __hash__(self):
         return id(self)
@@ -220,17 +220,17 @@ class Ajuste:
 @dataclass
 class Banda:
     """
-    Banda de confianza/predicción (ya calculada).
+    Confidence/prediction band (already computed).
     
     INPUT:
-        x: array_like -> puntos x
-        y_low: array_like -> límite inferior de la banda
-        y_high: array_like -> límite superior de la banda
-        label: str | None -> etiqueta (ej: "Banda 95%")
+        x: array_like -> x points
+        y_low: array_like -> lower bound of the band
+        y_high: array_like -> upper bound of the band
+        label: str | None -> label (e.g., "95% band")
     
-    PROPÓSITO:
-        "Dibuja esta región sombreada entre y_low e y_high"
-        Típicamente se usa junto con Ajuste.
+    PURPOSE:
+        "Draw this shaded region between y_low and y_high"
+        Typically used together with Ajuste.
     """
     x: np.ndarray = field(default_factory=lambda: np.array([]))
     y_low: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -242,7 +242,7 @@ class Banda:
         self.y_low = np.asarray(self.y_low, dtype=float)
         self.y_high = np.asarray(self.y_high, dtype=float)
         if self.x.shape[0] != self.y_low.shape[0] or self.x.shape[0] != self.y_high.shape[0]:
-            raise ValueError("Banda: 'x', 'y_low' e 'y_high' deben tener la misma longitud")
+            raise ValueError("Banda: 'x', 'y_low' and 'y_high' must have the same length")
     
     def __hash__(self):
         return id(self)
@@ -251,18 +251,18 @@ class Banda:
 @dataclass
 class Serie3D:
     """
-    Representa una serie de datos en 3D: x, y, z.
+    Represents a 3D data series: x, y, z.
     
     INPUT:
-        x: array_like -> variable independiente 1
-        y: array_like -> variable independiente 2
-        z: array_like -> variable dependiente
-        label: str | None -> etiqueta para leyenda
+        x: array_like -> independent variable 1
+        y: array_like -> independent variable 2
+        z: array_like -> dependent variable
+        label: str | None -> legend label
     
-    PROPÓSITO:
-        "Dibuja esta trayectoria o nube de puntos en 3D"
-        NO calcula nada.
-        Requiere dims="3D" en plot().
+    PURPOSE:
+        "Draw this trajectory or point cloud in 3D"
+        Does NOT compute anything.
+        Requires dims="3D" in plot().
     """
     x: np.ndarray = field(default_factory=lambda: np.array([]))
     y: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -274,7 +274,7 @@ class Serie3D:
         self.y = np.asarray(self.y, dtype=float)
         self.z = np.asarray(self.z, dtype=float)
         if self.x.shape[0] != self.y.shape[0] or self.x.shape[0] != self.z.shape[0]:
-            raise ValueError("Serie3D: 'x', 'y' y 'z' deben tener la misma longitud")
+            raise ValueError("Serie3D: 'x', 'y' and 'z' must have the same length")
     
     def __hash__(self):
         return id(self)
@@ -283,14 +283,14 @@ class Serie3D:
 @dataclass
 class Panel:
     """
-    Panel de composición: agrupa objetos que deben dibujarse en el mismo eje.
+    Composition panel: groups objects that should be drawn on the same axis.
 
     INPUT:
-        *objetos: objetos semánticos (Serie, SerieConError, Histograma, Ajuste, Banda, etc.)
+        *objetos: semantic objects (Serie, SerieConError, Histograma, Ajuste, Banda, etc.)
 
-    PROPÓSITO:
-        Explicitar qué debe ir superpuesto en un mismo subplot.
-        No calcula ni dibuja; solo almacena la intención.
+    PURPOSE:
+        Make explicit what should be overlaid in the same subplot.
+        Does not compute or draw; only stores intent.
     """
     objetos: List[Any] = field(default_factory=list)
 
@@ -301,32 +301,32 @@ class Panel:
 @dataclass
 class Scene:
     """
-    Escena gráfica completa: representa una figura reutilizable.
+    Complete graphic scene: represents a reusable figure.
     
     INPUT:
-        *paneles: Panel o objetos semánticos (se normalizan a Panel)
-        layout: str | None -> layout explícito ("2x3") o None (automático)
-        dims: str -> "2D" o "3D"
-        figsize: tuple | None -> tamaño de figura
-        xlabel, ylabel, title: str | None -> etiquetas globales
+        *paneles: Panel or semantic objects (normalized to Panel)
+        layout: str | None -> explicit layout ("2x3") or None (auto)
+        dims: str -> "2D" or "3D"
+        figsize: tuple | None -> figure size
+        xlabel, ylabel, title: str | None -> global labels
     
-    PROPÓSITO:
-        Encapsular ESTRUCTURA gráfica (qué objetos, cómo organizarlos).
-        NO encapsula ESTÉTICA (los kwargs de estilo se pasan a plot()).
-        NO calcula ni dibuja nada.
-        Base natural para futuras animaciones.
+    PURPOSE:
+        Encapsulate graphic STRUCTURE (what objects, how to arrange them).
+        Does NOT encapsulate AESTHETICS (style kwargs are passed to plot()).
+        Does NOT compute or draw anything.
+        Natural base for future animations.
     
-    DECISIONES DE DISEÑO:
-        - Scene es MUTABLE por diseño (permite modificar paneles después de creación)
-        - Validación temprana: verifica compatibilidad dims-objetos en construcción
-        - Debe pasarse como ARGUMENTO ÚNICO a plot(): plot(scene)
-        - Estilo se controla externamente: plot(scene, lw=2, dpi=200)
+    DESIGN DECISIONS:
+        - Scene is MUTABLE by design (allows modifying panels after creation)
+        - Early validation: checks dims-object compatibility on construction
+        - Must be passed as a SINGLE ARGUMENT to plot(): plot(scene)
+        - Style is controlled externally: plot(scene, lw=2, dpi=200)
         
-    EJEMPLOS:
+    EXAMPLES:
         scene = Scene(Serie(x, y), Histograma(data))
         scene = Scene(Panel(Serie(...), Ajuste(...)), layout="1x2", dims="2D")
-        plot(scene)  # dibuja la escena con estilo por defecto
-        plot(scene, dpi=300)  # mismo contenido, distinto estilo
+        plot(scene)  # draw the scene with default style
+        plot(scene, dpi=300)  # same content, different style
     """
     paneles: List[Panel] = field(default_factory=list)
     layout: Optional[str] = None
@@ -346,7 +346,7 @@ class Scene:
         ylabel: Optional[str] = None,
         title: Optional[str] = None
     ):
-        # Normalizar objetos sueltos a Panel (igual que plot())
+        # Normalize loose objects to Panel (same as plot())
         self.paneles = []
         for obj in paneles:
             if isinstance(obj, Panel):
@@ -354,7 +354,7 @@ class Scene:
             else:
                 self.paneles.append(Panel(obj))
         
-        # Validación temprana: compatibilidad dims-objetos
+        # Early validation: dims-object compatibility
         if dims == "3D":
             for panel in self.paneles:
                 for obj in panel.objetos:
@@ -427,22 +427,22 @@ def _aplicar_estilo(**overrides):
 
 def _layout_shape(n: int) -> Tuple[int, int]:
     """
-    Decide automáticamente forma de grid (nrows, ncols) para n gráficos.
+    Automatically decide grid shape (nrows, ncols) for n plots.
     
     INPUT:
-        n: int -> número de subplots
+        n: int -> number of subplots
     
     OUTPUT:
         (nrows, ncols)
     
-    REGLA:
+    RULE:
         1  -> 1x1
         2  -> 1x2
-        3  -> 2x2  (deja 1 vacío)
+        3  -> 2x2  (leaves 1 empty)
         4  -> 2x2
-        5  -> 2x3  (deja 1 vacío)
+        5  -> 2x3  (leaves 1 empty)
         6  -> 2x3
-        7  -> 3x3  (deja 2 vacíos)
+        7  -> 3x3  (leaves 2 empty)
         etc.
     """
     if n == 1:
@@ -454,27 +454,27 @@ def _layout_shape(n: int) -> Tuple[int, int]:
     elif n <= 6:
         return 2, 3
     else:
-        # para n >= 7: usa ceil(sqrt(n))
+        # for n >= 7: use ceil(sqrt(n))
         side = int(np.ceil(np.sqrt(n)))
         return side, side
 
 
 def _crear_eje(fig, idx: int, nrows: int, ncols: int, dims: str) -> plt.Axes:
     """
-    Crea un eje 2D o 3D según dims.
+    Create a 2D or 3D axis depending on dims.
     
     INPUT:
-        fig: figura matplotlib
-        idx: índice del subplot (1-based)
-        nrows, ncols: layout del subplot
-        dims: "2D" o "3D"
+        fig: matplotlib figure
+        idx: subplot index (1-based)
+        nrows, ncols: subplot layout
+        dims: "2D" or "3D"
     
     OUTPUT:
-        ax: matplotlib Axes (2D) o Axes3D (3D)
+        ax: matplotlib Axes (2D) or Axes3D (3D)
     
-    NOTAS:
-        - Si dims="3D", crea con projection="3d"
-        - Si dims="2D", crea eje normal
+    NOTES:
+        - If dims="3D", create with projection="3d"
+        - If dims="2D", create a normal axis
     """
     if dims == "3D":
         return fig.add_subplot(nrows, ncols, idx, projection="3d")
@@ -484,40 +484,40 @@ def _crear_eje(fig, idx: int, nrows: int, ncols: int, dims: str) -> plt.Axes:
 
 def _es_eje_3d(ax) -> bool:
     """
-    Detecta si un eje es 3D.
+    Detect whether an axis is 3D.
     
     INPUT:
         ax: matplotlib Axes
     
     OUTPUT:
-        bool: True si el eje tiene proyección 3D
+        bool: True if the axis has 3D projection
     
-    NOTAS:
-        Centraliza la detección para evitar inconsistencias.
-        Los ejes 3D tienen atributo 'zaxis'.
+    NOTES:
+        Centralizes detection to avoid inconsistencies.
+        3D axes have the 'zaxis' attribute.
     """
     return hasattr(ax, 'zaxis')
 
 
 def _post_process_ax(ax, cfg):
     """
-    Aplica post-processing estándar a un eje.
-    Usado internamente después de cada gráfico.
+    Apply standard post‑processing to an axis.
+    Used internally after each plot.
     
-    NOTAS:
-        - Para ejes 3D, omite minor ticks y spines (no aplicables)
-        - Para ejes 2D, aplica configuración estándar
+    NOTES:
+        - For 3D axes, skip minor ticks and spines (not applicable)
+        - For 2D axes, apply standard configuration
     """
-    # Ejes 3D: no aplicar lógica 2D
+    # 3D axes: do not apply 2D logic
     if _es_eje_3d(ax):
         return
     
-    # Minor ticks (solo 2D)
+    # Minor ticks (2D only)
     if cfg.get("minor_ticks", True):
         ax.xaxis.set_minor_locator(AutoMinorLocator())
         ax.yaxis.set_minor_locator(AutoMinorLocator())
 
-    # Spines visibility (solo 2D)
+    # Spines visibility (2D only)
     sp = set(cfg.get("spines", ("left", "bottom")))
     ax.spines["left"].set_visible("left" in sp)
     ax.spines["bottom"].set_visible("bottom" in sp)
@@ -527,7 +527,7 @@ def _post_process_ax(ax, cfg):
 
 def _apply_legend(ax, cfg):
     """
-    Aplica leyenda solo si hay labels válidos.
+    Apply legend only if there are valid labels.
     """
     if not cfg.get("legend", True):
         return
@@ -587,60 +587,60 @@ def plot(
     **kwargs
 ) -> Tuple[plt.Figure, Union[plt.Axes, np.ndarray]]:
     """
-    Motor central: grafica automáticamente una o más series.
+    Core engine: automatically plots one or more series.
     
     INPUT:
         *objetos: Serie, SerieConError, Histograma, Ajuste, Banda, Panel, Scene
         layout: str | None
-                None -> calcula automáticamente (1→1x1, 2→1x2, etc.)
-                "2x3" -> fuerza layout específico
-                Ignorado si se pasa Scene (usa scene.layout)
-        dims: str -> "2D" (defecto) o "3D"
-                Ignorado si se pasa Scene (usa scene.dims)
-        show: bool -> si True, ejecuta plt.show()
-        figsize: tuple | None -> tamaño figura; si None usa PLOT_DEFAULTS
-                Ignorado si se pasa Scene (usa scene.figsize)
-        xlabel, ylabel, title: str | None -> etiquetas globales (si aplica)
-                Ignorado si se pasa Scene (usa scene.xlabel, etc.)
-        **kwargs: opciones estilo (dpi, grid_alpha, lw, etc.)
-                Aplicables SIEMPRE (incluso con Scene)
+            None -> auto (1→1x1, 2→1x2, etc.)
+            "2x3" -> force specific layout
+            Ignored if Scene is passed (uses scene.layout)
+        dims: str -> "2D" (default) or "3D"
+            Ignored if Scene is passed (uses scene.dims)
+        show: bool -> if True, calls plt.show()
+        figsize: tuple | None -> figure size; if None uses PLOT_DEFAULTS
+            Ignored if Scene is passed (uses scene.figsize)
+        xlabel, ylabel, title: str | None -> global labels (if applicable)
+            Ignored if Scene is passed (uses scene.xlabel, etc.)
+        **kwargs: style options (dpi, grid_alpha, lw, etc.)
+            ALWAYS applied (even with Scene)
     
     OUTPUT:
         (fig, ax) si n_objetos == 1
         (fig, axs) si n_objetos > 1
     
-    EJEMPLOS:
-        # Modo directo
+    EXAMPLES:
+        # Direct mode
         plot(Serie(x, y))
         plot(SerieConError(x, y, sy), Ajuste(x, yfit))
         plot(Histograma(data1), Histograma(data2), layout="1x2")
         
-        # Con Scene (recomendado para reutilización)
+        # With Scene (recommended for reuse)
         scene = Scene(Serie(x, y), Histograma(data), layout="1x2")
-        plot(scene)  # estructura de Scene
-        plot(scene, dpi=300)  # mismo contenido, distinto estilo
+        plot(scene)  # Scene structure
+        plot(scene, dpi=300)  # same content, different style
     
-    NOTAS SOBRE Scene:
-        - Scene debe pasarse como ARGUMENTO ÚNICO: plot(scene)
-        - Scene define ESTRUCTURA (qué objetos, layout, dims, labels)
-        - kwargs definen ESTÉTICA (dpi, colores, grosores, etc.)
-        - Parámetros layout/dims/figsize/labels se ignoran si viene Scene
+    NOTES ABOUT Scene:
+        - Scene must be passed as a SINGLE ARGUMENT: plot(scene)
+        - Scene defines STRUCTURE (what objects, layout, dims, labels)
+        - kwargs define AESTHETICS (dpi, colors, line widths, etc.)
+        - layout/dims/figsize/labels parameters are ignored when Scene is provided
     
-    PROPÓSITO:
-        Usuario solo declara qué tiene, este motor:
-        - Detecta número y tipos de objetos
-        - Crea figura y ejes automáticamente
-        - Llama funciones internas según tipo
-        - Aplica estilos coherentes
-        - Minimiza decisiones del usuario
+    PURPOSE:
+        The user only declares what they have; this engine:
+        - Detects number and types of objects
+        - Creates figure and axes automatically
+        - Calls internal functions by type
+        - Applies consistent styling
+        - Minimizes user decisions
     """
-    # Caso especial: si se pasa un único Scene, usar sus propiedades
+    # Special case: if a single Scene is passed, use its properties
     if len(objetos) == 1 and _es_scene_like(objetos[0]):
         scene = objetos[0]
-        # Extraer propiedades de Scene (no sobreescribir si ya vienen en kwargs)
+        # Extract Scene properties (do not overwrite if explicitly provided)
         if layout is None:
             layout = scene.layout
-        if dims == "2D":  # solo si no se pasó explícitamente
+        if dims == "2D":  # only if not explicitly passed
             dims = scene.dims
         if figsize is None:
             figsize = scene.figsize
@@ -650,21 +650,21 @@ def plot(
             ylabel = scene.ylabel
         if title is None:
             title = scene.title
-        # Usar paneles de Scene directamente
+        # Use Scene panels directly
         objetos = tuple(scene.paneles)
     
     if len(objetos) == 0:
-        raise ValueError("plot() necesita al menos un objeto (Serie, Histograma, etc.)")
+        raise ValueError("plot() needs at least one object (Serie, Histograma, etc.)")
 
     if dims not in ("2D", "3D"):
-        raise ValueError(f"dims debe ser '2D' o '3D', recibido: {dims}")
+        raise ValueError(f"dims must be '2D' or '3D', received: {dims}")
 
     cfg = _aplicar_estilo(**kwargs)
 
     if figsize is None:
         figsize = cfg["figsize"]
 
-    # Normalizar a Paneles (cada Panel corresponde a un subplot)
+    # Normalize to Panels (each Panel corresponds to a subplot)
     paneles: List[Panel] = []
     for obj in objetos:
         if _es_panel_like(obj):
@@ -672,49 +672,49 @@ def plot(
         else:
             paneles.append(Panel(obj))
     if len(paneles) == 0:
-        raise ValueError("plot() necesita al menos un objeto (Serie, Histograma, etc.)")
+        raise ValueError("plot() needs at least one object (Serie, Histograma, etc.)")
 
-    # Calcular layout
+    # Compute layout
     n_grupos = len(paneles)
     if layout is None:
         nrows, ncols = _layout_shape(n_grupos)
     else:
-        # parsear "2x3" -> (2, 3)
+        # parse "2x3" -> (2, 3)
         parts = layout.split("x")
         if len(parts) != 2:
-            raise ValueError(f"layout debe ser 'NxM' (ej: '2x3'), recibido: {layout}")
+            raise ValueError(f"layout must be 'NxM' (e.g., '2x3'), received: {layout}")
         try:
             nrows, ncols = int(parts[0]), int(parts[1])
         except ValueError:
-            raise ValueError(f"layout debe ser 'NxM' con N,M enteros, recibido: {layout}")
+            raise ValueError(f"layout must be 'NxM' with integer N,M, received: {layout}")
 
-    # Decisión arquitectural: multipanel usa control manual, monoPanel usa constrained_layout
-    # constrained_layout y subplots_adjust son incompatibles (Matplotlib ignora adjust si constrained=True)
+    # Architectural decision: multipanel uses manual control, single panel uses constrained_layout
+    # constrained_layout and subplots_adjust are incompatible (Matplotlib ignores adjust if constrained=True)
     is_multipanel = n_grupos > 1
     use_constrained = cfg.get("tight", True) and not is_multipanel
     
-    # Crear figura
+    # Create figure
     fig = plt.figure(figsize=figsize, constrained_layout=use_constrained)
 
-    # Crear ejes manualmente (2D o 3D según dims)
+    # Create axes manually (2D or 3D depending on dims)
     axs = []
     for i in range(nrows * ncols):
         ax = _crear_eje(fig, i + 1, nrows, ncols, dims)
         axs.append(ax)
     axs = np.array(axs)
     
-    # Para multipanel, aplicar composición visual con control manual
+    # For multipanel, apply visual composition with manual control
     if is_multipanel:
         fig.subplots_adjust(
-            left=0.10,      # 10% margen izquierdo
-            right=0.95,     # 5% margen derecho
-            top=0.92,       # 8% margen superior
-            bottom=0.10,    # 10% margen inferior
-            wspace=0.35,    # 35% espaciado horizontal relativo
-            hspace=0.40     # 40% espaciado vertical relativo
+            left=0.10,      # 10% left margin
+            right=0.95,     # 5% right margin
+            top=0.92,       # 8% top margin
+            bottom=0.10,    # 10% bottom margin
+            wspace=0.35,    # 35% relative horizontal spacing
+            hspace=0.40     # 40% relative vertical spacing
         )
 
-    # Graficar cada panel
+    # Plot each panel
     for idx, panel in enumerate(paneles):
         if idx < len(axs):
             ax = axs[idx]
@@ -723,11 +723,11 @@ def plot(
             _post_process_ax(ax, cfg)
             _apply_legend(ax, cfg)
 
-    # Ocultar ejes sobrantes
+    # Hide extra axes
     for idx in range(len(paneles), len(axs)):
         axs[idx].set_visible(False)
 
-    # Etiquetas globales (si hay un solo subplot)
+    # Global labels (if only one subplot)
     if n_grupos == 1:
         ax = axs[0]
         if xlabel is not None:
@@ -740,7 +740,7 @@ def plot(
     if show:
         plt.show()
 
-    # Devolver formato consistente
+    # Return consistent format
     if n_grupos == 1:
         return fig, axs[0]
     else:
@@ -749,15 +749,15 @@ def plot(
 
 def _plot_objeto(obj: Any, ax: plt.Axes, cfg: Dict[str, Any]):
     """
-    Dispatcher interno: dibuja objeto en eje según su tipo.
+    Internal dispatcher: draw object on axis by type.
     
     INPUT:
         obj: Serie, SerieConError, Histograma, Ajuste, Banda, Serie3D
-        ax: matplotlib.axes.Axes o Axes3D
-        cfg: diccionario de configuración
+        ax: matplotlib.axes.Axes or Axes3D
+        cfg: configuration dictionary
     
-    NOTAS:
-        - NO modifica obj
+    NOTES:
+        - Does NOT modify obj
         - NO calcula nada
         - Solo dibuja lo que obj contiene
         - Valida compatibilidad 2D/3D
@@ -787,18 +787,18 @@ def _plot_objeto(obj: Any, ax: plt.Axes, cfg: Dict[str, Any]):
         elif isinstance(obj, Serie) or _es_serie_like(obj):
             _plot_serie(obj, ax, cfg)
         else:
-            raise TypeError(f"Tipo de objeto no soportado: {type(obj).__name__}")
+            raise TypeError(f"Unsupported object type: {type(obj).__name__}")
 
 
 def _plot_serie(obj: Serie, ax: plt.Axes, cfg: Dict[str, Any]):
     """
-    Dibuja una serie simple (scatter plot limpio).
+    Draw a simple series (clean scatter plot).
     """
     color = cfg["palette"]["data"]
     marker = obj.marker if obj.marker is not None else "o"
     
     if cfg.get("hollow_markers", True) and obj.marker is None:
-        # Hollow circles solo si no se especifica marker
+        # Hollow circles only if marker is not specified
         ax.scatter(
             obj.x, obj.y,
             label=obj.label,
@@ -809,7 +809,7 @@ def _plot_serie(obj: Serie, ax: plt.Axes, cfg: Dict[str, Any]):
             s=36
         )
     else:
-        # Marker específico o filled
+        # Specific marker or filled
         ax.scatter(
             obj.x, obj.y,
             label=obj.label,
@@ -821,7 +821,7 @@ def _plot_serie(obj: Serie, ax: plt.Axes, cfg: Dict[str, Any]):
 
 def _plot_serie_con_error(obj: SerieConError, ax: plt.Axes, cfg: Dict[str, Any]):
     """
-    Dibuja serie con barras de error (errorbar).
+    Draw a series with error bars (errorbar).
     """
     ax.errorbar(
         obj.x, obj.y,
@@ -838,7 +838,7 @@ def _plot_serie_con_error(obj: SerieConError, ax: plt.Axes, cfg: Dict[str, Any])
 
 def _plot_histograma(obj: Histograma, ax: plt.Axes, cfg: Dict[str, Any]):
     """
-    Dibuja histograma limpio.
+    Draw a clean histogram.
     """
     ax.hist(
         obj.data,
@@ -852,7 +852,7 @@ def _plot_histograma(obj: Histograma, ax: plt.Axes, cfg: Dict[str, Any]):
 
 def _plot_ajuste(obj: Ajuste, ax: plt.Axes, cfg: Dict[str, Any]):
     """
-    Dibuja curva de ajuste (línea suave).
+    Draw a fitted curve (smooth line).
     """
     ax.plot(
         obj.x, obj.yfit,
@@ -864,7 +864,7 @@ def _plot_ajuste(obj: Ajuste, ax: plt.Axes, cfg: Dict[str, Any]):
 
 def _plot_banda(obj: Banda, ax: plt.Axes, cfg: Dict[str, Any]):
     """
-    Dibuja banda (relleno entre y_low e y_high).
+    Draw a band (filled between y_low and y_high).
     """
     ax.fill_between(
         obj.x,
@@ -878,16 +878,16 @@ def _plot_banda(obj: Banda, ax: plt.Axes, cfg: Dict[str, Any]):
 
 def _plot_serie3d(obj: Serie3D, ax, cfg: Dict[str, Any]):
     """
-    Dibuja una serie 3D (línea o puntos en espacio 3D).
+    Draw a 3D series (line or points in 3D space).
     
     INPUT:
         obj: Serie3D
-        ax: Axes3D (eje con projection="3d")
-        cfg: diccionario de configuración
+        ax: Axes3D (axis with projection="3d")
+        cfg: configuration dictionary
     
-    NOTAS:
-        - Usa ax.plot(x, y, z) de mpl_toolkits.mplot3d
-        - Color sobrio coherente con paleta 2D
+    NOTES:
+        - Uses ax.plot(x, y, z) from mpl_toolkits.mplot3d
+        - Subdued color consistent with 2D palette
     """
     ax.plot(
         obj.x, obj.y, obj.z,
@@ -900,7 +900,7 @@ def _plot_serie3d(obj: Serie3D, ax, cfg: Dict[str, Any]):
 
 
 # ============================================================
-#  API CLÁSICA (compatibilidad con código antiguo)
+#  CLASSIC API (compatibility with legacy code)
 # ============================================================
 
 def figura(
@@ -912,10 +912,10 @@ def figura(
     **kwargs
 ):
     """
-    Crea figura + ejes con el estilo aplicado.
-    Devuelve (fig, ax) o (fig, axs) si hay varios subplots.
+    Create figure + axes with the applied style.
+    Returns (fig, ax) or (fig, axs) if there are multiple subplots.
 
-    kwargs: puedes pasar claves de PLOT_DEFAULTS (dpi, grid_alpha, lw, etc.)
+    kwargs: you can pass keys from PLOT_DEFAULTS (dpi, grid_alpha, lw, etc.)
     """
     cfg = _aplicar_estilo(**kwargs)
 
@@ -931,16 +931,16 @@ def figura(
         constrained_layout=cfg.get("tight", True)
     )
     
-    # Ajustar composición visual para multipanel (márgenes y espaciado científico)
-    # Aplicar la misma lógica que en plot(): multipanel desactiva constrained_layout
+    # Adjust visual composition for multipanel (margins and scientific spacing)
+    # Apply the same logic as plot(): multipanel disables constrained_layout
     if nrows > 1 or ncols > 1:
         fig.subplots_adjust(
-            left=0.10,      # 10% margen izquierdo
-            right=0.95,     # 5% margen derecho
-            top=0.92,       # 8% margen superior
-            bottom=0.10,    # 10% margen inferior
-            wspace=0.35,    # 35% espaciado horizontal relativo
-            hspace=0.40     # 40% espaciado vertical relativo
+            left=0.10,      # 10% left margin
+            right=0.95,     # 5% right margin
+            top=0.92,       # 8% top margin
+            bottom=0.10,    # 10% bottom margin
+            wspace=0.35,    # 35% relative horizontal spacing
+            hspace=0.40     # 40% relative vertical spacing
         )
 
     return fig, axs
@@ -954,17 +954,17 @@ def guardar(
     close: bool = True
 ):
     """
-    Guarda figura en uno o varios formatos (PDF recomendado para LaTeX).
+    Save figure in one or more formats (PDF recommended for LaTeX).
     
     INPUT:
         fig: matplotlib.figure.Figure
-        filename: str | Path -> ruta sin extensión
-        formatos: list[str] | None -> ["pdf", "png"]; None usa PLOT_DEFAULTS
-        transparent: bool | None -> fondo transparente
-        close: bool -> cerrar figura después de guardar
+        filename: str | Path -> path without extension
+        formatos: list[str] | None -> ["pdf", "png"]; None uses PLOT_DEFAULTS
+        transparent: bool | None -> transparent background
+        close: bool -> close figure after saving
     
     OUTPUT:
-        None (efecto: guarda archivo(s))
+        None (side effect: saves file(s))
     """
     if formatos is None:
         formatos = PLOT_DEFAULTS["save_formats"]
@@ -997,9 +997,9 @@ def linea(
     **kwargs
 ):
     """
-    Línea clásica x-y (API tradicional).
+    Classic x‑y line (traditional API).
     
-    Usa la clase Serie internamente para mantener consistencia.
+    Uses the Serie class internally to keep consistency.
     """
     cfg = _aplicar_estilo(**kwargs)
     if ax is None:
@@ -1145,16 +1145,16 @@ def errorbar(
 
 
 # ============================================================
-#  FACHADA (MISMO ESTILO QUE TUS OTROS MÓDULOS)
+#  FACADE (SAME STYLE AS YOUR OTHER MODULES)
 # ============================================================
 
 class _Graficos:
-    """Fachada: graficos.plot(...), graficos.linea(...), graficos.errorbar(...), etc."""
+    """Facade: graficos.plot(...), graficos.linea(...), graficos.errorbar(...), etc."""
     
-    # Motor central (NUEVO - Capa 2)
+    # Core engine (NEW - Layer 2)
     plot = staticmethod(plot)
     
-    # Clases semánticas (NUEVO - Capa 1)
+    # Semantic classes (NEW - Layer 1)
     Serie = Serie
     SerieConError = SerieConError
     Histograma = Histograma
@@ -1164,16 +1164,16 @@ class _Graficos:
     Panel = Panel
     Scene = Scene
     
-    # Utilidades y configuración
+    # Utilities and configuration
     _aplicar_estilo = staticmethod(_aplicar_estilo)
     figura = staticmethod(figura)
     guardar = staticmethod(guardar)
     
-    # API clásica (compatibilidad con código antiguo)
+    # Classic API (compatibility with legacy code)
     linea = staticmethod(linea)
     dispersion = staticmethod(dispersion)
     errorbar = staticmethod(errorbar)
 
 
-# Instancia global
+# Global instance
 graficos = _Graficos()

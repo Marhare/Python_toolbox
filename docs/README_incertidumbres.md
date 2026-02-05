@@ -1,41 +1,41 @@
 # incertidumbres.py
 
-## Propósito
-Creación de magnitudes con incertidumbre y propagación simbólica con SymPy.
+## Purpose
+Create quantities with uncertainty and symbolic propagation with SymPy.
 
-## API principal
+## Main API
 - `u(x, sigmax=0.0)`
-  - Devuelve `ufloat` si `x` es escalar.
-  - Devuelve `unumpy.uarray` si `x` es array.
+  - Returns `ufloat` if `x` is scalar.
+  - Returns `unumpy.uarray` if `x` is an array.
 
 - `propagacion_incertidumbre_sympy(f, vars_, valores, sigmas, cov=None, simplify=True)`
-  - Calcula gradiente, varianza propagada y sigma.
-  - Devuelve valores numéricos y LaTeX de las expresiones.
+  - Computes gradient, propagated variance, and sigma.
+  - Returns numeric values and LaTeX expressions.
 
-## Dependencias
+## Dependencies
 - `uncertainties`
 - `sympy`
 
-## Notas
-- Integra con `latex_tools` para generar LaTeX.
-- `cov` opcional permite covarianzas completas.
+## Notes
+- Integrates with `latex_tools` to generate LaTeX.
+- Optional `cov` enables full covariances.
 
-## Errores típicos
-- `sigmas` con valores negativos.
-- `cov` con dimensión inválida.
-- Variables faltantes en `valores` o `sigmas`.
+## Typical errors
+- `sigmas` with negative values.
+- `cov` with invalid dimensions.
+- Missing variables in `valores` or `sigmas`.
 
-## Ejemplos
+## Examples
 ```python
 from incertidumbres import incertidumbres
 
 u = incertidumbres.u([1.0, 2.0, 3.0], [0.1, 0.1, 0.2])
 ```
 
-## Mini ejemplos (por función)
+## Mini examples (per function)
 
 ### u(x, sigmax=0.0)
-**Caso 1 (típico - escalar):** Si aplicas esto:
+**Case 1 (typical - scalar):** If you do this:
 ```python
 from incertidumbres import incertidumbres
 
@@ -43,46 +43,46 @@ m = incertidumbres.u(9.81, 0.05)
 print(m)
 print(m.nominal_value, m.std_dev)
 ```
-haces esto: Creas una magnitud con valor central 9.81 e incertidumbre 0.05.
+You do this: Create a quantity with nominal value 9.81 and uncertainty 0.05.
 
-Obtienes esto:
+You get this:
 ```
 9.81+/-0.05
 9.81 0.05
 ```
 
-**Caso 2 (típico - array):** Si aplicas esto:
+**Case 2 (typical - array):** If you do this:
 ```python
 x = incertidumbres.u([1.0, 2.0, 3.0], [0.1, 0.2, 0.15])
 print(x)
 resultado = x * 2
 print(resultado)
 ```
-haces esto: Creas array de magnitudes y lo multiplicas.
+You do this: Create an array of quantities and multiply it.
 
-Obtienes esto:
+You get this:
 ```
 array([1.0+/-0.1, 2.0+/-0.2, 3.0+/-0.15], dtype=object)
 array([2.0+/-0.2, 4.0+/-0.4, 6.0+/-0.3], dtype=object)
 ```
 
-**Caso 3 (borde):** Si aplicas esto:
+**Case 3 (edge):** If you do this:
 ```python
 z = incertidumbres.u(5.0, 0.0)
 print(z)
 y = z + 3
 print(y)
 ```
-haces esto: Magnitud sin incertidumbre propagada.
+You do this: Quantity with zero propagated uncertainty.
 
-Obtienes esto:
+You get this:
 ```
 5.0+/-0.0
 8.0+/-0.0
 ```
 
 ### propagacion_incertidumbre_sympy(f, vars_, valores, sigmas, cov=None, simplify=True)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 import sympy as sp
 from incertidumbres import incertidumbres
@@ -98,15 +98,15 @@ resultado = incertidumbres.propagacion_incertidumbre_sympy(
 print(resultado["sigma"])
 print(resultado["valor"])
 ```
-haces esto: Propagas incertidumbre de f=x²+y con x=2±0.1, y=3±0.2.
+You do this: Propagate uncertainty for f=x²+y with x=2±0.1, y=3±0.2.
 
-Obtienes esto:
+You get this:
 ```
 sigma ≈ 0.408...
 valor = 7.0
 ```
 
-**Caso 2 (borde - función lineal):** Si aplicas esto:
+**Case 2 (edge - linear function):** If you do this:
 ```python
 x, y = sp.symbols('x y')
 f = 3*x + 2*y
@@ -118,9 +118,9 @@ resultado = incertidumbres.propagacion_incertidumbre_sympy(
 )
 print(resultado["sigma"])
 ```
-haces esto: Propagación en función lineal (σ_f = √(3²σ_x² + 2²σ_y²)).
+You do this: Propagation in a linear function (σ_f = √(3²σ_x² + 2²σ_y²)).
 
-Obtienes esto:
+You get this:
 ```
 sigma = sqrt(9*0.01 + 4*0.01) ≈ 0.361...
 ```

@@ -1,40 +1,40 @@
 # estadistica.py
 
-## Propósito
-Estadística descriptiva, intervalos de confianza y tests de hipótesis con una API simple en español.
+## Purpose
+Descriptive statistics, confidence intervals, and hypothesis tests with a simple API.
 
-## Estadística descriptiva
+## Descriptive statistics
 - `media(x)`
 - `varianza(x, ddof=1)`
 - `desviacion_tipica(x, ddof=1)`
 - `error_estandar(x)`
 
-## Estadística ponderada
+## Weighted statistics
 - `media_ponderada(x, w=None, sigma=None)`
 - `varianza_ponderada(x, w=None, sigma=None, ddof=1, tipo="frecuentista")`
 
-## Intervalos de confianza
+## Confidence intervals
 - `intervalo_confianza(x, nivel=0.95, distribucion="normal", sigma=None)`
-  - Normal, Poisson o Binomial según `distribucion`.
+  - Normal, Poisson, or Binomial depending on `distribucion`.
 
-## Tests de hipótesis
+## Hypothesis tests
 - `test_media(x, mu0, alternativa="dos_colas", distribucion="normal", sigma=None)`
-  - Normal: z‑test si `sigma` es conocida, t‑test si no.
-  - Poisson: test exacto para la tasa.
-  - Binomial: test exacto para probabilidad.
+  - Normal: z‑test if `sigma` is known, t‑test otherwise.
+  - Poisson: exact test for the rate.
+  - Binomial: exact test for the probability.
 
 - `test_ks(x, distribucion="normal")`
-  - Bondad de ajuste KS para normal o uniforme.
+  - KS goodness‑of‑fit for normal or uniform.
 
-## Salida
-Los métodos devuelven diccionarios con estadísticos, p‑valores y metadatos (`n`, `df`, etc.).
+## Output
+Methods return dictionaries with statistics, p‑values, and metadata (`n`, `df`, etc.).
 
-## Errores típicos
-- Muestras vacías o con tamaños inválidos.
-- Parámetros fuera de rango (p. ej. `sigma <= 0`, `nivel` fuera de (0,1)).
-- Distribuciones no soportadas.
+## Typical errors
+- Empty samples or invalid sizes.
+- Parameters out of range (e.g. `sigma <= 0`, `nivel` outside (0,1)).
+- Unsupported distributions.
 
-## Ejemplos
+## Examples
 ```python
 import numpy as np
 from estadistica import estadistica
@@ -45,207 +45,207 @@ ic = estadistica.intervalo_confianza(x, nivel=0.95, distribucion="normal")
 test = estadistica.test_media(x, mu0=0.0, distribucion="normal")
 ```
 
-## Mini ejemplos (por función)
+## Mini examples (per function)
 
 ### media(x)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 media = estadistica.media(x)
 ```
-haces esto: Calculas el promedio de 5 valores.
+You do this: Calculates the average of 5 values.
 
-Obtienes esto:
+You get this:
 ```
 3.0
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 x = np.array([0.0])
 media = estadistica.media(x)
 ```
-haces esto: Calculas la media de un único valor.
+You do this: Calculates the mean of a single value.
 
-Obtienes esto:
+You get this:
 ```
 0.0
 ```
 
 ### varianza(x, ddof=1)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 varianza = estadistica.varianza(x, ddof=1)
 ```
-haces esto: Calculas la varianza muestral (n-1).
+You do this: Calculates the sample variance (n-1).
 
-Obtienes esto:
+You get this:
 ```
 2.5
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 x = np.array([5.0, 5.0, 5.0])
 varianza = estadistica.varianza(x)
 ```
-haces esto: Calculas varianza cuando todos los valores son idénticos.
+You do this: Calculates variance when all values are identical.
 
-Obtienes esto:
+You get this:
 ```
 0.0
 ```
 
 ### desviacion_tipica(x, ddof=1)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 std = estadistica.desviacion_tipica(x)
 ```
-haces esto: Calculas la desviación estándar.
+You do this: Calculates the standard deviation.
 
-Obtienes esto:
+You get this:
 ```
 1.5811388...
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 x = np.array([0.0, 0.0])
 std = estadistica.desviacion_tipica(x, ddof=0)
 ```
-haces esto: Cálculo poblacional de desviación.
+You do this: Population standard deviation.
 
-Obtienes esto:
+You get this:
 ```
 0.0
 ```
 
 ### error_estandar(x)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 se = estadistica.error_estandar(x)
 ```
-haces esto: Calculas error estándar (σ/√n).
+You do this: Calculates standard error (σ/√n).
 
-Obtienes esto:
+You get this:
 ```
 0.7071067...
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 x = np.array([10.0])
 se = estadistica.error_estandar(x)
 ```
-haces esto: Error estándar con una sola muestra (σ/√1).
+You do this: Standard error with a single sample (σ/√1).
 
-Obtienes esto:
+You get this:
 ```
 nan
 ```
 
 ### media_ponderada(x, w=None, sigma=None)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.array([1.0, 2.0, 3.0])
 w = np.array([1.0, 2.0, 1.0])
 mean_w = estadistica.media_ponderada(x, w=w)
 ```
-haces esto: Calculas media ponderada con pesos [1, 2, 1].
+You do this: Calculates weighted mean with weights [1, 2, 1].
 
-Obtienes esto:
+You get this:
 ```
 2.0
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 x = np.array([5.0, 10.0])
 sigma = np.array([1.0, 0.1])
 mean_w = estadistica.media_ponderada(x, sigma=sigma)
 ```
-haces esto: Pesos inversos a σ² para minimizar error.
+You do this: Uses inverse‑variance weights to minimize error.
 
-Obtienes esto:
+You get this:
 ```
 9.917355...
 ```
 
 ### intervalo_confianza(x, nivel=0.95, distribucion="normal", sigma=None)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 ic = estadistica.intervalo_confianza(x, nivel=0.95)
 ```
-haces esto: Calculas IC al 95% con distribución normal.
+You do this: Computes a 95% CI with a normal distribution.
 
-Obtienes esto:
+You get this:
 ```
 {'media': 3.0, 'lower': 0.627..., 'upper': 5.372..., 'error': 2.372..., 'n': 5, 'sigma': 1.581...}
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 x = np.array([2.0, 2.0, 2.0, 2.0])
 ic = estadistica.intervalo_confianza(x, nivel=0.99)
 ```
-haces esto: IC con varianza cero y confianza alta.
+You do this: CI with zero variance and high confidence.
 
-Obtienes esto:
+You get this:
 ```
 {'media': 2.0, 'lower': 2.0, 'upper': 2.0, 'error': 0.0, ...}
 ```
 
 ### test_media(x, mu0, alternativa="dos_colas", distribucion="normal", sigma=None)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.array([1.1, 1.9, 2.1, 1.8, 2.0])
 test = estadistica.test_media(x, mu0=2.0, alternativa="dos_colas")
 ```
-haces esto: Test t-bilaterial contra μ₀=2.0.
+You do this: Two‑sided t‑test against μ₀=2.0.
 
-Obtienes esto:
+You get this:
 ```
 {'media': 1.78, 'sigma_x': 0.450..., 't': -1.094..., 'p_valor': 0.346..., 'rechaza': False}
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 x = np.array([5.0, 5.0, 5.0])
 test = estadistica.test_media(x, mu0=5.0)
 ```
-haces esto: Test contra valor idéntico a los datos.
+You do this: Test against a value equal to the data.
 
-Obtienes esto:
+You get this:
 ```
 {'media': 5.0, 'sigma_x': 0.0, 't': 'inf' or 'nan', 'p_valor': 1.0 or nan, 'rechaza': False}
 ```
 
 ### test_ks(x, distribucion="normal")
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 rng = np.random.default_rng(42)
 x = rng.normal(0, 1, 50)
 test = estadistica.test_ks(x, distribucion="normal")
 ```
-haces esto: Test Kolmogorov-Smirnov sobre muestra normal.
+You do this: Kolmogorov‑Smirnov test on a normal sample.
 
-Obtienes esto:
+You get this:
 ```
 {'estadistico': 0.089..., 'p_valor': 0.689..., 'rechaza': False}
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 x = np.linspace(0, 100, 100)
 test = estadistica.test_ks(x, distribucion="uniforme")
 ```
-haces esto: Test KS para distribución uniforme.
+You do this: KS test for a uniform distribution.
 
-Obtienes esto:
+You get this:
 ```
 {'estadistico': ~0.0, 'p_valor': > 0.9, 'rechaza': False}
 ```

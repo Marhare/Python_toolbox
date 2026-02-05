@@ -1,47 +1,8 @@
-"""
-RESUMEN RÁPIDO (Funciones públicas)
-----------------------------------
-u
-    INPUT:
-        x: number | array-like -> valores nominales
-        sigmax: number | array-like -> incertidumbre(s) (desviación típica)
-    OUTPUT:
-        ufloat | unp.uarray -> magnitud con incertidumbre
-    ERRORES:
-        ValueError -> sigmax incompatible con forma de x
-    NOTAS:
-        si x es escalar devuelve ufloat; si es array devuelve unp.uarray
-
-propagacion_incertidumbre_sympy
-    INPUT:
-        f: sympy.Expr -> expresión simbólica
-        vars_: list[sympy.Symbol] -> variables
-        valores: dict[Symbol, object] -> valores nominales
-        sigmas: dict[Symbol, float] -> incertidumbres
-        cov: sympy.Matrix | None -> covarianzas (opcional)
-        simplify: bool -> simplificar expresiones
-    OUTPUT:
-        dict -> expresiones simbólicas, valores numéricos y LaTeX
-        claves: f, grad, Sigma, var_f, sigma_f, valor, incertidumbre
-    ERRORES:
-        ValueError -> datos faltantes, tamaños incompatibles, sigma negativa
-        TypeError -> cov no es sympy.Matrix
-    NOTAS:
-        devuelve expr simbólica, valores numéricos y representación LaTeX si aplica
-"""
-
 from __future__ import annotations
-
-from typing import Dict, List, Optional, Tuple
 import numpy as np
 
-# Dependencia obligatoria: uncertainties SIEMPRE instalada
-from uncertainties import ufloat
-from uncertainties.core import AffineScalarFunc
-import uncertainties.unumpy as unp
-
+# Required dependency: uncertainties ALWAYS installed
 from .latex_tools import expr_to_latex, latex_tools
-from .estadistica import estadistica
 import sympy as sp
 
 
@@ -49,80 +10,117 @@ import sympy as sp
 
 
 
-class _Incertidumbres:
-    """Fachada de utilidades para magnitudes con incertidumbre.
-
-    Objetivos del diseño:
-    - Encapsular la posible dependencia con `uncertainties`.
-    - Ofrecer una API mínima, clara y en español.
-    - Integración directa con `latex_tools` (formato metrológico y tablas).
-    """
-
-    # --------- Construcción ---------
+class _Uncertainties:
+    '''
+    Docstring for _Uncertainties
+    '''
+    # --------- Construction ---------
     @staticmethod
-    def u(x, sigmax=0.0):
+    def checker(value, sigma):
         """
-        Construye una magnitud con incertidumbre (caso escalar o array) usando `uncertainties`.
-        INPUT:
-            x: number | array-like -> valores nominales
-            sigmax: number | array-like -> incertidumbre(s) (desviación típica)
-        OUTPUT:
-            ufloat | unp.uarray -> magnitud con incertidumbre
-        ERRORES:
-            ValueError -> sigmax incompatible con forma de x
-        NOTAS:
-            si x es escalar devuelve ufloat; si es array devuelve unp.uarray
+        Safety check for measurement inputs.
 
-        Reglas:
-        - Si x es escalar (0-D) -> devuelve `ufloat(x, sigmax)`.
-        - Si x es array-like (>=1-D) -> devuelve `unp.uarray(x, sigmax)` (mismo shape).
-        - `sigmax` puede ser escalar (se “broadcastea”) o array con la misma forma que `x`.
-
-        Parámetros
-        ----------
-        x : number | array-like
-            Valor(es) nominal(es).
-        sigmax : number | array-like, default 0.0
-            Incertidumbre(s) (desviación típica) asociada(s).
-
-        Devuelve
-        --------
-        ufloat | unumpy.uarray (ndarray de objetos uncertainties)
+        - Ensures value and sigma are numeric (scalar or array-like)
+        - Classifies scalar vs vector
+        - Checks shape compatibility
+        - Returns inherited type and shape
         """
-        # Convertimos x a ndarray para inspeccionar dimensionalidad (0-D vs N-D)
-        x_arr = np.asarray(x)
 
-        # Caso escalar (0-D): devolvemos ufloat
-        if x_arr.ndim == 0:
-            # Asegurar que sigmax es escalar numérico
-            s = np.asarray(sigmax)
-            if s.ndim != 0:
-                raise ValueError("Para x escalar, sigmax debe ser escalar.")
-            return ufloat(float(x_arr), float(s))
+        value = np.asarray(value, dtype=object)
+        sigma = np.asarray(sigma, dtype=object)
 
-        # Caso array (>=1-D): construimos uarray con broadcasting controlado
-        x_arr = x_arr.astype(float, copy=False)
+        # --- numeric check ---
+        if value.dtype.kind in ("U", "S") or sigma.dtype.kind in ("U", "S"):
+            raise TypeError("value or sigma is not numeric (string)")
 
-        s_arr = np.asarray(sigmax)
-        if s_arr.ndim == 0:
-            # Broadcast escalar a la forma de x
-            s_arr = np.full_like(x_arr, float(s_arr), dtype=float)
-        else:
-            s_arr = s_arr.astype(float, copy=False)
-            if s_arr.shape != x_arr.shape:
-                # Intentamos broadcasting estándar; si no, error claro
-                try:
-                    s_arr = np.broadcast_to(s_arr, x_arr.shape).astype(float, copy=False)
-                except Exception as e:
-                    raise ValueError(
-                        f"sigmax no es compatible con la forma de x: "
-                        f"x.shape={x_arr.shape}, sigmax.shape={np.asarray(sigmax).shape}"
-                    ) from e
+        try:
+            if not np.issubdtype(value.dtype, np.number):
+                np.asarray(value, dtype=float)
+            if not np.issubdtype(sigma.dtype, np.number):
+                np.asarray(sigma, dtype=float)
+        except Exception:
+            raise TypeError("value or sigma is not numeric")
 
-        return unp.uarray(x_arr, s_arr)
-    # --------- Propagación de incertidumbres ---------
+        # --- scalar vs vector ---
+        value_is_vec = value.ndim >= 1 and value.shape != ()
+        sigma_is_vec = sigma.ndim >= 1 and sigma.shape != ()
+
+        # --- compatibility ---
+        if not value_is_vec and sigma_is_vec:
+            raise ValueError("sigma is vector but value is scalar")
+
+        if not value_is_vec and not sigma_is_vec:
+            return {"shape": None, "kind": "scalar", "sigma_vec": None}
+
+        if value_is_vec and not sigma_is_vec:
+            sigma_scalar = float(np.asarray(sigma, dtype=float))
+            sigma_vec = np.full(value.shape, sigma_scalar, dtype=float)
+            return {"shape": value.shape, "kind": "vector", "sigma_vec": sigma_vec}
+
+        if value.shape != sigma.shape:
+            raise ValueError(
+                f"incompatible shapes: value={value.shape}, sigma={sigma.shape}"
+            )
+
+        sigma_vec = np.asarray(sigma, dtype=float)
+        return {"shape": value.shape, "kind": "vector", "sigma_vec": sigma_vec}
+    
     @staticmethod
-    def propagacion_incertidumbre_sympy(
+    def quantity(*args):
+        """
+        Unified quantity constructor (positional-only).
+
+        Accepted signatures:
+        1) quantity(value, sigma, unit)   -> input quantity (measurement/constant)
+        2) quantity(expr, unit)           -> derived quantity (expr as string or sympy.Expr)
+
+        Returns a dict with stable keys:
+        - valor: (value, sigma) or None
+        - expr:  None or sympy.Expr / str
+        - unit:  str
+        - dimension: shape tuple or None
+        """
+
+        if len(args) == 3:
+            value, sigma, unit = args
+
+            # negative sigma check (works for scalars and arrays)
+            if np.any(np.asarray(sigma) < 0):
+                raise ValueError("sigma cannot be negative")
+
+            info = _Uncertainties.checker(value, sigma)
+            sigma_out = info["sigma_vec"] if info["kind"] == "vector" else sigma
+
+            return {
+                "valor": (value, sigma_out),
+                "expr": None,
+                "unit": unit,
+                "dimension": info["shape"],
+            }
+
+        if len(args) == 2:
+            expr, unit = args
+
+            # keep expr as string or Expr (propagation will resolve symbols)
+            if not isinstance(expr, (str, sp.Expr)):
+                raise TypeError("expr must be a string or sympy.Expr")
+
+            return {
+                "valor": None,
+                "expr": expr,
+                "unit": unit,
+                "dimension": None,
+            }
+
+        raise TypeError("quantity(...) expects (value, sigma, unit) or (expr, unit)")
+
+        
+    
+    
+    
+    # --------- Uncertainty propagation ---------
+    @staticmethod
+    def uncertainty_propagation(
         f: sp.Expr,
         vars_: list[sp.Symbol],
         valores: dict[sp.Symbol, object],
@@ -135,104 +133,151 @@ class _Incertidumbres:
 
         for v in vars_:
             if v not in valores:
-                raise ValueError(f"Falta valor para {v}")
+                raise ValueError(f"Missing value for {v}")
             if v not in sigmas:
-                raise ValueError(f"Falta sigma para {v}")
+                raise ValueError(f"Missing sigma for {v}")
             if sigmas[v] < 0:
-                raise ValueError(f"Sigma negativa para {v}")
+                raise ValueError(f"Negative sigma for {v}")
 
-        # Gradiente
+        # Gradient
         grad = sp.Matrix([sp.diff(f, v) for v in vars_])
 
-        # Covarianzas
+        # Covariances (symbolic sigmas by default)
+        sigma_symbols = {v: sp.Symbol(f"sigma_{v.name}") for v in vars_}
         if cov is None:
-            Sigma = sp.diag(*[sigmas[v]**2 for v in vars_])
+            Sigma = sp.diag(*[sigma_symbols[v]**2 for v in vars_])
         else:
             if cov.shape != (len(vars_), len(vars_)):
-                raise ValueError("Dimensiones incorrectas de cov")
+                raise ValueError("Incorrect dimensions for cov")
             Sigma = cov
 
         var_f = (grad.T * Sigma * grad)[0]
-        sigma_f = sp.sqrt(var_f)
+        sigma_f_expr = sp.sqrt(var_f)
 
         if simplify:
             var_f = sp.simplify(var_f)
-            sigma_f = sp.simplify(sigma_f)
+            sigma_f_expr = sp.simplify(sigma_f_expr)
 
         f_num = sp.lambdify(vars_, f, "numpy")
-        s_num = sp.lambdify(vars_, sigma_f, "numpy")
+        sigma_syms = [sigma_symbols[v] for v in vars_]
+        s_num = sp.lambdify(vars_ + sigma_syms, sigma_f_expr, "numpy")
 
         args = [valores[v] for v in vars_]
+        s_args = [sigmas[v] for v in vars_]
 
         return {
             "valor": f_num(*args),
-            "sigma": s_num(*args),
+            "sigma": s_num(*args, *s_args),
             "expr_latex": sp.latex(f),
-            "sigma_latex": sp.latex(sigma_f),
+            "sigma_latex": sp.latex(sigma_f_expr),
         }
 
-def propagar(expr, valores: dict, sigmas: dict, simplify=True):
-    """
-    Propagación de incertidumbres ROBUSTA (sin errores de orden).
+    @staticmethod
+    def propagate(expr, valores: dict, sigmas: dict, simplify=True):
+        """
+        ROBUST uncertainty propagation (no ordering errors).
 
-    expr     : sympy.Expr
-    valores  : dict {Symbol: array | escalar}
-    sigmas   : dict {Symbol: float}
-    """
-    import numpy as np
+        expr     : sympy.Expr
+        valores  : dict {Symbol: array | scalar}
+        sigmas   : dict {Symbol: float}
+        """
+        import numpy as np
 
-    symbols = list(expr.free_symbols)
+        symbols = list(expr.free_symbols)
 
-    # Validaciones
-    for s in symbols:
-        if s not in valores:
-            raise ValueError(f"Falta valor para {s}")
-        if s not in sigmas:
-            raise ValueError(f"Falta sigma para {s}")
-
-    # Vectorialidad: si alguna entrada es array
-    vectorial = any(np.ndim(v) > 0 for v in valores.values())
-    if vectorial:
-        longitudes = [len(v) for v in valores.values() if np.ndim(v) > 0]
-        N = max(longitudes) if longitudes else 1
-    else:
-        N = 1
-
-    f_vals = []
-    s_vals = []
-
-    # Bucle principal (aquí vive i)
-    for i in range(N):
-        vals_i = {}
+        # Validations
         for s in symbols:
-            v = valores[s]
-            if vectorial and np.ndim(v) > 0:
-                vals_i[s] = v[i]
-            else:
-                vals_i[s] = v
+            if s not in valores:
+                raise ValueError(f"Missing value for {s}")
+            if s not in sigmas:
+                raise ValueError(f"Missing sigma for {s}")
 
-        res = incertidumbres.propagacion_incertidumbre_sympy(
-            expr,
-            symbols,
-            vals_i,
-            sigmas,
-            simplify=simplify
-        )
+        # Vectorized: if any input is array
+        vectorial = any(np.ndim(v) > 0 for v in valores.values())
+        if vectorial:
+            longitudes = [len(v) for v in valores.values() if np.ndim(v) > 0]
+            N = max(longitudes) if longitudes else 1
+        else:
+            N = 1
 
-        f_vals.append(res["valor"])
-        s_vals.append(res["sigma"])
+        f_vals = []
+        s_vals = []
 
-    return {
-        "valor": np.array(f_vals) if vectorial else f_vals[0],
-        "sigma": np.array(s_vals) if vectorial else s_vals[0],
-        "expr_latex": res["expr_latex"],
-        "sigma_latex": res["sigma_latex"],
-    }
+        # Main loop (i lives here)
+        for i in range(N):
+            vals_i = {}
+            for s in symbols:
+                v = valores[s]
+                if vectorial and np.ndim(v) > 0:
+                    vals_i[s] = v[i]
+                else:
+                    vals_i[s] = v
+
+            res = _Uncertainties.uncertainty_propagation(
+                expr,
+                symbols,
+                vals_i,
+                sigmas,
+                simplify=simplify
+            )
+
+            f_vals.append(res["valor"])
+            s_vals.append(res["sigma"])
+
+        return {
+            "valor": np.array(f_vals) if vectorial else f_vals[0],
+            "sigma": np.array(s_vals) if vectorial else s_vals[0],
+            "expr_latex": res["expr_latex"],
+            "sigma_latex": res["sigma_latex"],
+        }
+    @staticmethod
+    def propagate_quantity(name: str, magnitudes: dict, simplify=True):
+        """
+        High-level uncertainty propagation for a derived quantity.
+
+        Returns:
+            value
+            uncertainty
+            analytic expression (latex)
+            analytic uncertainty expression (latex)
+        """
+
+        # 1) Symbol registry
+        symbols = {k: sp.Symbol(k) for k in magnitudes}
+
+        # 2) Expression
+        q = magnitudes[name]
+        if q["expr"] is None:
+            raise ValueError(f"{name} is not a derived quantity")
+
+        expr = sp.sympify(q["expr"], locals=symbols)
+
+        # 3) Extract values and sigmas
+        values = {}
+        sigmas = {}
+        sigma_symbols = {}
+        for k, v in magnitudes.items():
+            if v["valor"] is not None:
+                val, sig = v["valor"]
+                sym = symbols[k]
+            values[sym] = val
+            sigmas[sym] = sig
+            sigma_symbols[sym] = sp.Symbol(f"sigma_{k}")
+
+        # 4) Propagate
+        res = _Uncertainties.propagate(expr, values, sigmas, simplify=simplify)
+
+        # 5) Return ONLY what you care about
+        return {
+            "value": res["valor"],
+            "uncertainty": res["sigma"],
+            "expr": res["expr_latex"],
+            "sigma_expr": res["sigma_latex"],
+        }
 
 
-
-    # --------- Accesores ---------
+    # --------- Accessors ---------
     
 
 
-incertidumbres = _Incertidumbres()
+incertidumbres = _Uncertainties()

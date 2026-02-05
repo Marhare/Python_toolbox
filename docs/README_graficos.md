@@ -1,9 +1,9 @@
 # graficos.py
 
-## Propósito
-Visualización científica de alto nivel basada en objetos semánticos. El usuario declara **qué** dibujar y el motor decide **cómo** dibujarlo.
+## Purpose
+High‑level scientific visualization based on semantic objects. The user declares **what** to draw and the engine decides **how** to draw it.
 
-## Objetos semánticos
+## Semantic objects
 - `Serie(x, y, label=None, marker=None)`
 - `SerieConError(x, y, sy=None, sx=None, label=None)`
 - `Histograma(data, bins=30, label=None)`
@@ -13,23 +13,23 @@ Visualización científica de alto nivel basada en objetos semánticos. El usuar
 - `Panel(*objetos)`
 - `Scene(*paneles, layout=None, dims="2D", figsize=None, xlabel=None, ylabel=None, title=None)`
 
-## Motor de plotting
+## Plotting engine
 - `plot(*objetos, layout=None, dims="2D", show=True, figsize=None, xlabel=None, ylabel=None, title=None, **kwargs)`
-  - Soporta `Scene` como argumento único.
-  - `Panel` permite agrupar objetos en el mismo subplot.
+  - Supports `Scene` as a single argument.
+  - `Panel` groups objects in the same subplot.
 
-## Estilo
-- Configuración global en `PLOT_DEFAULTS` (paleta, tamaño, grid, tipografía).
-- Estilo se ajusta con `**kwargs` en `plot()`.
+## Style
+- Global configuration in `PLOT_DEFAULTS` (palette, size, grid, typography).
+- Style is adjusted with `**kwargs` in `plot()`.
 
-## Guardado
-- Integración con `guardar()` (si aplica en el módulo) para exportar a PDF/PNG.
+## Saving
+- Integration with `guardar()` (if present in the module) to export to PDF/PNG.
 
-## Notas
-- `Scene` es la unidad recomendada para animaciones.
-- `dims="3D"` requiere `Serie3D`.
+## Notes
+- `Scene` is the recommended unit for animations.
+- `dims="3D"` requires `Serie3D`.
 
-## Ejemplos
+## Examples
 ```python
 import numpy as np
 from graficos import graficos
@@ -42,10 +42,10 @@ ajuste = graficos.Ajuste(x, yfit, label="Ajuste")
 graficos.plot(serie, ajuste, title="Datos + Ajuste")
 ```
 
-## Mini ejemplos (por función)
+## Mini examples (per function)
 
 ### Serie(x, y, label=None, marker=None)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 import numpy as np
 from graficos import graficos
@@ -55,27 +55,27 @@ y = np.array([2, 4, 6, 8])
 s = graficos.Serie(x, y, label="y=2x")
 graficos.plot(s)
 ```
-haces esto: Creas una serie de puntos y la graficas.
+You do this: Create a series of points and plot it.
 
-Obtienes esto:
+You get this:
 ```
-Gráfico con 4 puntos conectados, etiqueta "y=2x" en leyenda
+Plot with 4 connected points, label "y=2x" in the legend
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 s = graficos.Serie(np.array([0]), np.array([5]), marker="o")
 graficos.plot(s)
 ```
-haces esto: Serie con un único punto y marcador específico.
+You do this: A series with a single point and a specific marker.
 
-Obtienes esto:
+You get this:
 ```
-Gráfico con un punto circular en (0, 5)
+Plot with a circular point at (0, 5)
 ```
 
 ### SerieConError(x, y, sy=None, sx=None, label=None)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.array([1.0, 2.0, 3.0])
 y = np.array([2.0, 4.1, 5.9])
@@ -83,14 +83,14 @@ sy = np.array([0.2, 0.2, 0.3])
 s = graficos.SerieConError(x, y, sy=sy, label="Datos ±σ")
 graficos.plot(s)
 ```
-haces esto: Series con barras de error en y.
+You do this: Series with error bars in y.
 
-Obtienes esto:
+You get this:
 ```
-Gráfico con 3 puntos, cada uno con barra vertical de incertidumbre
+Plot with 3 points, each with a vertical uncertainty bar
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 x = np.array([1.0, 2.0])
 y = np.array([3.0, 4.0])
@@ -98,15 +98,15 @@ sy = np.array([0.0, 0.0])
 s = graficos.SerieConError(x, y, sy=sy)
 graficos.plot(s)
 ```
-haces esto: SerieConError con errores nulos.
+You do this: SerieConError with zero errors.
 
-Obtienes esto:
+You get this:
 ```
-Gráfico sin barras de error visibles (como Serie normal)
+Plot without visible error bars (like a normal Serie)
 ```
 
 ### Histograma(data, bins=30, label=None)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 import numpy as np
 from graficos import graficos
@@ -115,54 +115,54 @@ data = np.random.default_rng(0).normal(0, 1, 1000)
 hist = graficos.Histograma(data, bins=40, label="Normal(0,1)")
 graficos.plot(hist)
 ```
-haces esto: Histograma de 1000 muestras normales.
+You do this: Histogram of 1000 normal samples.
 
-Obtienes esto:
+You get this:
 ```
-Gráfico con 40 bins, forma de campana centrada en 0
+Plot with 40 bins, bell shape centered at 0
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 hist = graficos.Histograma(np.array([5.0, 5.0, 5.0]), bins=10)
 graficos.plot(hist)
 ```
-haces esto: Histograma con valores idénticos.
+You do this: Histogram with identical values.
 
-Obtienes esto:
+You get this:
 ```
-Un único bin con altura 3, resto vacío
+A single bin with height 3, the rest empty
 ```
 
 ### Ajuste(x, yfit, label=None)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.linspace(0, 2, 50)
 yfit = 1 + 0.5*x
 ajuste = graficos.Ajuste(x, yfit, label="y=1+0.5x")
 graficos.plot(ajuste)
 ```
-haces esto: Graficas una curva de ajuste.
+You do this: Plot a fitted curve.
 
-Obtienes esto:
+You get this:
 ```
-Línea continua desde (0,1) a (2,2), etiquetada
+Continuous line from (0,1) to (2,2), labeled
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 ayuste = graficos.Ajuste(np.array([1.0]), np.array([1.0]))
 graficos.plot(ajuste)
 ```
-haces esto: Ajuste con un solo punto.
+You do this: Fit with a single point.
 
-Obtienes esto:
+You get this:
 ```
-Un punto sin línea visible
+A point without a visible line
 ```
 
 ### Banda(x, y_low, y_high, label=None)
-**Caso 1 (típico):** Si aplicas esto:
+**Case 1 (typical):** If you do this:
 ```python
 x = np.linspace(0, 1, 20)
 y_low = x
@@ -170,21 +170,21 @@ y_high = x + 0.2
 banda = graficos.Banda(x, y_low, y_high, label="Intervalo")
 graficos.plot(banda)
 ```
-haces esto: Área sombreada entre dos curvas.
+You do this: Shaded area between two curves.
 
-Obtienes esto:
+You get this:
 ```
-Área gris o coloreada entre y=x e y=x+0.2
+Gray or colored area between y=x and y=x+0.2
 ```
 
-**Caso 2 (borde):** Si aplicas esto:
+**Case 2 (edge):** If you do this:
 ```python
 banda = graficos.Banda(np.array([0, 1]), np.array([1, 1]), np.array([1, 1]))
 graficos.plot(banda)
 ```
-haces esto: Banda con cero espesor (y_low = y_high).
+You do this: Band with zero thickness (y_low = y_high).
 
-Obtienes esto:
+You get this:
 ```
-Línea horizontal en y=1
+Horizontal line at y=1
 ```

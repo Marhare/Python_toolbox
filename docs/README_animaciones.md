@@ -1,38 +1,38 @@
 # animaciones.py
 
-## Propósito
-Motor temporal declarativo para animar objetos definidos en `graficos.py`. No calcula datos, solo actualiza artistas a partir de funciones de evolución temporal.
+## Purpose
+Declarative time engine to animate objects defined in `graficos.py`. It does not compute data; it only updates artists from time‑evolution functions.
 
-## Conceptos clave
-- `Scene` define **qué** se dibuja.
-- `evolve` define **cómo** evoluciona cada objeto en el tiempo.
-- `animate` transforma tiempo físico en frames y actualiza artistas.
+## Key concepts
+- `Scene` defines **what** is drawn.
+- `evolve` defines **how** each object evolves in time.
+- `animate` maps physical time to frames and updates artists.
 
-## API principal
+## Main API
 - `animate(scene, evolve, duration, fps=30, speed=1.0, loop=False, show=True)`
-  - `scene`: `Scene` con paneles y objetos.
-  - `evolve`: diccionario `{objeto: f(t)}`.
-  - Soporta `Serie`, `Serie3D`, `Banda`, `Ajuste`.
+  - `scene`: `Scene` with panels and objects.
+  - `evolve`: dictionary `{object: f(t)}`.
+  - Supports `Serie`, `Serie3D`, `Banda`, `Ajuste`.
 
-## Reglas de `evolve`
-- `Serie` → `f(t)` devuelve `y(t)`.
-- `Serie3D` → `f(t)` devuelve `(x, y, z)`.
-- `Banda` → `f(t)` devuelve `(y_low, y_high)`.
-- `Ajuste` → `f(t)` devuelve `yfit(t)`.
+## `evolve` rules
+- `Serie` → `f(t)` returns `y(t)`.
+- `Serie3D` → `f(t)` returns `(x, y, z)`.
+- `Banda` → `f(t)` returns `(y_low, y_high)`.
+- `Ajuste` → `f(t)` returns `yfit(t)`.
 
-## Salida
-Devuelve un `matplotlib.animation.FuncAnimation`. Si `show=True`, muestra la animación interactiva.
+## Output
+Returns a `matplotlib.animation.FuncAnimation`. If `show=True`, shows the interactive animation.
 
-## Notas de notebook
-- En backends inline la animación puede mostrarse como frame estático.
-- Se recomienda guardar a GIF/MP4 con `anim.save(...)` para reproducir fuera del notebook.
+## Notebook notes
+- In inline backends the animation may appear as a static frame.
+- Saving to GIF/MP4 with `anim.save(...)` is recommended for playback outside the notebook.
 
-## Errores típicos
-- `scene` no válido.
-- Objetos en `evolve` no presentes en la escena.
-- Formato de datos devuelto por `f(t)` incompatible.
+## Typical errors
+- Invalid `scene`.
+- Objects in `evolve` not present in the scene.
+- Incompatible data format returned by `f(t)`.
 
-## Ejemplo
+## Example
 ```python
 import numpy as np
 from graficos import graficos
@@ -41,6 +41,6 @@ from animaciones import animaciones
 x = np.linspace(0, 2*np.pi, 200)
 y = np.sin(x)
 serie = graficos.Serie(x, y, label="sin")
-scene = graficos.Scene(serie, title="Animación")
+scene = graficos.Scene(serie, title="Animation")
 anim = animaciones.animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0)
 ```

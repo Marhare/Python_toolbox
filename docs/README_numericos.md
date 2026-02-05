@@ -1,58 +1,58 @@
 # numericos.py
 
-## Propósito
-Calculadora numérico‑simbólica con auto‑detección: derivación, integración, raíces y evaluación.
+## Purpose
+Numeric‑symbolic calculator with auto‑detection: differentiation, integration, roots, and evaluation.
 
 ## API principal
 - `derivar(expr, var, metodo="auto", h=1e-5)`
-  - Si `expr` es simbólica → deriva con SymPy.
-  - Si `expr` es callable → devuelve derivada numérica.
+  - If `expr` is symbolic → differentiates with SymPy.
+  - If `expr` is callable → returns a numeric derivative.
 
 - `integrar_indefinida(expr, var)`
-  - Primitiva simbólica si es posible.
-  - Si `expr` es callable, devuelve integral acumulada desde 0.
+  - Symbolic antiderivative when possible.
+  - If `expr` is callable, returns the accumulated integral from 0.
 
 - `integrar_definida(expr, var, a, b)`
-  - Simbólica si se puede; si no, usa integración numérica.
+  - Symbolic when possible; otherwise uses numerical integration.
 
 - `raiz_numerica(f, x0)`
-  - Raíz usando Newton (numérico).
+  - Root using Newton (numeric).
 
 - `evaluar(expr, valores)`
-  - Evalúa expresiones SymPy con un diccionario de valores.
+  - Evaluates SymPy expressions with a values dictionary.
 
 - `rk4(f, intervalo, y0, dt)`
-  - Integración de EDOs por Runge‑Kutta 4.
+  - ODE integration with Runge‑Kutta 4.
 
-## Notas
-- Mezcla entradas `sympy.Expr`, `str` o `callable`.
-- Mantiene compatibilidad con funciones legacy (`derivada`).
+## Notes
+- Mixes `sympy.Expr`, `str`, or `callable` inputs.
+- Keeps compatibility with legacy functions (`derivada`).
 
-## Ejemplos
+## Examples
 ```python
 from numericos import numericos
 
-# EDO con RK4
+# ODE with RK4
 def f(t, y):
   return -0.8*y
 rk = numericos.rk4(f, (0, 5), y0=1.0, dt=0.1)
 print(rk["y"][-1])
 ```
 
-## Mini ejemplos (por función)
+## Mini examples (per function)
 ```python
 from numericos import numericos
 
-# derivar (simbólico)
+# derivar (symbolic)
 dx = numericos.derivar("sin(x) + x**2", "x")
 
-# derivar (numérico)
+# derivar (numeric)
 df = numericos.derivar(lambda t: t**2, "x", metodo="numerico")
 
-# integrar_indefinida (simbólica)
+# integrar_indefinida (symbolic)
 F = numericos.integrar_indefinida("exp(-x)", "x")
 
-# integrar_definida (numérica si no hay primitiva cerrada)
+# integrar_definida (numeric if no closed form)
 I = numericos.integrar_definida(lambda t: t**2, "x", 0, 1)
 
 # raiz_numerica

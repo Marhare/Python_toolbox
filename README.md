@@ -11,7 +11,7 @@ A collection of utilities and tools for Python, designed to simplify common task
 
 ## 🚀 Main Modules (Detailed)
 
-**Documentación por módulo:**
+**Module documentation:**
 - [docs/README_ajustes.md](docs/README_ajustes.md)
 - [docs/README_animaciones.md](docs/README_animaciones.md)
 - [docs/README_estadistica.md](docs/README_estadistica.md)
@@ -23,23 +23,23 @@ A collection of utilities and tools for Python, designed to simplify common task
 - [docs/README_numericos.md](docs/README_numericos.md)
 
 ### ajustes.py
-**Propósito:** ajuste de curvas por mínimos cuadrados ponderados (WLS) con covarianzas para propagación de incertidumbres.
+**Purpose:** weighted least‑squares (WLS) curve fitting with covariances for uncertainty propagation.
 
-**Supuestos:**
-- `sy` son incertidumbres absolutas conocidas en `y`.
-- Residuos gaussianos e independientes.
-- `absolute_sigma=True` (sin reescalar errores).
+**Assumptions:**
+- `sy` are known absolute uncertainties in `y`.
+- Residuals are Gaussian and independent.
+- `absolute_sigma=True` (no error rescaling).
 
-**API principal:**
+**Main API:**
 - `ajuste_lineal(x, y, sy=None)`
 - `ajuste_polinomico(x, y, grado, sy=None)`
 - `ajuste(modelo, x, y, sy=None, p0=None, variable="x")`
 - `intervalo_confianza_parametros(resultado_ajuste, nivel=0.95)`
 - `incertidumbre_prediccion(resultado_ajuste, modelo, x0)`
 
-**Errores típicos:** longitudes incompatibles, `sy` no positivo, modelo inválido.
+**Typical errors:** incompatible lengths, non‑positive `sy`, invalid model.
 
-**Ejemplo rápido:**
+**Quick example:**
 ```python
 from ajustes import ajustes
 
@@ -50,20 +50,20 @@ print(res["parametros"], res["chi2_red"], res["p"])
 ---
 
 ### animaciones.py
-**Propósito:** motor temporal declarativo para animar objetos de `graficos.py`.
+**Purpose:** declarative time engine to animate objects from `graficos.py`.
 
-**API principal:**
+**Main API:**
 - `animate(scene, evolve, duration, fps=30, speed=1.0, loop=False, show=True)`
 
-**Reglas de `evolve`:**
+**`evolve` rules:**
 - `Serie` → `y(t)`
 - `Serie3D` → `(x, y, z)`
 - `Banda` → `(y_low, y_high)`
 - `Ajuste` → `yfit(t)`
 
-**Notas:** en notebooks con backend inline puede verse un frame estático; se recomienda guardar a GIF/MP4.
+**Notes:** in notebooks with inline backend you may see a static frame; saving to GIF/MP4 is recommended.
 
-**Ejemplo rápido:**
+**Quick example:**
 ```python
 from graficos import graficos
 from animaciones import animaciones
@@ -76,19 +76,19 @@ anim = animaciones.animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0)
 ---
 
 ### estadistica.py
-**Propósito:** estadística descriptiva, IC y tests de hipótesis.
+**Purpose:** descriptive statistics, confidence intervals, and hypothesis tests.
 
-**Descriptiva:** `media`, `varianza`, `desviacion_tipica`, `error_estandar`.
+**Descriptive:** `media`, `varianza`, `desviacion_tipica`, `error_estandar`.
 
-**Ponderada:** `media_ponderada`, `varianza_ponderada`.
+**Weighted:** `media_ponderada`, `varianza_ponderada`.
 
-**Intervalos de confianza:** `intervalo_confianza` (normal/poisson/binomial).
+**Confidence intervals:** `intervalo_confianza` (normal/poisson/binomial).
 
 **Tests:**
 - `test_media` (z/t, Poisson exacto, Binomial exacto)
 - `test_ks` (normal o uniforme)
 
-**Ejemplo rápido:**
+**Quick example:**
 ```python
 from estadistica import estadistica
 
@@ -99,15 +99,15 @@ print(res["estadistico"], res["p_valor"])
 ---
 
 ### incertidumbres.py
-**Propósito:** magnitudes con incertidumbre y propagación simbólica.
+**Purpose:** quantities with uncertainty and symbolic propagation.
 
 **API:**
 - `u(x, sigmax=0.0)`
 - `propagacion_incertidumbre_sympy(f, vars_, valores, sigmas, cov=None, simplify=True)`
 
-**Notas:** integra con `latex_tools` para LaTeX.
+**Notes:** integrates with `latex_tools` for LaTeX.
 
-**Ejemplo rápido:**
+**Quick example:**
 ```python
 from incertidumbres import incertidumbres
 u = incertidumbres.u(10.0, 0.2)
@@ -116,13 +116,13 @@ u = incertidumbres.u(10.0, 0.2)
 ---
 
 ### fft_tools.py
-**Propósito:** FFT unidimensional con `scipy.fft`.
+**Purpose:** 1D FFT with `scipy.fft`.
 
 **API:**
 - `fft(signal, dt)`
 - `espectro_potencia(signal, dt)`
 
-**Ejemplo rápido:**
+**Quick example:**
 ```python
 from fft_tools import fft_tools
 spec = fft_tools.espectro_potencia(signal, dt)
@@ -131,13 +131,13 @@ spec = fft_tools.espectro_potencia(signal, dt)
 ---
 
 ### graficos.py
-**Propósito:** visualización científica con objetos semánticos y estilo coherente.
+**Purpose:** scientific visualization with semantic objects and consistent styling.
 
-**Objetos:** `Serie`, `SerieConError`, `Histograma`, `Ajuste`, `Banda`, `Serie3D`, `Panel`, `Scene`.
+**Objects:** `Serie`, `SerieConError`, `Histograma`, `Ajuste`, `Banda`, `Serie3D`, `Panel`, `Scene`.
 
-**Motor:** `plot(*objetos, layout=None, dims="2D", show=True, ...)`
+**Engine:** `plot(*objetos, layout=None, dims="2D", show=True, ...)`
 
-**Ejemplo rápido:**
+**Quick example:**
 ```python
 from graficos import graficos
 serie = graficos.Serie(x, y, label="Datos")
@@ -147,13 +147,13 @@ graficos.plot(serie)
 ---
 
 ### montecarlo.py
-**Propósito:** integración y propagación por Monte Carlo.
+**Purpose:** Monte Carlo integration and propagation.
 
 **API:**
 - `integral_1d(f, a, b, n=10000)`
 - `propagacion(fun, generadores, n=10000)`
 
-**Ejemplo rápido:**
+**Quick example:**
 ```python
 from montecarlo import montecarlo
 res = montecarlo.integral_1d(lambda t: t**2, 0, 1, n=5000)
@@ -162,13 +162,13 @@ res = montecarlo.integral_1d(lambda t: t**2, 0, 1, n=5000)
 ---
 
 ### numericos.py
-**Propósito:** calculadora numérico‑simbólica con auto‑detección.
+**Purpose:** numeric‑symbolic calculator with auto‑detection.
 
-**API principal:**
+**Main API:**
 - `derivar`, `integrar_indefinida`, `integrar_definida`
 - `raiz_numerica`, `evaluar`, `rk4`
 
-**Ejemplo rápido (EDO con RK4):**
+**Quick example (ODE with RK4):**
 ```python
 from numericos import numericos
 def f(t, y):
@@ -179,15 +179,15 @@ rk = numericos.rk4(f, (0, 5), y0=1.0, dt=0.1)
 ---
 
 ### latex_tools.py
-**Propósito:** LaTeX científico (redondeo metrológico, valores con incertidumbre, tablas y exportación).
+**Purpose:** scientific LaTeX (metrological rounding, values with uncertainty, tables, and export).
 
-**API principal:**
+**Main API:**
 - `redondeo_incertidumbre`
 - `valor_pm`
 - `expr_to_latex`
 - `exportar`
 
-**Ejemplo rápido:**
+**Quick example:**
 ```python
 from latex_tools import latex_tools
 tex = latex_tools.valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
