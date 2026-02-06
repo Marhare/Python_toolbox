@@ -30,7 +30,7 @@ class _Uncertainties:
         sigma = np.asarray(sigma, dtype=object)
 
         # --- numeric check ---
-        if value.dtype.kind in ("U", "S") or sigma.dtype.kind in ("U", "S"):
+        if value.dtype.kind in ("U", "S") or sigma.dtype.kind in ("U", "S"):#What's "U" and "S"?
             raise TypeError("value or sigma is not numeric (string)")
 
         try:
@@ -52,7 +52,7 @@ class _Uncertainties:
         if not value_is_vec and not sigma_is_vec:
             return {"shape": None, "kind": "scalar", "sigma_vec": None}
 
-        if value_is_vec and not sigma_is_vec:
+        if value_is_vec and not sigma_is_vec:       #Transform scalar sigma to vector
             sigma_scalar = float(np.asarray(sigma, dtype=float))
             sigma_vec = np.full(value.shape, sigma_scalar, dtype=float)
             return {"shape": value.shape, "kind": "vector", "sigma_vec": sigma_vec}
@@ -122,8 +122,8 @@ class _Uncertainties:
     @staticmethod
     def uncertainty_propagation(
         f: sp.Expr,
-        vars_: list[sp.Symbol],
-        valores: dict[sp.Symbol, object],
+        vars_: list[sp.Symbol], #What's the difference between vars_ and variables?
+        values: dict[sp.Symbol, object],
         sigmas: dict[sp.Symbol, float],
         cov: sp.Matrix | None = None,
         simplify: bool = True
@@ -132,7 +132,7 @@ class _Uncertainties:
         import numpy as np
 
         for v in vars_:
-            if v not in valores:
+            if v not in values:
                 raise ValueError(f"Missing value for {v}")
             if v not in sigmas:
                 raise ValueError(f"Missing sigma for {v}")
@@ -162,7 +162,7 @@ class _Uncertainties:
         sigma_syms = [sigma_symbols[v] for v in vars_]
         s_num = sp.lambdify(vars_ + sigma_syms, sigma_f_expr, "numpy")
 
-        args = [valores[v] for v in vars_]
+        args = [values[v] for v in vars_]
         s_args = [sigmas[v] for v in vars_]
 
         return {
@@ -173,12 +173,12 @@ class _Uncertainties:
         }
 
     @staticmethod
-    def propagate(expr, valores: dict, sigmas: dict, simplify=True):
+    def propagate(expr, values: dict, sigmas: dict, simplify=True): #And unit??-> "symbols" is the list of variables in the expression.
         """
         ROBUST uncertainty propagation (no ordering errors).
 
         expr     : sympy.Expr
-        valores  : dict {Symbol: array | scalar}
+        values  : dict {Symbol: array | scalar}
         sigmas   : dict {Symbol: float}
         """
         import numpy as np
@@ -187,15 +187,15 @@ class _Uncertainties:
 
         # Validations
         for s in symbols:
-            if s not in valores:
+            if s not in values:
                 raise ValueError(f"Missing value for {s}")
             if s not in sigmas:
                 raise ValueError(f"Missing sigma for {s}")
 
         # Vectorized: if any input is array
-        vectorial = any(np.ndim(v) > 0 for v in valores.values())
+        vectorial = any(np.ndim(v) > 0 for v in values.values())
         if vectorial:
-            longitudes = [len(v) for v in valores.values() if np.ndim(v) > 0]
+            longitudes = [len(v) for v in values.values() if np.ndim(v) > 0]
             N = max(longitudes) if longitudes else 1
         else:
             N = 1
@@ -207,7 +207,7 @@ class _Uncertainties:
         for i in range(N):
             vals_i = {}
             for s in symbols:
-                v = valores[s]
+                v = values[s]
                 if vectorial and np.ndim(v) > 0:
                     vals_i[s] = v[i]
                 else:
@@ -255,14 +255,13 @@ class _Uncertainties:
         # 3) Extract values and sigmas
         values = {}
         sigmas = {}
-        sigma_symbols = {}
         for k, v in magnitudes.items():
-            if v["valor"] is not None:
-                val, sig = v["valor"]
-                sym = symbols[k]
+            if v["valor"] is None:
+                continue
+            val, sig = v["valor"]
+            sym = symbols[k]
             values[sym] = val
             sigmas[sym] = sig
-            sigma_symbols[sym] = sp.Symbol(f"sigma_{k}")
 
         # 4) Propagate
         res = _Uncertainties.propagate(expr, values, sigmas, simplify=simplify)
