@@ -1,19 +1,19 @@
-from .estadistica import estadistica
-from .ajustes import ajustes
+from .statistics import statistics
+from .fitting import fitting
 from .fft_tools import fft_tools
-from .numericos import numericos
-from .montecarlo import montecarlo
+from .numerics import numerics
+from .monte_carlo import monte_carlo
 from .latex_tools import latex_tools
-from .graficos import graficos
-from .incertidumbres import incertidumbres
+from .graphics import graphics
+from .uncertainties import uncertainties
 
 __all__ = [
-    "estadistica",
-    "ajustes",
+    "statistics",
+    "fitting",
     "fft_tools",
-    "numericos",
-    "montecarlo",
+    "numerics",
+    "monte_carlo",
     "latex_tools",
-    "graficos",
-    "incertidumbres",
+    "graphics",
+    "uncertainties",
 ]

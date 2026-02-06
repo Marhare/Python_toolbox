@@ -11,7 +11,7 @@ class _FFTTools:
         return {"freqs": freqs, "fft": fft_vals}
 
     @staticmethod
-    def espectro_potencia(signal, dt):
+    def power_spectrum(signal, dt):
         s = np.asarray(signal)
         freqs = rfftfreq(len(s), dt)
         fft_vals = np.abs(rfft(s))**2

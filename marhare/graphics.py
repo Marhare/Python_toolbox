@@ -1,5 +1,5 @@
 """
-graficos.py
+graphics.py
 ============================================================
 High‑level, low‑friction scientific visualization module.
 
@@ -10,7 +10,7 @@ PHILOSOPHY:
 DOES NOT COMPUTE DATA. It only plots already computed results.
 
 LAYERED DESIGN:
-    1. Semantic objects (Serie, SerieConError, Histograma, Ajuste, Banda, Serie3D, Panel, Scene)
+    1. Semantic objects (Series, SeriesWithError, Histogram, Fit, Band, Series3D, Panel, Scene)
     2. Core engine: plot(*objetos, layout=None, dims="2D", show=True)
     3. Automatic layout
     4. Future extensibility (animations)
@@ -20,7 +20,7 @@ ANIMATION PREPARATION:
     - Future time engine: animate(scene, updater, frames) [NOT implemented]
     - Scene is the natural unit for animations: defines WHAT is drawn
     - updater defines HOW the scene evolves over time
-    - Clean separation: graficos.py (static) + animaciones.py (temporal)
+    - Clean separation: graphics.py (static) + animations.py (temporal)
 
 ============================================================
 """
@@ -95,7 +95,7 @@ PLOT_DEFAULTS = {
 # ============================================================
 
 @dataclass
-class Serie:
+class Series:
     """
     Represents a simple data series: x, y.
     
@@ -118,14 +118,14 @@ class Serie:
         self.x = np.asarray(self.x, dtype=float)
         self.y = np.asarray(self.y, dtype=float)
         if self.x.shape[0] != self.y.shape[0]:
-            raise ValueError("Serie: 'x' and 'y' must have the same length")
+            raise ValueError("Series: 'x' and 'y' must have the same length")
     
     def __hash__(self):
         return id(self)
 
 
 @dataclass
-class SerieConError:
+class SeriesWithError:
     """
     Series with (symmetric) error bars.
     
@@ -154,18 +154,18 @@ class SerieConError:
         if self.sx is not None:
             self.sx = np.asarray(self.sx, dtype=float)
         if self.x.shape[0] != self.y.shape[0]:
-            raise ValueError("SerieConError: 'x' and 'y' must have the same length")
+            raise ValueError("SeriesWithError: 'x' and 'y' must have the same length")
         if self.sy is not None and self.sy.shape[0] != self.y.shape[0]:
-            raise ValueError("SerieConError: 'sy' must have the same length as 'y'")
+            raise ValueError("SeriesWithError: 'sy' must have the same length as 'y'")
         if self.sx is not None and self.sx.shape[0] != self.x.shape[0]:
-            raise ValueError("SerieConError: 'sx' must have the same length as 'x'")
+            raise ValueError("SeriesWithError: 'sx' must have the same length as 'x'")
     
     def __hash__(self):
         return id(self)
 
 
 @dataclass
-class Histograma:
+class Histogram:
     """
     Histogram of a variable.
     
@@ -190,7 +190,7 @@ class Histograma:
 
 
 @dataclass
-class Ajuste:
+class Fit:
     """
     Fitted curve (already computed in another module).
     
@@ -211,14 +211,14 @@ class Ajuste:
         self.x = np.asarray(self.x, dtype=float)
         self.yfit = np.asarray(self.yfit, dtype=float)
         if self.x.shape[0] != self.yfit.shape[0]:
-            raise ValueError("Ajuste: 'x' and 'yfit' must have the same length")
+            raise ValueError("Fit: 'x' and 'yfit' must have the same length")
     
     def __hash__(self):
         return id(self)
 
 
 @dataclass
-class Banda:
+class Band:
     """
     Confidence/prediction band (already computed).
     
@@ -230,7 +230,7 @@ class Banda:
     
     PURPOSE:
         "Draw this shaded region between y_low and y_high"
-        Typically used together with Ajuste.
+        Typically used together with Fit.
     """
     x: np.ndarray = field(default_factory=lambda: np.array([]))
     y_low: np.ndarray = field(default_factory=lambda: np.array([]))
@@ -242,14 +242,14 @@ class Banda:
         self.y_low = np.asarray(self.y_low, dtype=float)
         self.y_high = np.asarray(self.y_high, dtype=float)
         if self.x.shape[0] != self.y_low.shape[0] or self.x.shape[0] != self.y_high.shape[0]:
-            raise ValueError("Banda: 'x', 'y_low' and 'y_high' must have the same length")
+            raise ValueError("Band: 'x', 'y_low' and 'y_high' must have the same length")
     
     def __hash__(self):
         return id(self)
 
 
 @dataclass
-class Serie3D:
+class Series3D:
     """
     Represents a 3D data series: x, y, z.
     
@@ -274,7 +274,7 @@ class Serie3D:
         self.y = np.asarray(self.y, dtype=float)
         self.z = np.asarray(self.z, dtype=float)
         if self.x.shape[0] != self.y.shape[0] or self.x.shape[0] != self.z.shape[0]:
-            raise ValueError("Serie3D: 'x', 'y' and 'z' must have the same length")
+            raise ValueError("Series3D: 'x', 'y' and 'z' must have the same length")
     
     def __hash__(self):
         return id(self)
@@ -286,7 +286,7 @@ class Panel:
     Composition panel: groups objects that should be drawn on the same axis.
 
     INPUT:
-        *objetos: semantic objects (Serie, SerieConError, Histograma, Ajuste, Banda, etc.)
+        *objetos: semantic objects (Series, SeriesWithError, Histogram, Fit, Band, etc.)
 
     PURPOSE:
         Make explicit what should be overlaid in the same subplot.
@@ -323,8 +323,8 @@ class Scene:
         - Style is controlled externally: plot(scene, lw=2, dpi=200)
         
     EXAMPLES:
-        scene = Scene(Serie(x, y), Histograma(data))
-        scene = Scene(Panel(Serie(...), Ajuste(...)), layout="1x2", dims="2D")
+        scene = Scene(Series(x, y), Histogram(data))
+        scene = Scene(Panel(Series(...), Fit(...)), layout="1x2", dims="2D")
         plot(scene)  # draw the scene with default style
         plot(scene, dpi=300)  # same content, different style
     """
@@ -358,17 +358,17 @@ class Scene:
         if dims == "3D":
             for panel in self.paneles:
                 for obj in panel.objetos:
-                    if not isinstance(obj, Serie3D):
+                    if not isinstance(obj, Series3D):
                         raise TypeError(
-                            f"Scene con dims='3D' solo acepta objetos Serie3D. "
+                            f"Scene con dims='3D' solo acepta objetos Series3D. "
                             f"Encontrado: {type(obj).__name__}"
                         )
         elif dims == "2D":
             for panel in self.paneles:
                 for obj in panel.objetos:
-                    if isinstance(obj, Serie3D):
+                    if isinstance(obj, Series3D):
                         raise TypeError(
-                            f"Scene con dims='2D' no acepta objetos Serie3D. "
+                            f"Scene con dims='2D' no acepta objetos Series3D. "
                             f"Usa dims='3D' o cambia a objetos 2D."
                         )
         
@@ -384,7 +384,7 @@ class Scene:
 #  UTILIDADES INTERNAS
 # ============================================================
 
-def _aplicar_estilo(**overrides):
+def _apply_style(**overrides):
     """
     Aplica estilo global a matplotlib rcParams.
     """
@@ -459,7 +459,7 @@ def _layout_shape(n: int) -> Tuple[int, int]:
         return side, side
 
 
-def _crear_eje(fig, idx: int, nrows: int, ncols: int, dims: str) -> plt.Axes:
+def _create_axis(fig, idx: int, nrows: int, ncols: int, dims: str) -> plt.Axes:
     """
     Create a 2D or 3D axis depending on dims.
     
@@ -482,7 +482,7 @@ def _crear_eje(fig, idx: int, nrows: int, ncols: int, dims: str) -> plt.Axes:
         return fig.add_subplot(nrows, ncols, idx)
 
 
-def _es_eje_3d(ax) -> bool:
+def _is_axis_3d(ax) -> bool:
     """
     Detect whether an axis is 3D.
     
@@ -499,7 +499,7 @@ def _es_eje_3d(ax) -> bool:
     return hasattr(ax, 'zaxis')
 
 
-def _post_process_ax(ax, cfg):
+def _post_process_axis(ax, cfg):
     """
     Apply standard post‑processing to an axis.
     Used internally after each plot.
@@ -509,7 +509,7 @@ def _post_process_ax(ax, cfg):
         - For 2D axes, apply standard configuration
     """
     # 3D axes: do not apply 2D logic
-    if _es_eje_3d(ax):
+    if _is_axis_3d(ax):
         return
     
     # Minor ticks (2D only)
@@ -542,37 +542,37 @@ def _apply_legend(ax, cfg):
 #  CAPA 2: MOTOR CENTRAL DE PLOTTING
 # ============================================================
 
-def _es_scene_like(obj: Any) -> bool:
+def _is_scene_like(obj: Any) -> bool:
     return isinstance(obj, Scene) or (
         hasattr(obj, "paneles") and hasattr(obj, "layout") and hasattr(obj, "dims")
     )
 
 
-def _es_panel_like(obj: Any) -> bool:
+def _is_panel_like(obj: Any) -> bool:
     return isinstance(obj, Panel) or hasattr(obj, "objetos")
 
 
-def _es_serie3d_like(obj: Any) -> bool:
+def _is_series3d_like(obj: Any) -> bool:
     return hasattr(obj, "x") and hasattr(obj, "y") and hasattr(obj, "z")
 
 
-def _es_serie_con_error_like(obj: Any) -> bool:
+def _is_series_with_error_like(obj: Any) -> bool:
     return hasattr(obj, "x") and hasattr(obj, "y") and (hasattr(obj, "sy") or hasattr(obj, "sx"))
 
 
-def _es_histograma_like(obj: Any) -> bool:
+def _is_histogram_like(obj: Any) -> bool:
     return hasattr(obj, "data") and hasattr(obj, "bins")
 
 
-def _es_ajuste_like(obj: Any) -> bool:
+def _is_fit_like(obj: Any) -> bool:
     return hasattr(obj, "x") and hasattr(obj, "yfit")
 
 
-def _es_banda_like(obj: Any) -> bool:
+def _is_band_like(obj: Any) -> bool:
     return hasattr(obj, "x") and hasattr(obj, "y_low") and hasattr(obj, "y_high")
 
 
-def _es_serie_like(obj: Any) -> bool:
+def _is_series_like(obj: Any) -> bool:
     return hasattr(obj, "x") and hasattr(obj, "y")
 
 def plot(
@@ -590,7 +590,7 @@ def plot(
     Core engine: automatically plots one or more series.
     
     INPUT:
-        *objetos: Serie, SerieConError, Histograma, Ajuste, Banda, Panel, Scene
+        *objetos: Series, SeriesWithError, Histogram, Fit, Band, Panel, Scene
         layout: str | None
             None -> auto (1→1x1, 2→1x2, etc.)
             "2x3" -> force specific layout
@@ -611,12 +611,12 @@ def plot(
     
     EXAMPLES:
         # Direct mode
-        plot(Serie(x, y))
-        plot(SerieConError(x, y, sy), Ajuste(x, yfit))
-        plot(Histograma(data1), Histograma(data2), layout="1x2")
+        plot(Series(x, y))
+        plot(SeriesWithError(x, y, sy), Fit(x, yfit))
+        plot(Histogram(data1), Histogram(data2), layout="1x2")
         
         # With Scene (recommended for reuse)
-        scene = Scene(Serie(x, y), Histograma(data), layout="1x2")
+        scene = Scene(Series(x, y), Histogram(data), layout="1x2")
         plot(scene)  # Scene structure
         plot(scene, dpi=300)  # same content, different style
     
@@ -635,7 +635,7 @@ def plot(
         - Minimizes user decisions
     """
     # Special case: if a single Scene is passed, use its properties
-    if len(objetos) == 1 and _es_scene_like(objetos[0]):
+    if len(objetos) == 1 and _is_scene_like(objetos[0]):
         scene = objetos[0]
         # Extract Scene properties (do not overwrite if explicitly provided)
         if layout is None:
@@ -654,12 +654,12 @@ def plot(
         objetos = tuple(scene.paneles)
     
     if len(objetos) == 0:
-        raise ValueError("plot() needs at least one object (Serie, Histograma, etc.)")
+        raise ValueError("plot() needs at least one object (Series, Histogram, etc.)")
 
     if dims not in ("2D", "3D"):
         raise ValueError(f"dims must be '2D' or '3D', received: {dims}")
 
-    cfg = _aplicar_estilo(**kwargs)
+    cfg = _apply_style(**kwargs)
 
     if figsize is None:
         figsize = cfg["figsize"]
@@ -667,12 +667,12 @@ def plot(
     # Normalize to Panels (each Panel corresponds to a subplot)
     paneles: List[Panel] = []
     for obj in objetos:
-        if _es_panel_like(obj):
+        if _is_panel_like(obj):
             paneles.append(obj)
         else:
             paneles.append(Panel(obj))
     if len(paneles) == 0:
-        raise ValueError("plot() needs at least one object (Serie, Histograma, etc.)")
+        raise ValueError("plot() needs at least one object (Series, Histogram, etc.)")
 
     # Compute layout
     n_grupos = len(paneles)
@@ -699,7 +699,7 @@ def plot(
     # Create axes manually (2D or 3D depending on dims)
     axs = []
     for i in range(nrows * ncols):
-        ax = _crear_eje(fig, i + 1, nrows, ncols, dims)
+        ax = _create_axis(fig, i + 1, nrows, ncols, dims)
         axs.append(ax)
     axs = np.array(axs)
     
@@ -719,8 +719,8 @@ def plot(
         if idx < len(axs):
             ax = axs[idx]
             for obj in panel.objetos:
-                _plot_objeto(obj, ax, cfg)
-            _post_process_ax(ax, cfg)
+                _plot_object(obj, ax, cfg)
+            _post_process_axis(ax, cfg)
             _apply_legend(ax, cfg)
 
     # Hide extra axes
@@ -747,12 +747,12 @@ def plot(
         return fig, axs[:n_grupos]
 
 
-def _plot_objeto(obj: Any, ax: plt.Axes, cfg: Dict[str, Any]):
+def _plot_object(obj: Any, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Internal dispatcher: draw object on axis by type.
     
     INPUT:
-        obj: Serie, SerieConError, Histograma, Ajuste, Banda, Serie3D
+        obj: Series, SeriesWithError, Histogram, Fit, Band, Series3D
         ax: matplotlib.axes.Axes or Axes3D
         cfg: configuration dictionary
     
@@ -763,34 +763,34 @@ def _plot_objeto(obj: Any, ax: plt.Axes, cfg: Dict[str, Any]):
         - Valida compatibilidad 2D/3D
     """
     # Detectar si el eje es 3D (usando helper centralizado)
-    is_3d_axis = _es_eje_3d(ax)
+    is_3d_axis = _is_axis_3d(ax)
     
     # Validar compatibilidad 2D/3D
-    if isinstance(obj, Serie3D) or _es_serie3d_like(obj):
+    if isinstance(obj, Series3D) or _is_series3d_like(obj):
         if not is_3d_axis:
-            raise TypeError("Serie3D requiere dims='3D'. Usa plot(..., dims='3D')")
-        _plot_serie3d(obj, ax, cfg)
+            raise TypeError("Series3D requires dims='3D'. Use plot(..., dims='3D')")
+        _plot_series3d(obj, ax, cfg)
     else:
-        # Objetos 2D (Serie, SerieConError, etc.)
+        # 2D objects (Series, SeriesWithError, etc.)
         if is_3d_axis:
-            tipos_2d = "Serie, SerieConError, Histograma, Ajuste, Banda"
-            raise TypeError(f"Objetos 2D ({tipos_2d}) no pueden dibujarse en ejes 3D. Usa dims='2D' o Serie3D")
+            tipos_2d = "Series, SeriesWithError, Histogram, Fit, Band"
+            raise TypeError(f"2D objects ({tipos_2d}) cannot be drawn on 3D axes. Use dims='2D' or Series3D")
 
-        if isinstance(obj, SerieConError) or _es_serie_con_error_like(obj):
-            _plot_serie_con_error(obj, ax, cfg)
-        elif isinstance(obj, Histograma) or _es_histograma_like(obj):
-            _plot_histograma(obj, ax, cfg)
-        elif isinstance(obj, Ajuste) or _es_ajuste_like(obj):
-            _plot_ajuste(obj, ax, cfg)
-        elif isinstance(obj, Banda) or _es_banda_like(obj):
-            _plot_banda(obj, ax, cfg)
-        elif isinstance(obj, Serie) or _es_serie_like(obj):
-            _plot_serie(obj, ax, cfg)
+        if isinstance(obj, SeriesWithError) or _is_series_with_error_like(obj):
+            _plot_series_with_error(obj, ax, cfg)
+        elif isinstance(obj, Histogram) or _is_histogram_like(obj):
+            _plot_histogram(obj, ax, cfg)
+        elif isinstance(obj, Fit) or _is_fit_like(obj):
+            _plot_fit(obj, ax, cfg)
+        elif isinstance(obj, Band) or _is_band_like(obj):
+            _plot_band(obj, ax, cfg)
+        elif isinstance(obj, Series) or _is_series_like(obj):
+            _plot_series(obj, ax, cfg)
         else:
             raise TypeError(f"Unsupported object type: {type(obj).__name__}")
 
 
-def _plot_serie(obj: Serie, ax: plt.Axes, cfg: Dict[str, Any]):
+def _plot_series(obj: Series, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a simple series (clean scatter plot).
     """
@@ -819,7 +819,7 @@ def _plot_serie(obj: Serie, ax: plt.Axes, cfg: Dict[str, Any]):
         )
 
 
-def _plot_serie_con_error(obj: SerieConError, ax: plt.Axes, cfg: Dict[str, Any]):
+def _plot_series_with_error(obj: SeriesWithError, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a series with error bars (errorbar).
     """
@@ -836,7 +836,7 @@ def _plot_serie_con_error(obj: SerieConError, ax: plt.Axes, cfg: Dict[str, Any])
     )
 
 
-def _plot_histograma(obj: Histograma, ax: plt.Axes, cfg: Dict[str, Any]):
+def _plot_histogram(obj: Histogram, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a clean histogram.
     """
@@ -850,7 +850,7 @@ def _plot_histograma(obj: Histograma, ax: plt.Axes, cfg: Dict[str, Any]):
     )
 
 
-def _plot_ajuste(obj: Ajuste, ax: plt.Axes, cfg: Dict[str, Any]):
+def _plot_fit(obj: Fit, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a fitted curve (smooth line).
     """
@@ -862,7 +862,7 @@ def _plot_ajuste(obj: Ajuste, ax: plt.Axes, cfg: Dict[str, Any]):
     )
 
 
-def _plot_banda(obj: Banda, ax: plt.Axes, cfg: Dict[str, Any]):
+def _plot_band(obj: Band, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a band (filled between y_low and y_high).
     """
@@ -876,12 +876,12 @@ def _plot_banda(obj: Banda, ax: plt.Axes, cfg: Dict[str, Any]):
     )
 
 
-def _plot_serie3d(obj: Serie3D, ax, cfg: Dict[str, Any]):
+def _plot_series3d(obj: Series3D, ax, cfg: Dict[str, Any]):
     """
     Draw a 3D series (line or points in 3D space).
     
     INPUT:
-        obj: Serie3D
+        obj: Series3D
         ax: Axes3D (axis with projection="3d")
         cfg: configuration dictionary
     
@@ -903,7 +903,7 @@ def _plot_serie3d(obj: Serie3D, ax, cfg: Dict[str, Any]):
 #  CLASSIC API (compatibility with legacy code)
 # ============================================================
 
-def figura(
+def figure(
     figsize: Optional[Tuple[float, float]] = None,
     nrows: int = 1,
     ncols: int = 1,
@@ -917,7 +917,7 @@ def figura(
 
     kwargs: you can pass keys from PLOT_DEFAULTS (dpi, grid_alpha, lw, etc.)
     """
-    cfg = _aplicar_estilo(**kwargs)
+    cfg = _apply_style(**kwargs)
 
     if figsize is None:
         figsize = cfg["figsize"]
@@ -946,7 +946,7 @@ def figura(
     return fig, axs
 
 
-def guardar(
+def save(
     fig,
     filename: Union[str, Path],
     formatos: Optional[List[str]] = None,
@@ -982,7 +982,7 @@ def guardar(
         plt.close(fig)
 
 
-def linea(
+def line(
     x, y,
     *,
     ax=None,
@@ -999,9 +999,9 @@ def linea(
     """
     Classic x‑y line (traditional API).
     
-    Uses the Serie class internally to keep consistency.
+    Uses the Series class internally to keep consistency.
     """
-    cfg = _aplicar_estilo(**kwargs)
+    cfg = _apply_style(**kwargs)
     if ax is None:
         fig, ax = plt.subplots(figsize=cfg["figsize"], constrained_layout=cfg.get("tight", True))
     
@@ -1021,7 +1021,7 @@ def linea(
     if ylim is not None:
         ax.set_ylim(ylim)
     
-    _post_process_ax(ax, cfg)
+    _post_process_axis(ax, cfg)
     
     if legend is None:
         legend = cfg.get("legend", True)
@@ -1031,7 +1031,7 @@ def linea(
     return ax
 
 
-def dispersion(
+def scatter(
     x, y,
     *,
     ax=None,
@@ -1047,7 +1047,7 @@ def dispersion(
     """
     Scatter limpio (API tradicional).
     """
-    cfg = _aplicar_estilo(**kwargs)
+    cfg = _apply_style(**kwargs)
     if ax is None:
         fig, ax = plt.subplots(figsize=cfg["figsize"], constrained_layout=cfg.get("tight", True))
     
@@ -1074,7 +1074,7 @@ def dispersion(
     if ylim is not None:
         ax.set_ylim(ylim)
     
-    _post_process_ax(ax, cfg)
+    _post_process_axis(ax, cfg)
     
     if legend is None:
         legend = cfg.get("legend", True)
@@ -1102,9 +1102,9 @@ def errorbar(
     """
     Puntos con barras de error (API tradicional).
     
-    Usa SerieConError internamente.
+    Uses SeriesWithError internally.
     """
-    cfg = _aplicar_estilo(**kwargs)
+    cfg = _apply_style(**kwargs)
     if ax is None:
         fig, ax = plt.subplots(figsize=cfg["figsize"], constrained_layout=cfg.get("tight", True))
     
@@ -1134,7 +1134,7 @@ def errorbar(
     if ylim is not None:
         ax.set_ylim(ylim)
     
-    _post_process_ax(ax, cfg)
+    _post_process_axis(ax, cfg)
     
     if legend is None:
         legend = cfg.get("legend", True)
@@ -1148,32 +1148,32 @@ def errorbar(
 #  FACADE (SAME STYLE AS YOUR OTHER MODULES)
 # ============================================================
 
-class _Graficos:
-    """Facade: graficos.plot(...), graficos.linea(...), graficos.errorbar(...), etc."""
+class _Graphics:
+    """Facade: graphics.plot(...), graphics.line(...), graphics.errorbar(...), etc."""
     
     # Core engine (NEW - Layer 2)
     plot = staticmethod(plot)
     
     # Semantic classes (NEW - Layer 1)
-    Serie = Serie
-    SerieConError = SerieConError
-    Histograma = Histograma
-    Ajuste = Ajuste
-    Banda = Banda
-    Serie3D = Serie3D
+    Series = Series
+    SeriesWithError = SeriesWithError
+    Histogram = Histogram
+    Fit = Fit
+    Band = Band
+    Series3D = Series3D
     Panel = Panel
     Scene = Scene
     
     # Utilities and configuration
-    _aplicar_estilo = staticmethod(_aplicar_estilo)
-    figura = staticmethod(figura)
-    guardar = staticmethod(guardar)
+    _apply_style = staticmethod(_apply_style)
+    figure = staticmethod(figure)
+    save = staticmethod(save)
     
     # Classic API (compatibility with legacy code)
-    linea = staticmethod(linea)
-    dispersion = staticmethod(dispersion)
+    line = staticmethod(line)
+    scatter = staticmethod(scatter)
     errorbar = staticmethod(errorbar)
 
 
 # Global instance
-graficos = _Graficos()
+graphics = _Graphics()

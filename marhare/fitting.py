@@ -1,10 +1,10 @@
 """
-ajustes.py
+fitting.py
 ==========
 
 PURPOSE AND DIFFERENCES:
 - Curve fitting module using weighted least squares (WLS).
-- ajustes.py: fits models to data (linear, polynomial, generic, symbolic).
+- fitting.py: fits models to data (linear, polynomial, generic, symbolic).
 - estadistica.py: hypothesis tests, p‑values, confidence intervals for distributions.
 - incertidumbres.py: propagates parameter uncertainties to observables (derivatives, etc.).
 - This module COMBINES WLS + a covariance matrix to allow later propagation via incertidumbres.py.
@@ -19,7 +19,7 @@ DEFAULT ASSUMPTIONS:
 PUBLIC FUNCTIONS
 ================
 
-1) ajuste_lineal(x, y, sy=None)
+1) linear_fit(x, y, sy=None)
    Exact analytic WLS fit for y = a + b·x.
    
    INPUT:
@@ -46,7 +46,7 @@ PUBLIC FUNCTIONS
        - ValueError if sy contains values <= 0 or shape differs from y
        - ValueError if x,y are not 1D arrays
 
-2) ajuste_polinomico(x, y, grado, sy=None)
+2) polynomial_fit(x, y, degree, sy=None)
    Polynomial fit y = p0·x^n + ... + pn by WLS.
    
    INPUT:
@@ -76,7 +76,7 @@ PUBLIC FUNCTIONS
        - ValueError if x,y are not 1D arrays
        - Error if grado < 0 or grado >= n
 
-3) ajuste(modelo, x, y, sy=None, p0=None, *, variable="x")
+3) fit(model, x, y, sy=None, p0=None, *, variable="x")
    Unified generic fit: accepts callable OR sympy expression.
    
    INPUT:
@@ -115,7 +115,7 @@ PUBLIC FUNCTIONS
        - ValueError if len(x) != len(y) or sy shape/values are invalid
        - RuntimeError if curve_fit does not converge
 
-4) intervalo_confianza_parametros(resultado_ajuste, nivel=0.95)
+4) parameter_confidence_interval(fit_result, level=0.95)
    Computes confidence intervals (CI) for fitted parameters.
    
    INPUT:
@@ -144,7 +144,7 @@ PUBLIC FUNCTIONS
        - ValueError if nivel is not in (0,1)
        - ValueError if resultado_ajuste lacks 'parametros' or 'errores'
 
-5) incertidumbre_prediccion(resultado_ajuste, modelo, x0)
+5) prediction_uncertainty(fit_result, model, x0)
    Computes statistical uncertainty of the model prediction at x0.
    
    INPUT:
@@ -176,9 +176,9 @@ CONVENTIONS AND TYPICAL FLOW
 ============================
 
 1. Fit data:
-   res = ajustes.ajuste_lineal(x, y, sy=sy_data)
+    res = fitting.linear_fit(x, y, sy=sy_data)
    or
-   res = ajustes.ajuste(modelo, x, y, sy=sy_data, p0=p0_inicial)
+    res = fitting.fit(modelo, x, y, sy=sy_data, p0=p0_inicial)
 
 2. Interpret results:
    params = res["parametros"]
@@ -186,12 +186,12 @@ CONVENTIONS AND TYPICAL FLOW
    chi2_red = res["chi2_red"]  -> if ~1, fit is good
 
 3. Build CI for parameters:
-   ic = ajustes.intervalo_confianza_parametros(res, nivel=0.95)
+    ic = fitting.parameter_confidence_interval(res, level=0.95)
    for param_ic in ic["parametros"]:
        print(f"{param_ic['nombre']}: {param_ic['inferior']} - {param_ic['superior']}")
 
 4. Evaluate prediction uncertainty:
-   pred = ajustes.incertidumbre_prediccion(res, modelo, x_nuevo)
+    pred = fitting.prediction_uncertainty(res, modelo, x_nuevo)
    print(f"y({x_nuevo}) = {pred['y']} ± {pred['sigma_modelo']}")
 
 5. Propagate to other observables (use incertidumbres.py):
@@ -203,10 +203,10 @@ import numpy as np
 from scipy import stats, optimize
 import sympy as sp
 
-class _Ajustes:
+class _Fitting:
 
     @staticmethod
-    def _validar_datos(x, y, sy=None):
+    def _validate_data(x, y, sy=None):
         x = np.asarray(x)
         y = np.asarray(y)
         if x.shape != y.shape:
@@ -224,8 +224,8 @@ class _Ajustes:
         return x, y, sy
 
     @staticmethod
-    def _ajuste_curvefit(f, x, y, sy=None, p0=None):
-        x, y, sy = _Ajustes._validar_datos(x, y, sy)
+    def _curve_fit(f, x, y, sy=None, p0=None):
+        x, y, sy = _Fitting._validate_data(x, y, sy)
 
         popt, pcov = optimize.curve_fit(
             f, x, y, sigma=sy, absolute_sigma=True, p0=p0
@@ -249,7 +249,7 @@ class _Ajustes:
 
     # ---------- Linear ----------
     @staticmethod
-    def ajuste_lineal(x, y, sy=None):
+    def linear_fit(x, y, sy=None):
         """
         INPUT:
             x: array_like (n,)
@@ -266,7 +266,7 @@ class _Ajustes:
             - Analytic weighted linear fit (WLS)
             - Assumes absolute sigma is known (no error rescaling)
         """
-        x, y, sy = _Ajustes._validar_datos(x, y, sy)
+        x, y, sy = _Fitting._validate_data(x, y, sy)
         w = 1 / sy**2
 
         S = np.sum(w)
@@ -307,7 +307,7 @@ class _Ajustes:
 
     # ---------- Polynomial ----------
     @staticmethod
-    def ajuste_polinomico(x, y, grado, sy=None):
+    def polynomial_fit(x, y, grado, sy=None):
         """
         INPUT:
             x: array_like (n,)
@@ -325,7 +325,7 @@ class _Ajustes:
             - Based on np.polyfit with weights
             - Assumes absolute sigma is known (no error rescaling)
         """
-        x, y, sy = _Ajustes._validar_datos(x, y, sy)
+        x, y, sy = _Fitting._validate_data(x, y, sy)
         coef, cov = np.polyfit(x, y, grado, w=1 / sy, cov="unscaled")
         errores = np.sqrt(np.diag(cov))
         yfit = np.polyval(coef, x)
@@ -345,7 +345,7 @@ class _Ajustes:
 
     # ---------- Unified ----------
     @staticmethod
-    def ajuste(modelo, x, y, sy=None, p0=None, *, variable="x"):
+    def fit(modelo, x, y, sy=None, p0=None, *, variable="x"):
         """
         INPUT:
             modelo: callable f(x, *params) | sympy.Expr
@@ -366,7 +366,7 @@ class _Ajustes:
             - absolute_sigma=True always
         """
         if callable(modelo) and not isinstance(modelo, sp.Expr):
-            return _Ajustes._ajuste_curvefit(modelo, x, y, sy, p0)
+            return _Fitting._curve_fit(modelo, x, y, sy, p0)
 
         if isinstance(modelo, sp.Expr):
             expr = modelo
@@ -395,7 +395,7 @@ class _Ajustes:
             def f_num(x, *p):
                 return f(x, *p)
 
-            res = _Ajustes._ajuste_curvefit(f_num, x, y, sy, p0)
+            res = _Fitting._curve_fit(f_num, x, y, sy, p0)
             res["expresion"] = expr
             res["parametros_simbolicos"] = params
             return res
@@ -404,12 +404,12 @@ class _Ajustes:
 
     # ---------- A.1 Parameter confidence intervals ----------
     @staticmethod
-    def intervalo_confianza_parametros(resultado_ajuste, nivel=0.95):
+    def parameter_confidence_interval(resultado_ajuste, nivel=0.95):
         """
         Compute confidence intervals for fitted parameters.
         
         INPUT:
-            resultado_ajuste: dict result from ajuste()/ajuste_lineal()/ajuste_polinomico()
+            resultado_ajuste: dict result from fit()/linear_fit()/polynomial_fit()
             nivel: float [0, 1] -> confidence level (default 0.95)
         
         OUTPUT:
@@ -484,12 +484,12 @@ class _Ajustes:
 
     # ---------- A.2 Model prediction uncertainty ----------
     @staticmethod
-    def incertidumbre_prediccion(resultado_ajuste, modelo, x0):
+    def prediction_uncertainty(resultado_ajuste, modelo, x0):
         """
         Compute the statistical uncertainty of the model prediction at x0.
         
         INPUT:
-            resultado_ajuste: dict result from ajuste()/ajuste_lineal()/ajuste_polinomico()
+            resultado_ajuste: dict result from fit()/linear_fit()/polynomial_fit()
             modelo: callable f(x, *params) | sympy.Expr
             x0: float | array_like -> prediction point(s)
         
@@ -599,4 +599,4 @@ class _Ajustes:
         
         return result
 
-ajustes = _Ajustes()
+fitting = _Fitting()

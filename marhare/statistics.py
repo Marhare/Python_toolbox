@@ -1,7 +1,7 @@
 """
 QUICK SUMMARY (Public functions)
 --------------------------------
-media
+mean
     INPUT:
         x: array_like (n,) -> numeric data (list/np.ndarray)
     OUTPUT:
@@ -9,7 +9,7 @@ media
     ERRORS:
         ValueError -> empty array
 
-varianza
+variance
     INPUT:
         x: array_like (n,) -> numeric data
         ddof: int -> degrees of freedom
@@ -18,7 +18,7 @@ varianza
     ERRORS:
         ValueError -> empty array, n <= ddof
 
-desviacion_tipica
+standard_deviation
     INPUT:
         x: array_like (n,) -> numeric data
         ddof: int -> degrees of freedom
@@ -27,7 +27,7 @@ desviacion_tipica
     ERRORS:
         ValueError -> empty array, n <= ddof
 
-error_estandar
+standard_error
     INPUT:
         x: array_like (n,) -> numeric data
     OUTPUT:
@@ -35,7 +35,7 @@ error_estandar
     ERRORS:
         ValueError -> empty array
 
-media_ponderada
+weighted_mean
     INPUT:
         x: array_like (n,) -> numeric data
         w: array_like (n,) | None -> positive weights
@@ -45,7 +45,7 @@ media_ponderada
     ERRORS:
         ValueError -> empty array, mismatched lengths, non‑finite values
 
-varianza_ponderada
+weighted_variance
     INPUT:
         x: array_like (n,) -> numeric data
         w: array_like (n,) | None -> positive weights
@@ -57,7 +57,7 @@ varianza_ponderada
     ERRORS:
         ValueError -> empty array, n_eff <= ddof, unsupported tipo, invalid weights
 
-intervalo_confianza
+confidence_interval
     INPUT:
         x: array_like (n,) -> numeric data
         nivel: float -> confidence level (0,1)
@@ -70,7 +70,7 @@ intervalo_confianza
     ERRORS:
         ValueError -> invalid assumptions, incompatible data
 
-test_media
+mean_test
     INPUT:
         x: array_like (n,) -> numeric data
         mu0: float -> value under H0
@@ -84,7 +84,7 @@ test_media
     ERRORS:
         ValueError -> invalid assumptions, incompatible data
 
-test_ks
+ks_test
     INPUT:
         x: array_like (n,) -> numeric data
         distribucion: str -> "normal" | "uniforme"
@@ -103,7 +103,7 @@ from typing import Union, Tuple, Dict
 # MAIN CLASS: ESTADISTICA
 # ============================================================================
 
-class _Estadistica:
+class _Statistics:
     """
     To perform statistical analysis of data, first answer:
     
@@ -119,7 +119,7 @@ class _Estadistica:
     # ========================================================================
     
     @staticmethod
-    def media(x: Union[list, np.ndarray]) -> float:
+    def mean(x: Union[list, np.ndarray]) -> float:
         """
         Compute the sample arithmetic mean.
         INPUT:
@@ -145,7 +145,7 @@ class _Estadistica:
         return float(np.mean(x))
 
     @staticmethod
-    def varianza(x: Union[list, np.ndarray], ddof: int = 1) -> float:
+    def variance(x: Union[list, np.ndarray], ddof: int = 1) -> float:
         """
         Compute the sample variance (s^2).
         INPUT:
@@ -176,7 +176,7 @@ class _Estadistica:
         return float(np.var(x, ddof=ddof))
 
     @staticmethod
-    def desviacion_tipica(x: Union[list, np.ndarray], ddof: int = 1) -> float:
+    def standard_deviation(x: Union[list, np.ndarray], ddof: int = 1) -> float:
         """
         Compute the sample standard deviation (s).
         INPUT:
@@ -207,7 +207,7 @@ class _Estadistica:
         return float(np.std(x, ddof=ddof))
 
     @staticmethod
-    def error_estandar(x: Union[list, np.ndarray]) -> float:
+    def standard_error(x: Union[list, np.ndarray]) -> float:
         """
         Compute the standard error of the mean: σ / sqrt(n).
         INPUT:
@@ -235,7 +235,7 @@ class _Estadistica:
         return sigma / np.sqrt(n)
 
     @staticmethod
-    def _calcular_pesos(
+    def _compute_weights(
         x: np.ndarray,
         w: Union[list, np.ndarray, None],
         sigma: Union[list, np.ndarray, None]
@@ -292,7 +292,7 @@ class _Estadistica:
         return w
 
     @staticmethod
-    def media_ponderada(
+    def weighted_mean(
         x: Union[list, np.ndarray],
         w: Union[list, np.ndarray, None] = None,
         sigma: Union[list, np.ndarray, None] = None
@@ -335,11 +335,11 @@ class _Estadistica:
         Examples
         --------
         >>> x = [1.0, 2.0, 3.0]
-        >>> estadistica.media_ponderada(x)  # Simple mean
+        >>> statistics.weighted_mean(x)  # Simple mean
         2.0
-        >>> estadistica.media_ponderada(x, w=[1, 2, 1])  # Weighted mean
+        >>> statistics.weighted_mean(x, w=[1, 2, 1])  # Weighted mean
         2.0
-        >>> estadistica.media_ponderada(x, sigma=[0.1, 0.2, 0.1])  # Uncertainty weights
+        >>> statistics.weighted_mean(x, sigma=[0.1, 0.2, 0.1])  # Uncertainty weights
         2.0
         """
         x = np.asarray(x, dtype=float)
@@ -350,12 +350,12 @@ class _Estadistica:
         if not np.all(np.isfinite(x)):
             raise ValueError("x contains non‑finite values (inf/nan)")
         
-        w = _Estadistica._calcular_pesos(x, w, sigma)
+        w = _Statistics._compute_weights(x, w, sigma)
         
         return float(np.sum(w * x) / np.sum(w))
 
     @staticmethod
-    def varianza_ponderada(
+    def weighted_variance(
         x: Union[list, np.ndarray],
         w: Union[list, np.ndarray, None] = None,
         sigma: Union[list, np.ndarray, None] = None,
@@ -419,9 +419,9 @@ class _Estadistica:
         Examples
         --------
         >>> x = [1.0, 2.0, 3.0]
-        >>> estadistica.varianza_ponderada(x)  # Simple variance (ddof=1)
+        >>> statistics.weighted_variance(x)  # Simple variance (ddof=1)
         1.0
-        >>> estadistica.varianza_ponderada(x, w=[1, 2, 1], tipo="mle")
+        >>> statistics.weighted_variance(x, w=[1, 2, 1], tipo="mle")
         0.5
         """
         x = np.asarray(x, dtype=float)
@@ -436,7 +436,7 @@ class _Estadistica:
         if tipo not in ["frecuentista", "mle"]:
             raise ValueError('tipo must be "frecuentista" or "mle"')
         
-        w = _Estadistica._calcular_pesos(x, w, sigma)
+        w = _Statistics._compute_weights(x, w, sigma)
         
         # Weighted mean
         mu_w = np.sum(w * x) / np.sum(w)
@@ -469,7 +469,7 @@ class _Estadistica:
     
     
     @staticmethod
-    def intervalo_confianza(
+    def confidence_interval(
         x: Union[list, np.ndarray],
         *,
         nivel: float = 0.95,
@@ -539,19 +539,19 @@ class _Estadistica:
         -------------
         >>> x = [2.1, 2.4, 2.0, 2.3]
         >>> # Normal con σ desconocida (t-Student exacto)
-        >>> resultado = estadistica.intervalo_confianza(x, distribucion="normal")
+        >>> resultado = statistics.confidence_interval(x, distribucion="normal")
         >>> print(f"IC[μ]: ({resultado['limite_inferior']:.3f}, {resultado['limite_superior']:.3f})")
 
         >>> # Normal con σ conocida (z exacto)
-        >>> resultado = estadistica.intervalo_confianza(x, sigma=0.2, distribucion="normal")
+        >>> resultado = statistics.confidence_interval(x, sigma=0.2, distribucion="normal")
 
         >>> # Poisson (exacto chi-cuadrado)
         >>> conteos = [3, 1, 4, 2, 0]
-        >>> resultado = estadistica.intervalo_confianza(conteos, distribucion="poisson")
+        >>> resultado = statistics.confidence_interval(conteos, distribucion="poisson")
 
         >>> # Binomial (Clopper-Pearson exacto)
         >>> ensayos = [1, 0, 1, 1, 0, 1]
-        >>> resultado = estadistica.intervalo_confianza(ensayos, distribucion="binomial")
+        >>> resultado = statistics.confidence_interval(ensayos, distribucion="binomial")
 
         Notes
         -----
@@ -675,7 +675,7 @@ class _Estadistica:
 
 
     @staticmethod
-    def intervalo_varianza(
+    def variance_interval(
         x: Union[list, np.ndarray],
         nivel: float = 0.95
     ) -> Tuple[float, float]:
@@ -712,7 +712,7 @@ class _Estadistica:
     # ========================================================================
 
     @staticmethod
-    def test_media(
+    def mean_test(
         x: Union[list, np.ndarray],
         mu0: float,
         *,
@@ -791,18 +791,18 @@ class _Estadistica:
         --------
         >>> x = [2.1, 2.4, 2.0, 2.3]
         >>> # z-test with known σ = 0.2
-        >>> resultado = estadistica.test_media(x, mu0=2.0, distribucion="normal", sigma=0.2)
+        >>> resultado = statistics.mean_test(x, mu0=2.0, distribucion="normal", sigma=0.2)
 
         >>> # t-test with unknown σ
-        >>> resultado = estadistica.test_media(x, mu0=2.0, distribucion="normal")
+        >>> resultado = statistics.mean_test(x, mu0=2.0, distribucion="normal")
 
         >>> # Exact Poisson test: is λ = 2?
         >>> conteos = [3, 1, 4, 2, 0]
-        >>> resultado = estadistica.test_media(conteos, mu0=2.0, distribucion="poisson")
+        >>> resultado = statistics.mean_test(conteos, mu0=2.0, distribucion="poisson")
 
         >>> # Exact Binomial test: is p = 0.5?
         >>> ensayos = [1, 0, 1, 1, 0, 1]
-        >>> resultado = estadistica.test_media(ensayos, mu0=0.5, distribucion="binomial")
+        >>> resultado = statistics.mean_test(ensayos, mu0=0.5, distribucion="binomial")
         """
         x = np.asarray(x, dtype=float)
         n = len(x)
@@ -959,10 +959,10 @@ class _Estadistica:
             }
 
         else:
-            raise ValueError(f"Distribution '{distribucion}' not supported for test_media")
+            raise ValueError(f"Distribution '{distribucion}' not supported for mean_test")
 
     @staticmethod
-    def test_ks(x: Union[list, np.ndarray], distribucion: str = "normal") -> Dict[str, float]:
+    def ks_test(x: Union[list, np.ndarray], distribucion: str = "normal") -> Dict[str, float]:
         """
         Kolmogorov‑Smirnov test for goodness of fit.
         INPUT:
@@ -1006,4 +1006,4 @@ class _Estadistica:
 # INSTANCIA SINGLETON
 # ============================================================================
 
-estadistica = _Estadistica()
+statistics = _Statistics()
