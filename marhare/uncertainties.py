@@ -1,8 +1,10 @@
 from __future__ import annotations
+import functools
+import inspect
 import numpy as np
 
 # Required dependency: uncertainties ALWAYS installed
-from .latex_tools import expr_to_latex, latex_tools
+
 import sympy as sp
 
 
@@ -66,23 +68,49 @@ class _Uncertainties:
         return {"shape": value.shape, "kind": "vector", "sigma_vec": sigma_vec}
     
     @staticmethod
-    def quantity(*args):
+    def quantity(*args, symbol=None):
         """
         Unified quantity constructor (positional-only).
 
         Accepted signatures:
-        1) quantity(value, sigma, unit)   -> input quantity (measurement/constant)
-        2) quantity(expr, unit)           -> derived quantity (expr as string or sympy.Expr)
+        1) quantity(value, sigma, unit)         -> measurement only
+        2) quantity(expr, unit)                 -> expression only
+        3) quantity(value, sigma, unit, expr)   -> measurement + expression
+
+        Optional keyword:
+        - symbol: str | None
 
         Returns a dict with stable keys:
-        - valor: (value, sigma) or None
-        - expr:  None or sympy.Expr / str
+        - measure: (value, sigma) or None
+        - result: (value, sigma) or None
+        - expr:   None or sympy.Expr / str
         - unit:  str
         - dimension: shape tuple or None
+        - symbol: str | None
         """
 
-        if len(args) == 3:
+        if len(args) == 4:
+            value, sigma, unit, expr = args
+            if not isinstance(expr, (str, sp.Expr, type(None))):
+                raise TypeError("expr must be a string, sympy.Expr, or None")
+
+        elif len(args) == 3:
             value, sigma, unit = args
+            expr = None
+
+        elif len(args) == 2:
+            expr, unit = args
+            value = sigma = None
+
+        else:
+            raise TypeError(
+                "quantity(...) expects (value, sigma, unit), (expr, unit), "
+                "or (value, sigma, unit, expr)"
+            )
+
+        if value is not None or sigma is not None:
+            if value is None or sigma is None:
+                raise TypeError("Both value and sigma must be provided for measurement")
 
             # negative sigma check (works for scalars and arrays)
             if np.any(np.asarray(sigma) < 0):
@@ -91,28 +119,24 @@ class _Uncertainties:
             info = _Uncertainties.checker(value, sigma)
             sigma_out = info["sigma_vec"] if info["kind"] == "vector" else sigma
 
-            return {
-                "valor": (value, sigma_out),
-                "expr": None,
-                "unit": unit,
-                "dimension": info["shape"],
-            }
+            measure = (value, sigma_out)
+            dimension = info["shape"]
+        else:
+            measure = None
+            dimension = None
 
-        if len(args) == 2:
-            expr, unit = args
+        # keep expr as string or Expr (propagation will resolve symbols)
+        if expr is not None and not isinstance(expr, (str, sp.Expr)):
+            raise TypeError("expr must be a string or sympy.Expr")
 
-            # keep expr as string or Expr (propagation will resolve symbols)
-            if not isinstance(expr, (str, sp.Expr)):
-                raise TypeError("expr must be a string or sympy.Expr")
-
-            return {
-                "valor": None,
-                "expr": expr,
-                "unit": unit,
-                "dimension": None,
-            }
-
-        raise TypeError("quantity(...) expects (value, sigma, unit) or (expr, unit)")
+        return {
+            "measure": measure,
+            "result": None,
+            "expr": expr,
+            "unit": unit,
+            "dimension": dimension,
+            "symbol": symbol,
+        }
 
         
     
@@ -136,7 +160,7 @@ class _Uncertainties:
                 raise ValueError(f"Missing value for {v}")
             if v not in sigmas:
                 raise ValueError(f"Missing sigma for {v}")
-            if sigmas[v] < 0:
+            if np.any(np.asarray(sigmas[v]) < 0):
                 raise ValueError(f"Negative sigma for {v}")
 
         # Gradient
@@ -206,18 +230,24 @@ class _Uncertainties:
         # Main loop (i lives here)
         for i in range(N):
             vals_i = {}
+            sigmas_i = {}
             for s in symbols:
                 v = values[s]
                 if vectorial and np.ndim(v) > 0:
                     vals_i[s] = v[i]
                 else:
                     vals_i[s] = v
+                sg = sigmas[s]
+                if vectorial and np.ndim(sg) > 0:
+                    sigmas_i[s] = sg[i]
+                else:
+                    sigmas_i[s] = sg
 
             res = _Uncertainties.uncertainty_propagation(
                 expr,
                 symbols,
                 vals_i,
-                sigmas,
+                sigmas_i,
                 simplify=simplify
             )
 
@@ -231,7 +261,7 @@ class _Uncertainties:
             "sigma_latex": res["sigma_latex"],
         }
     @staticmethod
-    def propagate_quantity(name: str, magnitudes: dict, simplify=True):
+    def propagate_quantity(target, magnitudes, simplify=True):
         """
         High-level uncertainty propagation for a derived quantity.
 
@@ -240,35 +270,103 @@ class _Uncertainties:
             uncertainty
             analytic expression (latex)
             analytic uncertainty expression (latex)
+
         """
+        # 1) Normalize magnitudes and target
+        if isinstance(magnitudes, dict):
+            registry = dict(magnitudes)
+        else:
+            registry = {}
+            for q in magnitudes:
+                if not isinstance(q, dict):
+                    raise TypeError("magnitudes must be a dict or an iterable of quantity dicts")
+                symbol = q.get("symbol", None)
+                if symbol is None:
+                    raise ValueError("All magnitudes must define a non-empty 'symbol'")
+                if symbol in registry:
+                    raise ValueError(f"Duplicate magnitude symbol: {symbol}")
+                registry[symbol] = q
 
-        # 1) Symbol registry
-        symbols = {k: sp.Symbol(k) for k in magnitudes}
+        if isinstance(target, dict):
+            name = target.get("symbol", None)
+            if name is None:
+                raise ValueError("Target magnitude must define a non-empty 'symbol'")
+        else:
+            name = target
 
-        # 2) Expression
-        q = magnitudes[name]
-        if q["expr"] is None:
-            raise ValueError(f"{name} is not a derived quantity")
+        if name not in registry:
+            raise ValueError(f"Missing quantity for {name}")
 
-        expr = sp.sympify(q["expr"], locals=symbols)
+        # 2) Symbol registry
+        symbols = {k: sp.Symbol(k) for k in registry}
 
-        # 3) Extract values and sigmas
-        values = {}
-        sigmas = {}
-        for k, v in magnitudes.items():
-            if v["valor"] is None:
-                continue
-            val, sig = v["valor"]
-            sym = symbols[k]
-            values[sym] = val
-            sigmas[sym] = sig
+        cache = {}
+        resolving = set()
 
-        # 4) Propagate
-        res = _Uncertainties.propagate(expr, values, sigmas, simplify=simplify)
+        def resolve_quantity(key: str) -> dict:
+            if key in cache:
+                return cache[key]
 
-        # 5) Return ONLY what you care about
+            if key not in registry:
+                raise ValueError(f"Missing quantity for {key}")
+
+            q = registry[key]
+            expr = q.get("expr", None)
+            measure = q.get("measure", None)
+
+            # Base quantities are identified by having no expression.
+            if expr is None:
+                if measure is None:
+                    raise ValueError(f"{key} has no measure or expression")
+                val, sig = measure
+                info = _Uncertainties.checker(val, sig)
+                sig_out = info["sigma_vec"] if info["kind"] == "vector" else sig
+                res = {
+                    "value": val,
+                    "sigma": sig_out,
+                    "expr_latex": None,
+                    "sigma_latex": None,
+                }
+                cache[key] = res
+                return res
+
+            if key in resolving:
+                raise ValueError(f"Circular dependency detected at {key}")
+
+            resolving.add(key)
+            expr = sp.sympify(expr, locals=symbols)
+            expr_symbols = list(expr.free_symbols)
+
+            values = {}
+            sigmas = {}
+            for sym in expr_symbols:
+                dep = sym.name
+                dep_res = resolve_quantity(dep)
+                values[sym] = dep_res["value"]
+                sigmas[sym] = dep_res["sigma"]
+
+            res = _Uncertainties.propagate(expr, values, sigmas, simplify=simplify)
+            resolving.remove(key)
+
+            out = {
+                "value": res["valor"],
+                "sigma": res["sigma"],
+                "expr_latex": res["expr_latex"],
+                "sigma_latex": res["sigma_latex"],
+            }
+            cache[key] = out
+
+            # Cache computed numeric result without altering the definition.
+            registry[key]["result"] = (out["value"], out["sigma"])
+
+            return out
+
+        # 2) Resolve target
+        res = resolve_quantity(name)
+
+        # 3) Return ONLY what you care about
         return {
-            "value": res["valor"],
+            "value": res["value"],
             "uncertainty": res["sigma"],
             "expr": res["expr_latex"],
             "sigma_expr": res["sigma_latex"],
@@ -280,3 +378,128 @@ class _Uncertainties:
 
 
 incertidumbres = _Uncertainties()
+
+
+@functools.wraps(_Uncertainties.quantity)
+def quantity(*args, symbol=None):
+    """
+    Unified quantity constructor (positional-only).
+
+    Accepted signatures:
+    1) quantity(value, sigma, unit)         -> measurement only
+    2) quantity(expr, unit)                 -> expression only
+    3) quantity(value, sigma, unit, expr)   -> measurement + expression
+
+    Optional keyword:
+    - symbol: str | None
+
+    Returns a dict with stable keys:
+    - measure: (value, sigma) or None
+    - result: (value, sigma) or None
+    - expr:   None or sympy.Expr / str
+    - unit:   str
+    - dimension: shape tuple or None
+    - symbol: str | None
+    """
+    return _Uncertainties.quantity(*args, symbol=symbol)
+
+
+@functools.wraps(_Uncertainties.propagate)
+def propagate(expr, values: dict, sigmas: dict, simplify=True):
+    return _Uncertainties.propagate(expr, values, sigmas, simplify=simplify)
+
+
+@functools.wraps(_Uncertainties.propagate_quantity)
+def propagate_quantity(target, magnitudes, simplify=True):
+    return _Uncertainties.propagate_quantity(target, magnitudes, simplify=simplify)
+
+
+def value_quantity(q: dict, prefer: str = "measure"):
+    """
+    Return numeric (value, sigma) from a quantity dict without mutation.
+
+    prefer="measure" returns measure if available; otherwise result.
+    Any other prefer value returns result if available; otherwise measure.
+    """
+    if prefer == "measure":
+        if q.get("measure", None) is not None:
+            return q["measure"]
+        if q.get("result", None) is not None:
+            return q["result"]
+    else:
+        if q.get("result", None) is not None:
+            return q["result"]
+        if q.get("measure", None) is not None:
+            return q["measure"]
+
+    raise ValueError("No numeric value available")
+
+
+def register(*magnitudes):
+    """
+    Build a magnitudes registry using caller-local variable names as symbols.
+
+    Each provided object must be referenced by exactly one name in the caller's
+    local namespace. Raises ValueError on missing bindings or aliasing.
+    """
+    frame = inspect.currentframe()
+    if frame is None or frame.f_back is None:
+        raise RuntimeError("register() could not access caller frame")
+
+    try:
+        caller_locals = frame.f_back.f_locals
+        registry = {}
+        seen_ids = set()
+
+        for q in magnitudes:
+            if not isinstance(q, dict):
+                raise TypeError("register() expects magnitude dicts from quantity()")
+
+            names = [name for name, val in caller_locals.items() if val is q]
+            if len(names) == 0:
+                raise ValueError("register(): magnitude not found in caller namespace")
+            if len(names) > 1:
+                raise ValueError(
+                    "register(): magnitude has multiple names in caller namespace: "
+                    + ", ".join(sorted(names))
+                )
+
+            symbol = names[0]
+            if symbol in registry:
+                raise ValueError(f"register(): duplicate symbol '{symbol}'")
+
+            obj_id = id(q)
+            if obj_id in seen_ids:
+                raise ValueError("register(): duplicate magnitude object provided")
+            seen_ids.add(obj_id)
+
+            existing_symbol = q.get("symbol", None)
+            if existing_symbol is not None and existing_symbol != symbol:
+                raise ValueError(
+                    f"register(): magnitude symbol mismatch for '{symbol}'"
+                )
+            q["symbol"] = symbol
+            registry[symbol] = q
+
+        return registry
+    finally:
+        del frame
+
+
+@functools.wraps(_Uncertainties.uncertainty_propagation)
+def uncertainty_propagation(
+    f: sp.Expr,
+    vars_: list[sp.Symbol],
+    values: dict[sp.Symbol, object],
+    sigmas: dict[sp.Symbol, float],
+    cov: sp.Matrix | None = None,
+    simplify: bool = True,
+) -> dict:
+    return _Uncertainties.uncertainty_propagation(
+        f,
+        vars_,
+        values,
+        sigmas,
+        cov=cov,
+        simplify=simplify,
+    )

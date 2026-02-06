@@ -17,119 +17,16 @@ from typing import Optional
 
 import numpy as np
 import sympy as sp
+
+from .uncertainties import value_quantity
 import uncertainties.unumpy as unp
-
-
-
-# ============================================================
-#  QUICK START GUIDE (latex_tools.py)
-# ============================================================
-#
-# Recommended import (object-style facade):
-#   from mi_toolbox.latex_tools import latex_tools
-#
-# 1) redondeo_incertidumbre(valor, sigma, cifras=2)
-# ------------------------------------------------------------
-# What it does:
-#   Rounds value and uncertainty using metrological rules:
-#   - sigma with 1 or 2 significant digits (per 'cifras')
-#   - value rounded to the same number of decimals as sigma
-# Returns:
-#   (valor_redondeado, sigma_redondeada, decimales)
-# Example:
-#   v_r, s_r, dec = latex_tools.redondeo_incertidumbre(3.14159, 0.0123, cifras=2)
-#
-#
-# 2) valor_pm(valor, sigma=None, *, unidad=None, cifras=2, siunitx=False,
-#             caption=None, label=None, centrar=None, tamano=None, lineas=None,
-#             envolver=None, posicion=None, orientacion="vertical")
-# ------------------------------------------------------------
-# What it does:
-#   Versatile facade to present values with uncertainties in LaTeX.
-#
-#   SCALAR input or uncertainties.uarray:
-#     - Returns: \[ (v ± s) \]  (display math)
-#   VECTOR/MATRIX input:
-#     - Returns: LaTeX table with style from TABLA_CONFIG
-#
-#   Main parameters:
-#     - valor: float, array, or uncertainties.uarray
-#     - sigma: uncertainty (None if value is already uarray)
-#     - unidad: optional str with LaTeX unit
-#     - cifras: 1 or 2 sig. figs. in uncertainty (keyword-only)
-#     - siunitx: bool, if True uses \SI{...}{...} (requires unit)
-#     - orientacion: "vertical" or "horizontal" (only for 1D vectors)
-#
-#   Table parameters (taken from TABLA_CONFIG if not provided):
-#     - caption, label, centrar, tamano, lineas, envolver, posicion
-#
-# Returns:
-#   str (LaTeX)
-#
-# Examples:
-#   # Scalar
-#   latex_tools.valor_pm(3.14159, 0.0123, cifras=2)
-#   → \[(3.14 ± 0.01)\]
-#
-#   latex_tools.valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
-#   → \[(9.81 ± 0.05)\\,\\mathrm{m/s^2}\]
-#
-#   # Vector (column by default)
-#   x = np.array([1.0, 2.0, 3.0])
-#   sx = 0.1
-#   latex_tools.valor_pm(x, sx, cifras=1)
-#   → tabla vertical (1 columna, 3 filas)
-#
-#   # Horizontal vector
-#   latex_tools.valor_pm(x, sx, cifras=1, orientacion="horizontal")
-#   → tabla horizontal (1 fila, 3 columnas)
-#
-#   # Matrix
-#   V = np.array([[1.0, 2.0], [3.0, 4.0]])
-#   sV = 0.1
-#   latex_tools.valor_pm(V, sV, cifras=1, caption="Datos", label="tab:datos")
-#   → tabla LaTeX 2×2 con caption/label
-#
-# Important note:
-#   - 'cifras' is KEYWORD-ONLY: valor_pm(x, sx, cifras=1)
-#   - For tables, TABLA_CONFIG options are respected
-#   - Without a unit, siunitx is not used (parameter is ignored)
-#
-#
-# 3) exportar(filename, contenido, modo="w")
-# ------------------------------------------------------------
-# What it does:
-#   Writes the LaTeX string to a file (overwrites by default).
-# Returns:
-#   None
-# Example:
-#   latex_tools.exportar("tablas/medidas.tex", tex)
-#
-#
-# Table configuration (TABLA_CONFIG):
-#   TABLA_CONFIG["lineas"] = "hline"     # or "booktabs" or None
-#   TABLA_CONFIG["centrar"] = True       # centers the table
-#   TABLA_CONFIG["tamano"] = "small"     # or None, "footnotesize", etc.
-#   TABLA_CONFIG["envolver"] = True      # enable \begin{table}...\end{table}
-#   TABLA_CONFIG["posicion"] = "htbp"    # float position
-
-
-# ============================================================================
-# GLOBAL TABLE CONFIGURATION
-# ============================================================================
-
 TABLA_CONFIG = {
     "centrar": True,
-    "tamano": None,          # None | "small" | "footnotesize" | ...
-    "lineas": "hline",       # "booktabs" | "hline" | None
-    "envolver": True,        # Use floating table environment
-    "posicion": "htbp",      # Float position
+    "tamano": None,
+    "lineas": "hline",
+    "envolver": True,
+    "posicion": "htbp",
 }
-
-
-# ============================================================================
-# ROUNDING AND SIGNIFICANT DIGITS UTILITIES
-# ============================================================================
 
 def _orden_magnitud(x: float) -> int:
     """
@@ -140,7 +37,6 @@ def _orden_magnitud(x: float) -> int:
     if x == 0:
         return 0
     return int(math.floor(math.log10(abs(x))))
-
 
 def redondeo_incertidumbre(
     valor: float,
@@ -171,18 +67,12 @@ def redondeo_incertidumbre(
     if sigma <= 0:
         raise ValueError("Uncertainty must be positive")
 
-    orden = _orden_magnitud(sigma)
     decimales = -(orden - (cifras - 1))
 
     sigma_r = round(sigma, decimales)
     valor_r = round(valor, decimales)
 
     return valor_r, sigma_r, decimales
-
-
-# ============================================================================
-# FORMATO LATEX CON INCERTIDUMBRES
-# ============================================================================
 
 def _to_latex_sci(valor: float, cifras: int = 2) -> str:
     """
@@ -192,14 +82,11 @@ def _to_latex_sci(valor: float, cifras: int = 2) -> str:
     """
     fmt = f"{{:.{cifras}e}}"
     s = fmt.format(valor)
-    # Parse mantissa and exponent
-    # Typical format: "5.30e-04"
     mantisa_str, exp_str = s.split('e')
     mantisa = float(mantisa_str)
     exponente = int(exp_str)
     
     return f"{mantisa:.{cifras}f} \\times 10^{{{exponente}}}"
-
 
 def _valor_pm_escalar(
     valor: float,
@@ -243,7 +130,6 @@ def _valor_pm_escalar(
 
     return f"({v_str} \\pm {s_str})"
 
-
 def valor_pm(
     valor,
     sigma=None,
@@ -251,27 +137,23 @@ def valor_pm(
     unidad: Optional[str] = None,
     cifras: int = 2,
     siunitx: bool = False,
-
-    # --- table configuration ---
     caption: Optional[str] = None,
     label: Optional[str] = None,
     centrar: Optional[bool] = None,
     tamano: Optional[str] = None,
-    lineas: Optional[str] = None,     # "booktabs" | "hline" | None
+    lineas: Optional[str] = None,
     envolver: Optional[bool] = None,
     posicion: Optional[str] = None,
-
-    orientacion: str = "vertical",    # only for 1D vectors
-
-    # --- headers ---
-    headers: Optional[list[str]] = None,       # column headers
-    row_headers: Optional[list[str]] = None,   # row headers
+    orientacion: str = "vertical",
+    headers: Optional[list[str]] = None,
+    row_headers: Optional[list[str]] = None,
 ):
     """
     Main function to format values with uncertainties in LaTeX.
     
-    Accepts scalars, vectors, and matrices. For scalars returns a math
-    expression \\[...\\], for vectors/matrices generates a LaTeX table.
+    Accepts scalars, vectors, and matrices. For scalars returns a plain
+    LaTeX fragment without display math delimiters; for vectors/matrices
+    generates a LaTeX table.
     
     Parameters
     ----------
@@ -315,19 +197,17 @@ def valor_pm(
     --------
     >>> # Scalar
     >>> valor_pm(3.14159, 0.0123, cifras=2)
-    '\\[(3.14 ± 0.01)\\]'
+    '(3.14 ± 0.01)'
     
     >>> # With unit
     >>> valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
-    '\\[(9.81 ± 0.05)\\,\\mathrm{m/s^2}\\]'
+    '(9.81 ± 0.05)\\,\\mathrm{m/s^2}'
     
     >>> # Vector (table)
     >>> x = np.array([1.0, 2.0, 3.0])
     >>> valor_pm(x, 0.1, cifras=1, caption="Measures")
     # Generates a 3×1 LaTeX table
     """
-
-    # Defaults from global configuration
     if centrar is None:
         centrar = TABLA_CONFIG["centrar"]
     if tamano is None:
@@ -339,7 +219,6 @@ def valor_pm(
     if posicion is None:
         posicion = TABLA_CONFIG["posicion"]
 
-    # Input normalization
     if sigma is None:
         obj = valor
     else:
@@ -348,20 +227,14 @@ def valor_pm(
     v = unp.nominal_values(obj)
     s = unp.std_devs(obj)
 
-    # -------------------------------
-    # SCALAR CASE
-    # -------------------------------
     if not isinstance(v, np.ndarray) or v.shape == ():
         v0 = float(np.asarray(v).item())
         s0 = float(np.asarray(s).item())
         contenido = _valor_pm_escalar(
             v0, s0, unidad=unidad, cifras=cifras, siunitx=siunitx
         )
-        return rf"\[{contenido}\]"
+        return contenido
 
-    # -------------------------------
-    # VECTOR / MATRIX CASE
-    # -------------------------------
     v = np.asarray(v)
     s = np.asarray(s)
 
@@ -378,13 +251,11 @@ def valor_pm(
 
     filas, cols = v.shape
 
-    # Header validation
     if headers is not None and len(headers) != cols:
         raise ValueError("headers must have the same length as the number of columns.")
     if row_headers is not None and len(row_headers) != filas:
         raise ValueError("row_headers must have the same length as the number of rows.")
 
-    # Column format
     col_fmt = ""
     if row_headers:
         col_fmt += "l"
@@ -392,23 +263,20 @@ def valor_pm(
 
     tabular = [rf"\begin{{tabular}}{{{col_fmt}}}"]
 
-    # Top line
     if lineas == "booktabs":
         tabular.append(r"\toprule")
     elif lineas == "hline":
         tabular.append(r"\hline")
 
-    # Column headers
     if headers:
         header_line = []
         if row_headers:
-            header_line.append("")  # empty corner
+            header_line.append("")
         header_line.extend(headers)
         tabular.append(" & ".join(header_line) + r" \\")
         if lineas in ("booktabs", "hline"):
             tabular.append(r"\midrule" if lineas == "booktabs" else r"\hline")
 
-    # Body
     for i in range(filas):
         fila = []
         if row_headers:
@@ -425,7 +293,6 @@ def valor_pm(
             )
         tabular.append(" & ".join(fila) + r" \\")
 
-    # Bottom line
     if lineas == "booktabs":
         tabular.append(r"\bottomrule")
     elif lineas == "hline":
@@ -460,6 +327,7 @@ def valor_pm(
         out += "\n" + unidad_global
     return out
 
+
 def tabla_pm(
     columnas,
     valores,
@@ -473,17 +341,25 @@ def tabla_pm(
     )
     return valor_pm(valores, sigmas, headers=columnas, **kw)
 
-def magnitude(mag: dict, *, cifras: int = 2, siunitx: bool = False, inline: bool = False, **kw) -> str:
+
+def latex_quantity(
+    mag: dict,
+    *,
+    cifras: int = 2,
+    siunitx: bool = False,
+    **kw
+) -> str:
     """
     Format a magnitude/constant from the magnitudes registry.
 
-    Expects mag to be a dict like:
-      {
-        "valor": (value, sigma),
-        "unit": "m",
-        "dimension": None | tuple,
-        "expr": None | str | sp.Expr
-      }
+        Expects mag to be a dict like:
+            {
+                "measure": (value, sigma) | None,
+                "result": (value, sigma) | None,
+                "unit": "m",
+                "dimension": None | tuple,
+                "expr": None | str | sp.Expr
+            }
 
     Notes:
     - Uses mag["dimension"] (shape) to decide scalar vs vector/matrix.
@@ -491,55 +367,29 @@ def magnitude(mag: dict, *, cifras: int = 2, siunitx: bool = False, inline: bool
     - Delegates actual formatting to `valor_pm`.
     """
 
-    if "valor" not in mag or mag["valor"] is None:
-        raise ValueError("magnitude(): mag has no numeric 'valor' to format")
+    if mag.get("measure", None) is None and mag.get("result", None) is None:
+        expr = mag.get("expr", None)
+        if expr is not None:
+            if isinstance(expr, sp.Expr):
+                return sp.latex(expr)
+            try:
+                return sp.latex(sp.sympify(expr))
+            except Exception:
+                # Assume expr is already LaTeX if SymPy cannot parse it
+                return str(expr)
+        raise ValueError("latex_quantity(): mag has no numeric value to format")
 
-    value, sigma = mag["valor"]
+    value, sigma = value_quantity(mag)
     unit = mag.get("unit", None)
-    shape = mag.get("dimension", None)
 
-    # Scalar: dimension is None
-    if shape is None:
-        return valor_pm(
-            value,
-            sigma,
-            unit=unit,
-            cifras=cifras,
-            siunitx=siunitx,
-            inline=inline,
-            **kw
-        )
-
-    # Vector / Matrix: dimension is a tuple (e.g., (N,), (N,M))
-    # We trust that sigma matches value shape (or was expanded by checker).
     return valor_pm(
         value,
         sigma,
-        unit=unit,
+        unidad=unit,
         cifras=cifras,
         siunitx=siunitx,
-        inline=inline,
         **kw
     )
-
-
-def magnitude_eq(name: str, mag: dict, *, cifras: int = 2, siunitx: bool = False, inline: bool = False, **kw) -> str:
-    """
-    Convenience: format 'name = <magnitude>' where magnitude comes from registry.
-
-    Example:
-      magnitude_eq("L", magnitudes["L"]) -> "L = (1.25 \\pm 0.02)\\,\\mathrm{m}"
-    """
-
-    body = magnitude(mag, cifras=cifras, siunitx=siunitx, inline=True, **kw)
-    # body may already be wrapped in \( \) or \[ \] depending on inline flags inside valor_pm.
-    # To keep predictable output here, we force inline=True in magnitude() call above.
-    return f"{name} = {body}"
-
-# ============================================================================
-# FILE EXPORT
-# ============================================================================
-
 def exportar(
     filename: str,
     contenido: str,
@@ -560,37 +410,6 @@ def exportar(
     with open(filename, modo, encoding="utf-8") as f:
         f.write(contenido)
 
-# ============================================================================
-# Sympy‑LaTeX bridge
-# ============================================================================
-
-def expr_to_latex(expr: sp.Expr, *, simplify: bool = True) -> str:
-    """
-    Convert a symbolic SymPy expression to LaTeX.
-
-    Parameters
-    ----------
-    expr : sympy.Expr
-        Symbolic expression.
-    simplify : bool, default True
-        If True, simplify before converting.
-
-    Returns
-    -------
-    str
-        LaTeX string.
-    """
-    if simplify:
-        expr = sp.simplify(expr)
-
-    return sp.latex(expr)
-
-
-
-# ============================================================================
-# FACADE (SINGLETON INSTANCE)
-# ============================================================================
-
 class _LatexTools:
     """
     LaTeX tools facade for experimental analysis.
@@ -602,8 +421,8 @@ class _LatexTools:
     redondeo_incertidumbre = staticmethod(redondeo_incertidumbre)
     valor_pm = staticmethod(valor_pm)
     exportar = staticmethod(exportar)
-    expr_to_latex = staticmethod(expr_to_latex)
     tabla_pm = staticmethod(tabla_pm)
+    latex_quantity = staticmethod(latex_quantity)
 
 
 latex_tools = _LatexTools()
