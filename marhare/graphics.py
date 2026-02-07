@@ -17,7 +17,6 @@ LAYERED DESIGN:
 
 ANIMATION PREPARATION:
     - Scene encapsulates the full graphic structure (panels + metadata)
-    - Future time engine: animate(scene, updater, frames) [NOT implemented]
     - Scene is the natural unit for animations: defines WHAT is drawn
     - updater defines HOW the scene evolves over time
     - Clean separation: graphics.py (static) + animations.py (temporal)
@@ -34,6 +33,11 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
 from cycler import cycler
 from dataclasses import dataclass, field
+
+try:
+    from .uncertainties import value_quantity
+except ImportError:
+    from uncertainties import value_quantity
 
 
 # ============================================================
@@ -459,6 +463,16 @@ def _layout_shape(n: int) -> Tuple[int, int]:
         return side, side
 
 
+def _parse_layout(layout: str) -> Tuple[int, int]:
+    parts = layout.split("x")
+    if len(parts) != 2:
+        raise ValueError(f"layout must be 'NxM' (e.g., '2x3'), received: {layout}")
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        raise ValueError(f"layout must be 'NxM' with integer N,M, received: {layout}")
+
+
 def _create_axis(fig, idx: int, nrows: int, ncols: int, dims: str) -> plt.Axes:
     """
     Create a 2D or 3D axis depending on dims.
@@ -575,6 +589,66 @@ def _is_band_like(obj: Any) -> bool:
 def _is_series_like(obj: Any) -> bool:
     return hasattr(obj, "x") and hasattr(obj, "y")
 
+
+def _is_semantic_like(obj: Any) -> bool:
+    return (
+        _is_scene_like(obj)
+        or _is_panel_like(obj)
+        or isinstance(obj, (Series, SeriesWithError, Histogram, Fit, Band, Series3D))
+        or _is_series_with_error_like(obj)
+        or _is_histogram_like(obj)
+        or _is_fit_like(obj)
+        or _is_band_like(obj)
+        or _is_series3d_like(obj)
+        or _is_series_like(obj)
+    )
+
+
+def _looks_like_data(obj: Any) -> bool:
+    return isinstance(obj, (list, tuple, np.ndarray))
+
+
+def _looks_like_data_or_quantity(obj: Any) -> bool:
+    return _looks_like_data(obj) or _is_quantity_like(obj)
+
+
+def _parse_histogram(hist) -> Histogram:
+    if isinstance(hist, Histogram) or _is_histogram_like(hist):
+        return hist
+    if isinstance(hist, (list, tuple)) and len(hist) == 2:
+        data, bins = hist
+        return Histogram(data, bins)
+    return Histogram(hist)
+
+
+def _parse_band(x, bands) -> Band:
+    if isinstance(bands, Band) or _is_band_like(bands):
+        return bands
+    if isinstance(bands, dict):
+        if "y_low" not in bands or "y_high" not in bands:
+            raise ValueError("bands dict must contain 'y_low' and 'y_high'")
+        return Band(x, bands["y_low"], bands["y_high"])
+    if isinstance(bands, (list, tuple)) and len(bands) == 2:
+        y_low, y_high = bands
+        return Band(x, y_low, y_high)
+    raise ValueError("bands must be a Band or a (y_low, y_high) tuple")
+
+
+def _is_quantity_like(obj: Any) -> bool:
+    return isinstance(obj, dict) and "unit" in obj and ("measure" in obj or "result" in obj)
+
+
+def _quantity_axis_label(q: dict) -> Optional[str]:
+    symbol = q.get("symbol")
+    unit = q.get("unit")
+    if symbol and unit:
+        return f"{symbol} [{unit}]"
+    if symbol:
+        return str(symbol)
+    if unit:
+        return str(unit)
+    return None
+
 def plot(
     *objetos,
     layout: Optional[str] = None,
@@ -584,13 +658,19 @@ def plot(
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None,
     title: Optional[str] = None,
+    y_fit: Optional[np.ndarray] = None,
+    yerr: Optional[np.ndarray] = None,
+    bands: Optional[Any] = None,
+    hist: Optional[Any] = None,
+    ax: Optional[plt.Axes] = None,
     **kwargs
-) -> Tuple[plt.Figure, Union[plt.Axes, np.ndarray]]:
+) -> Union[Scene, Tuple[plt.Figure, Union[plt.Axes, np.ndarray]]]:
     """
-    Core engine: automatically plots one or more series.
+    Core engine and fast Scene constructor.
     
     INPUT:
         *objetos: Series, SeriesWithError, Histogram, Fit, Band, Panel, Scene
+              or quantity dicts for x/y (constructor mode)
         layout: str | None
             None -> auto (1→1x1, 2→1x2, etc.)
             "2x3" -> force specific layout
@@ -602,19 +682,27 @@ def plot(
             Ignored if Scene is passed (uses scene.figsize)
         xlabel, ylabel, title: str | None -> global labels (if applicable)
             Ignored if Scene is passed (uses scene.xlabel, etc.)
+        y_fit: array_like | Fit | quantity dict | None -> fitted curve (constructor mode)
+        yerr: array_like | None -> symmetric y errors (constructor mode)
+        bands: Band | (y_low, y_high) | dict | None -> band (constructor mode)
+        hist: array_like | (data, bins) | Histogram | quantity dict | None -> histogram (constructor mode)
+        ax: matplotlib.axes.Axes | None -> draw into a provided axis (single panel)
         **kwargs: style options (dpi, grid_alpha, lw, etc.)
             ALWAYS applied (even with Scene)
     
     OUTPUT:
+        Scene when used as constructor (plot(x, y, ...) or plot(hist=...))
         (fig, ax) si n_objetos == 1
         (fig, axs) si n_objetos > 1
     
     EXAMPLES:
-        # Direct mode
-        plot(Series(x, y))
-        plot(SeriesWithError(x, y, sy), Fit(x, yfit))
-        plot(Histogram(data1), Histogram(data2), layout="1x2")
-        
+        # Fast constructor
+        s1 = plot(x, y)
+        s2 = plot(x, y, y_fit=yfit)
+        s3 = plot(x, y, yerr=sy, bands=(y_low, y_high))
+        s4 = plot(hist=data)
+        s5 = plot(xq, yq)  # quantity dicts
+
         # With Scene (recommended for reuse)
         scene = Scene(Series(x, y), Histogram(data), layout="1x2")
         plot(scene)  # Scene structure
@@ -628,15 +716,74 @@ def plot(
     
     PURPOSE:
         The user only declares what they have; this engine:
-        - Detects number and types of objects
-        - Creates figure and axes automatically
-        - Calls internal functions by type
+        - Builds a Scene when called with raw data
+        - Plots existing Scene/Panel/semantic objects
         - Applies consistent styling
-        - Minimizes user decisions
     """
+    # Constructor mode: build a Scene from raw data
+    return_scene = False
+    constructor_mode = False
+    if hist is not None or y_fit is not None or yerr is not None or bands is not None:
+        constructor_mode = True
+    elif len(objetos) == 2 and not _is_semantic_like(objetos[0]) and not _is_semantic_like(objetos[1]):
+        if _looks_like_data_or_quantity(objetos[0]) and _looks_like_data_or_quantity(objetos[1]):
+            constructor_mode = True
+
+    if constructor_mode:
+        show = False
+        if hist is not None:
+            if len(objetos) > 0 or y_fit is not None or yerr is not None or bands is not None:
+                raise ValueError("Histogram must be plotted as its own Scene")
+            if _is_quantity_like(hist):
+                xlabel = xlabel or _quantity_axis_label(hist)
+                hist = value_quantity(hist)[0]
+            scene = Scene(_parse_histogram(hist))
+        else:
+            if len(objetos) != 2:
+                raise ValueError("plot(x, y, ...) requires both x and y")
+            x, y = objetos
+            series_label = None
+            if _is_quantity_like(x):
+                x_value, _ = value_quantity(x)
+                xlabel = xlabel or _quantity_axis_label(x)
+                x = x_value
+            if _is_quantity_like(y):
+                y_value, y_sigma = value_quantity(y)
+                ylabel = ylabel or _quantity_axis_label(y)
+                series_label = y.get("symbol") or None
+                y = y_value
+                if yerr is None:
+                    yerr = y_sigma
+            if yerr is not None:
+                series_obj = SeriesWithError(x, y, sy=yerr, label=series_label)
+            else:
+                series_obj = Series(x, y, label=series_label)
+            objetos_scene = [series_obj]
+            if y_fit is not None:
+                if isinstance(y_fit, Fit) or _is_fit_like(y_fit):
+                    objetos_scene.append(y_fit)
+                elif _is_quantity_like(y_fit):
+                    y_fit_value, _ = value_quantity(y_fit)
+                    objetos_scene.append(Fit(x, y_fit_value))
+                else:
+                    objetos_scene.append(Fit(x, y_fit))
+            if bands is not None:
+                objetos_scene.append(_parse_band(x, bands))
+            scene = Scene(*objetos_scene)
+        if xlabel is not None:
+            scene.xlabel = xlabel
+        if ylabel is not None:
+            scene.ylabel = ylabel
+        if title is not None:
+            scene.title = title
+        objetos = (scene,)
+        return_scene = True
+
     # Special case: if a single Scene is passed, use its properties
+    scene_ref = None
     if len(objetos) == 1 and _is_scene_like(objetos[0]):
         scene = objetos[0]
+        scene_ref = scene
         # Extract Scene properties (do not overwrite if explicitly provided)
         if layout is None:
             layout = scene.layout
@@ -674,25 +821,48 @@ def plot(
     if len(paneles) == 0:
         raise ValueError("plot() needs at least one object (Series, Histogram, etc.)")
 
+    # Plot with a provided axis (single panel only)
+    if ax is not None:
+        if len(paneles) != 1:
+            raise ValueError("ax can only be used with a single panel/Scene")
+        if dims == "3D" and not _is_axis_3d(ax):
+            raise TypeError("dims='3D' requires a 3D axis")
+        if dims == "2D" and _is_axis_3d(ax):
+            raise TypeError("dims='2D' cannot be drawn on a 3D axis")
+        if scene_ref is not None:
+            scene_ref._artist_map_by_id = {}
+        for obj in paneles[0].objetos:
+            artist = _plot_object(obj, ax, cfg)
+            if scene_ref is not None:
+                scene_ref._artist_map_by_id[id(obj)] = artist
+        _post_process_axis(ax, cfg)
+        _apply_legend(ax, cfg)
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+        if title is not None:
+            ax.set_title(title)
+        if show:
+            plt.show()
+        if return_scene:
+            if not show:
+                plt.close(ax.figure)
+            return scene
+        return (ax.figure, ax)
+
     # Compute layout
     n_grupos = len(paneles)
     if layout is None:
         nrows, ncols = _layout_shape(n_grupos)
     else:
-        # parse "2x3" -> (2, 3)
-        parts = layout.split("x")
-        if len(parts) != 2:
-            raise ValueError(f"layout must be 'NxM' (e.g., '2x3'), received: {layout}")
-        try:
-            nrows, ncols = int(parts[0]), int(parts[1])
-        except ValueError:
-            raise ValueError(f"layout must be 'NxM' with integer N,M, received: {layout}")
+        nrows, ncols = _parse_layout(layout)
 
     # Architectural decision: multipanel uses manual control, single panel uses constrained_layout
     # constrained_layout and subplots_adjust are incompatible (Matplotlib ignores adjust if constrained=True)
     is_multipanel = n_grupos > 1
     use_constrained = cfg.get("tight", True) and not is_multipanel
-    
+
     # Create figure
     fig = plt.figure(figsize=figsize, constrained_layout=use_constrained)
 
@@ -702,7 +872,7 @@ def plot(
         ax = _create_axis(fig, i + 1, nrows, ncols, dims)
         axs.append(ax)
     axs = np.array(axs)
-    
+
     # For multipanel, apply visual composition with manual control
     if is_multipanel:
         fig.subplots_adjust(
@@ -714,12 +884,18 @@ def plot(
             hspace=0.40     # 40% relative vertical spacing
         )
 
+    # If a Scene was provided, keep a stable mapping from semantic objects to artists
+    if scene_ref is not None:
+        scene_ref._artist_map_by_id = {}
+
     # Plot each panel
     for idx, panel in enumerate(paneles):
         if idx < len(axs):
             ax = axs[idx]
             for obj in panel.objetos:
-                _plot_object(obj, ax, cfg)
+                artist = _plot_object(obj, ax, cfg)
+                if scene_ref is not None:
+                    scene_ref._artist_map_by_id[id(obj)] = artist
             _post_process_axis(ax, cfg)
             _apply_legend(ax, cfg)
 
@@ -741,6 +917,10 @@ def plot(
         plt.show()
 
     # Return consistent format
+    if return_scene:
+        if not show:
+            plt.close(fig)
+        return scene
     if n_grupos == 1:
         return fig, axs[0]
     else:
@@ -769,7 +949,7 @@ def _plot_object(obj: Any, ax: plt.Axes, cfg: Dict[str, Any]):
     if isinstance(obj, Series3D) or _is_series3d_like(obj):
         if not is_3d_axis:
             raise TypeError("Series3D requires dims='3D'. Use plot(..., dims='3D')")
-        _plot_series3d(obj, ax, cfg)
+        return _plot_series3d(obj, ax, cfg)
     else:
         # 2D objects (Series, SeriesWithError, etc.)
         if is_3d_axis:
@@ -777,15 +957,15 @@ def _plot_object(obj: Any, ax: plt.Axes, cfg: Dict[str, Any]):
             raise TypeError(f"2D objects ({tipos_2d}) cannot be drawn on 3D axes. Use dims='2D' or Series3D")
 
         if isinstance(obj, SeriesWithError) or _is_series_with_error_like(obj):
-            _plot_series_with_error(obj, ax, cfg)
+            return _plot_series_with_error(obj, ax, cfg)
         elif isinstance(obj, Histogram) or _is_histogram_like(obj):
-            _plot_histogram(obj, ax, cfg)
+            return _plot_histogram(obj, ax, cfg)
         elif isinstance(obj, Fit) or _is_fit_like(obj):
-            _plot_fit(obj, ax, cfg)
+            return _plot_fit(obj, ax, cfg)
         elif isinstance(obj, Band) or _is_band_like(obj):
-            _plot_band(obj, ax, cfg)
+            return _plot_band(obj, ax, cfg)
         elif isinstance(obj, Series) or _is_series_like(obj):
-            _plot_series(obj, ax, cfg)
+            return _plot_series(obj, ax, cfg)
         else:
             raise TypeError(f"Unsupported object type: {type(obj).__name__}")
 
@@ -799,7 +979,7 @@ def _plot_series(obj: Series, ax: plt.Axes, cfg: Dict[str, Any]):
     
     if cfg.get("hollow_markers", True) and obj.marker is None:
         # Hollow circles only if marker is not specified
-        ax.scatter(
+        artist = ax.scatter(
             obj.x, obj.y,
             label=obj.label,
             marker=marker,
@@ -808,22 +988,24 @@ def _plot_series(obj: Series, ax: plt.Axes, cfg: Dict[str, Any]):
             linewidths=1.0,
             s=36
         )
+        return artist
     else:
         # Specific marker or filled
-        ax.scatter(
+        artist = ax.scatter(
             obj.x, obj.y,
             label=obj.label,
             marker=marker,
             color=color,
             s=36
         )
+        return artist
 
 
 def _plot_series_with_error(obj: SeriesWithError, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a series with error bars (errorbar).
     """
-    ax.errorbar(
+    artist = ax.errorbar(
         obj.x, obj.y,
         xerr=obj.sx, yerr=obj.sy,
         fmt="o",
@@ -834,13 +1016,14 @@ def _plot_series_with_error(obj: SeriesWithError, ax: plt.Axes, cfg: Dict[str, A
         markerfacecolor="none" if cfg.get("hollow_markers", True) else None,
         markeredgecolor=cfg["palette"]["data"] if cfg.get("hollow_markers", True) else None,
     )
+    return artist
 
 
 def _plot_histogram(obj: Histogram, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a clean histogram.
     """
-    ax.hist(
+    _, _, artist = ax.hist(
         obj.data,
         bins=obj.bins,
         label=obj.label,
@@ -848,25 +1031,27 @@ def _plot_histogram(obj: Histogram, ax: plt.Axes, cfg: Dict[str, Any]):
         edgecolor=cfg["palette"]["ink"],
         alpha=0.7,
     )
+    return artist
 
 
 def _plot_fit(obj: Fit, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a fitted curve (smooth line).
     """
-    ax.plot(
+    (artist,) = ax.plot(
         obj.x, obj.yfit,
         label=obj.label,
         color=cfg["palette"]["ink"],
         linewidth=cfg["lw"],
     )
+    return artist
 
 
 def _plot_band(obj: Band, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a band (filled between y_low and y_high).
     """
-    ax.fill_between(
+    artist = ax.fill_between(
         obj.x,
         obj.y_low, obj.y_high,
         label=obj.label,
@@ -874,6 +1059,7 @@ def _plot_band(obj: Band, ax: plt.Axes, cfg: Dict[str, Any]):
         alpha=0.2,
         linewidth=0,
     )
+    return artist
 
 
 def _plot_series3d(obj: Series3D, ax, cfg: Dict[str, Any]):
@@ -889,7 +1075,7 @@ def _plot_series3d(obj: Series3D, ax, cfg: Dict[str, Any]):
         - Uses ax.plot(x, y, z) from mpl_toolkits.mplot3d
         - Subdued color consistent with 2D palette
     """
-    ax.plot(
+    (artist,) = ax.plot(
         obj.x, obj.y, obj.z,
         label=obj.label,
         color=cfg["palette"]["ink"],
@@ -897,6 +1083,7 @@ def _plot_series3d(obj: Series3D, ax, cfg: Dict[str, Any]):
         marker='o',
         markersize=cfg["ms"]
     )
+    return artist
 
 
 # ============================================================
@@ -1145,6 +1332,88 @@ def errorbar(
 
 
 # ============================================================
+#  SCENE COMPOSITION (FIGURE OF SCENES)
+# ============================================================
+
+class Figure:
+    """
+    Lightweight container for composing multiple Scene objects.
+
+    RULES:
+        - One Scene corresponds to one axis
+        - Composition happens only at this level
+        - Each Scene must contain exactly one Panel
+
+    EXAMPLE:
+        s1 = plot(x, y)
+        s2 = plot(hist=data)
+        fig = Figure(s1, s2)
+        fig.show()
+    """
+
+    def __init__(self, *scenes: Scene):
+        if len(scenes) == 0:
+            raise ValueError("Figure requires at least one Scene")
+        for scene in scenes:
+            if not _is_scene_like(scene):
+                raise TypeError("Figure only accepts Scene objects")
+            if len(scene.paneles) != 1:
+                raise ValueError("Each Scene in Figure must contain exactly one Panel")
+        self.scenes = list(scenes)
+
+    def show(
+        self,
+        *,
+        layout: Optional[str] = None,
+        figsize: Optional[Tuple[float, float]] = None,
+        show: bool = True,
+        **kwargs
+    ) -> Tuple[plt.Figure, Union[plt.Axes, np.ndarray]]:
+        cfg = _apply_style(**kwargs)
+        if figsize is None:
+            figsize = cfg["figsize"]
+
+        n_scenes = len(self.scenes)
+        if layout is None:
+            nrows, ncols = _layout_shape(n_scenes)
+        else:
+            nrows, ncols = _parse_layout(layout)
+
+        is_multipanel = n_scenes > 1
+        use_constrained = cfg.get("tight", True) and not is_multipanel
+        fig = plt.figure(figsize=figsize, constrained_layout=use_constrained)
+
+        axs = []
+        for i in range(nrows * ncols):
+            if i < n_scenes:
+                dims = self.scenes[i].dims
+                ax = _create_axis(fig, i + 1, nrows, ncols, dims)
+                plot(self.scenes[i], show=False, ax=ax, **kwargs)
+            else:
+                ax = _create_axis(fig, i + 1, nrows, ncols, "2D")
+                ax.set_visible(False)
+            axs.append(ax)
+        axs = np.array(axs)
+
+        if is_multipanel:
+            fig.subplots_adjust(
+                left=0.10,
+                right=0.95,
+                top=0.92,
+                bottom=0.10,
+                wspace=0.35,
+                hspace=0.40
+            )
+
+        if show:
+            plt.show()
+
+        if n_scenes == 1:
+            return fig, axs[0]
+        return fig, axs[:n_scenes]
+
+
+# ============================================================
 #  FACADE (SAME STYLE AS YOUR OTHER MODULES)
 # ============================================================
 
@@ -1163,6 +1432,7 @@ class _Graphics:
     Series3D = Series3D
     Panel = Panel
     Scene = Scene
+    Figure = Figure
     
     # Utilities and configuration
     _apply_style = staticmethod(_apply_style)

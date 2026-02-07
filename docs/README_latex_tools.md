@@ -11,8 +11,8 @@ Scientific LaTeX generation: metrological rounding, values with uncertainty, tab
   - Scalar → `(v ± s)`.
   - Vector/matrix → configured LaTeX table.
 
-- `expr_to_latex(expr, simplify=True)`
-  - Converts SymPy expressions to LaTeX.
+- `latex_quantity(mag, cifras=2, siunitx=False, ...)`
+  - Formats a quantity dict using its numeric data.
 
 - `exportar(filename, contenido, modo="w")`
   - Writes LaTeX content to a file.
@@ -22,14 +22,14 @@ Scientific LaTeX generation: metrological rounding, values with uncertainty, tab
 
 ## Notes
 - Compatible with `siunitx` if `unidad` is provided and `siunitx=True`.
-- Integrates with `incertidumbres.py`.
+- Integrates with `uncertainties.value_quantity` for numeric selection.
 
 ## Examples
 ```python
-from latex_tools import latex_tools
+import marhare as mh
 
-tex = latex_tools.valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
-latex_tools.exportar("salidas/resultados.tex", tex)
+tex = mh.valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
+mh.exportar("salidas/resultados.tex", tex)
 ```
 
 ## Mini examples (per function)
@@ -109,35 +109,20 @@ You get this:
 \SI{42.0}{kg}
 ```
 
-### expr_to_latex(expr, simplify=True)
+### latex_quantity(mag, cifras=2, siunitx=False)
 **Case 1 (typical):** If you do this:
 ```python
-import sympy as sp
-from latex_tools import latex_tools
+import marhare as mh
 
-x = sp.Symbol('x')
-expr = sp.diff(sp.sin(x) * sp.exp(x), x)
-latex_str = latex_tools.expr_to_latex(expr, simplify=True)
-print(latex_str)
+V = mh.quantity(9.81, 0.05, "m/s^2")
+tex = mh.latex_quantity(V)
+print(tex)
 ```
-You do this: Convert a symbolic derivative to LaTeX.
+You do this: Format a quantity with uncertainty for LaTeX.
 
 You get this:
 ```
-e^{x} \sin(x) + e^{x} \cos(x)
-```
-
-**Case 2 (edge):** If you do this:
-```python
-expr = sp.integrate(sp.exp(-x**2), (x, 0, sp.oo))
-latex_str = latex_tools.expr_to_latex(expr)
-print(latex_str)
-```
-You do this: Definite integral with symbolic limits.
-
-You get this:
-```
-\frac{\sqrt{\pi}}{2}
+(9.81 \pm 0.05)\,\mathrm{m/s^2}
 ```
 
 ### exportar(filename, contenido, modo="w")

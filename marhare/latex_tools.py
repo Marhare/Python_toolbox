@@ -16,8 +16,6 @@ import math
 from typing import Optional
 
 import numpy as np
-import sympy as sp
-
 from .uncertainties import value_quantity
 import uncertainties.unumpy as unp
 TABLA_CONFIG = {
@@ -67,6 +65,7 @@ def redondeo_incertidumbre(
     if sigma <= 0:
         raise ValueError("Uncertainty must be positive")
 
+    orden = _orden_magnitud(sigma)
     decimales = -(orden - (cifras - 1))
 
     sigma_r = round(sigma, decimales)
@@ -130,10 +129,115 @@ def _valor_pm_escalar(
 
     return f"({v_str} \\pm {s_str})"
 
+
+def tabla_latex(
+    filas,
+    *,
+    headers=None,
+    row_headers=None,
+    caption=None,
+    label=None,
+    centrar=True,
+    tamano=None,
+    lineas=None,
+    envolver=True,
+    posicion="htbp",
+    post=None,
+):
+    """
+    Build a LaTeX table from preformatted rows.
+
+    This is the only place where tabular environments are constructed.
+    """
+    if lineas is None:
+        lineas = TABLA_CONFIG["lineas"]
+
+    if not isinstance(filas, (list, tuple)) or len(filas) == 0:
+        raise ValueError("tabla_latex(): filas must be a non-empty list/tuple")
+
+    filas_norm = []
+    for i, fila in enumerate(filas):
+        if not isinstance(fila, (list, tuple)):
+            raise TypeError(
+                f"tabla_latex(): expected row list/tuple at index {i}, got {type(fila).__name__}"
+            )
+        if i == 0:
+            cols = len(fila)
+            if cols == 0:
+                raise ValueError("tabla_latex(): rows must have at least one column")
+        elif len(fila) != cols:
+            raise ValueError("tabla_latex(): all rows must have the same length")
+        filas_norm.append([str(celda) for celda in fila])
+
+    if headers is not None and len(headers) != cols:
+        raise ValueError("headers must have the same length as the number of columns.")
+    if row_headers is not None and len(row_headers) != len(filas_norm):
+        raise ValueError("row_headers must have the same length as the number of rows.")
+
+    col_fmt = ""
+    if row_headers:
+        col_fmt += "l"
+    col_fmt += "c" * cols
+
+    tabular = [rf"\\begin{{tabular}}{{{col_fmt}}}"]
+
+    if lineas == "booktabs":
+        tabular.append(r"\\toprule")
+    elif lineas == "hline":
+        tabular.append(r"\\hline")
+
+    if headers:
+        header_line = []
+        if row_headers:
+            header_line.append("")
+        header_line.extend(headers)
+        tabular.append(" & ".join(header_line) + r" \\")
+        if lineas in ("booktabs", "hline"):
+            tabular.append(r"\\midrule" if lineas == "booktabs" else r"\\hline")
+
+    for i, fila in enumerate(filas_norm):
+        fila_out = []
+        if row_headers:
+            fila_out.append(row_headers[i])
+        fila_out.extend(fila)
+        tabular.append(" & ".join(fila_out) + r" \\")
+
+    if lineas == "booktabs":
+        tabular.append(r"\\bottomrule")
+    elif lineas == "hline":
+        tabular.append(r"\\hline")
+
+    tabular.append(r"\\end{tabular}")
+    latex_tabular = "\n".join(tabular)
+
+    inserciones = ""
+    if centrar:
+        inserciones += "\\centering\n"
+    if tamano:
+        inserciones += f"\\{tamano}\n"
+
+    if envolver:
+        out = f"\\begin{{table}}[{posicion}]\n"
+        out += inserciones
+        if caption:
+            out += f"\\caption{{{caption}}}\n"
+        if label:
+            out += f"\\label{{{label}}}\n"
+        out += latex_tabular + "\n"
+        if post:
+            out += str(post) + "\n"
+        out += "\\end{table}\n"
+        return out
+
+    out = inserciones + latex_tabular
+    if post:
+        out += "\n" + str(post)
+    return out
+
 def valor_pm(
     valor,
     sigma=None,
-    *,
+    *magnitudes,
     unidad: Optional[str] = None,
     cifras: int = 2,
     siunitx: bool = False,
@@ -151,15 +255,15 @@ def valor_pm(
     """
     Main function to format values with uncertainties in LaTeX.
     
-    Accepts scalars, vectors, and matrices. For scalars returns a plain
-    LaTeX fragment without display math delimiters; for vectors/matrices
-    generates a LaTeX table.
+    Accepts scalars, vectors, matrices, or quantity dicts. For scalars returns
+    a plain LaTeX fragment without display math delimiters; for vectors/matrices
+    generates a LaTeX table. For quantity dicts, generates a magnitudes table.
     
     Parameters
     ----------
-    valor : float, array_like, or uncertainties.uarray
-        Value(s) to format.
-    sigma : float, array_like, or None
+    valor : float, array_like, uncertainties.uarray, or quantity dict
+        Value(s) to format or a quantity dict.
+    sigma : float, array_like, dict, or None
         Uncertainty(ies). If None, assumes valor is already a uarray.
     unidad : str, optional
         Physical unit in LaTeX format (e.g., "m/s^2").
@@ -207,6 +311,10 @@ def valor_pm(
     >>> x = np.array([1.0, 2.0, 3.0])
     >>> valor_pm(x, 0.1, cifras=1, caption="Measures")
     # Generates a 3×1 LaTeX table
+
+    >>> # Magnitudes table
+    >>> valor_pm(q1, q2, q3)
+    # Generates a table with symbols and per-row units
     """
     if centrar is None:
         centrar = TABLA_CONFIG["centrar"]
@@ -218,6 +326,208 @@ def valor_pm(
         envolver = TABLA_CONFIG["envolver"]
     if posicion is None:
         posicion = TABLA_CONFIG["posicion"]
+
+    # Flow: detect quantity dicts here, normalize via value_quantity, then render.
+    mags = None
+    if isinstance(valor, (list, tuple)) and not magnitudes:
+        if any(isinstance(item, dict) for item in valor) and not all(
+            isinstance(item, dict) for item in valor
+        ):
+            raise TypeError("valor_pm(): cannot mix dict and non-dict magnitudes")
+    if isinstance(valor, dict) and not magnitudes:
+        if sigma is None:
+            # Single quantity dict: normalize first, then format as scalar or 1D table.
+            v, s = value_quantity(valor)
+            unit = valor.get("unit", None)
+            symbol = valor.get("symbol", "") or ""
+            v_arr = np.asarray(v)
+            s_arr = np.asarray(s)
+
+            if v_arr.shape == () and s_arr.shape == ():
+                return valor_pm(
+                    v,
+                    s,
+                    unidad=unit,
+                    cifras=cifras,
+                    siunitx=siunitx,
+                )
+
+            if v_arr.ndim != 1 or s_arr.ndim != 1 or v_arr.shape != s_arr.shape:
+                raise ValueError(
+                    "valor_pm(): single-quantity tables require 1D value/sigma arrays"
+                )
+            if siunitx:
+                raise ValueError(
+                    "valor_pm(): siunitx is not supported for magnitude tables"
+                )
+
+            header = f"{symbol} ({unit})" if unit else symbol
+            filas = [
+                [
+                    _valor_pm_escalar(
+                        float(v_arr[i]),
+                        float(s_arr[i]),
+                        unidad=None,
+                        cifras=cifras,
+                        siunitx=False,
+                    )
+                ]
+                for i in range(v_arr.shape[0])
+            ]
+
+            return tabla_latex(
+                filas,
+                headers=[header],
+                row_headers=None,
+                caption=caption,
+                label=label,
+                centrar=centrar,
+                tamano=tamano,
+                lineas=lineas,
+                envolver=envolver,
+                posicion=posicion,
+            )
+        raise TypeError("valor_pm(): sigma must be None when passing a quantity dict")
+
+    if isinstance(valor, (list, tuple)) and not magnitudes:
+        if len(valor) == 0:
+            raise ValueError("valor_pm(): empty list/tuple of magnitudes")
+        if all(isinstance(item, dict) for item in valor):
+            if sigma is not None:
+                raise TypeError("valor_pm(): sigma must be None when passing a list of magnitudes")
+            mags = list(valor)
+
+    if mags is None and isinstance(valor, dict) and magnitudes:
+        # Support valor_pm(q1, q2, q3) by treating dict sigma as a magnitude.
+        if sigma is not None and not isinstance(sigma, dict):
+            raise TypeError("valor_pm(): sigma must be None for magnitudes tables")
+        mags = [valor]
+        if isinstance(sigma, dict):
+            mags.append(sigma)
+        for m in magnitudes:
+            mags.append(m)
+
+    if mags is not None:
+        # Multiple quantities: build a magnitudes table via tabla_latex.
+        for i, mag in enumerate(mags):
+            if not isinstance(mag, dict):
+                raise TypeError(
+                    f"valor_pm(): expected dict at index {i}, got {type(mag).__name__}"
+                )
+
+        if headers is not None or row_headers is not None:
+            raise ValueError("valor_pm(): headers are not allowed for magnitudes tables")
+
+        values = []
+        sigmas = []
+        symbols = []
+        units = []
+        any_vector = False
+
+        for mag in mags:
+            # value_quantity centralizes numeric normalization for quantity dicts.
+            v, s = value_quantity(mag)
+            v_arr = np.asarray(v)
+            s_arr = np.asarray(s)
+            if v_arr.shape != () or s_arr.shape != ():
+                any_vector = True
+            values.append(v_arr)
+            sigmas.append(s_arr)
+            symbols.append(mag.get("symbol", "") or "")
+            units.append(mag.get("unit", None))
+
+        if any_vector:
+            # Vector magnitudes: build a data table with one column per quantity.
+            if siunitx:
+                raise ValueError(
+                    "valor_pm(): siunitx is not supported for magnitude tables"
+                )
+            lengths = []
+            for v_arr, s_arr in zip(values, sigmas):
+                if v_arr.ndim != 1 or s_arr.ndim != 1:
+                    raise ValueError(
+                        "valor_pm(): vector magnitudes must be 1D arrays"
+                    )
+                if v_arr.shape != s_arr.shape:
+                    raise ValueError(
+                        "valor_pm(): vector magnitudes must have matching value/sigma shapes"
+                    )
+                lengths.append(v_arr.shape[0])
+
+            if len(set(lengths)) != 1:
+                raise ValueError(
+                    "valor_pm(): vector magnitudes must share the same length"
+                )
+
+            headers = []
+            for sym, unit in zip(symbols, units):
+                if unit:
+                    headers.append(f"{sym} ({unit})" if sym else f"({unit})")
+                else:
+                    headers.append(sym)
+
+            filas = []
+            for i in range(lengths[0]):
+                fila = []
+                for v_arr, s_arr in zip(values, sigmas):
+                    # Units live in the header for vector tables.
+                    fila.append(
+                        _valor_pm_escalar(
+                            float(v_arr[i]),
+                            float(s_arr[i]),
+                            unidad=None,
+                            cifras=cifras,
+                            siunitx=False,
+                        )
+                    )
+                filas.append(fila)
+
+            return tabla_latex(
+                filas,
+                headers=headers,
+                row_headers=None,
+                caption=caption,
+                label=label,
+                centrar=centrar,
+                tamano=tamano,
+                lineas=lineas,
+                envolver=envolver,
+                posicion=posicion,
+            )
+
+        filas = []
+        for v_arr, s_arr, unit, symbol in zip(values, sigmas, units, symbols):
+            # Always format the numeric cell through valor_pm to keep rendering centralized.
+            formatted = valor_pm(
+                float(v_arr.item()),
+                float(s_arr.item()),
+                unidad=unit,
+                cifras=cifras,
+                siunitx=siunitx,
+                centrar=False,
+                tamano=None,
+                lineas=lineas,
+                envolver=False,
+                posicion=posicion,
+                orientacion=orientacion,
+            )
+            filas.append([symbol, formatted])
+
+        # Headers are fixed for magnitudes tables.
+        headers = ["Magnitud", "Valor"]
+        # Delegate the table layout to the shared table helper.
+        return tabla_latex(
+            filas,
+            headers=headers,
+            row_headers=None,
+            caption=caption,
+            label=label,
+            centrar=centrar,
+            tamano=tamano,
+            lineas=lineas,
+            envolver=envolver,
+            posicion=posicion,
+        )
 
     if sigma is None:
         obj = valor
@@ -251,145 +561,74 @@ def valor_pm(
 
     filas, cols = v.shape
 
-    if headers is not None and len(headers) != cols:
-        raise ValueError("headers must have the same length as the number of columns.")
-    if row_headers is not None and len(row_headers) != filas:
-        raise ValueError("row_headers must have the same length as the number of rows.")
+    if siunitx and unidad is None:
+        raise ValueError("valor_pm(): siunitx requires unidad for tables")
 
-    col_fmt = ""
-    if row_headers:
-        col_fmt += "l"
-    col_fmt += "c" * cols
-
-    tabular = [rf"\begin{{tabular}}{{{col_fmt}}}"]
-
-    if lineas == "booktabs":
-        tabular.append(r"\toprule")
-    elif lineas == "hline":
-        tabular.append(r"\hline")
-
-    if headers:
-        header_line = []
-        if row_headers:
-            header_line.append("")
-        header_line.extend(headers)
-        tabular.append(" & ".join(header_line) + r" \\")
-        if lineas in ("booktabs", "hline"):
-            tabular.append(r"\midrule" if lineas == "booktabs" else r"\hline")
-
+    filas_fmt = []
     for i in range(filas):
         fila = []
-        if row_headers:
-            fila.append(row_headers[i])
         for j in range(cols):
             fila.append(
                 _valor_pm_escalar(
                     float(v[i, j]),
                     float(s[i, j]),
-                    unidad=None,
+                    unidad=unidad if siunitx else None,
                     cifras=cifras,
-                    siunitx=False,
+                    siunitx=siunitx,
                 )
             )
-        tabular.append(" & ".join(fila) + r" \\")
+        filas_fmt.append(fila)
 
-    if lineas == "booktabs":
-        tabular.append(r"\bottomrule")
-    elif lineas == "hline":
-        tabular.append(r"\hline")
+    unidad_global = rf"\,\mathrm{{{unidad}}}" if unidad and not siunitx else ""
 
-    tabular.append(r"\end{tabular}")
-    latex_tabular = "\n".join(tabular)
-
-    inserciones = ""
-    if centrar:
-        inserciones += "\\centering\n"
-    if tamano:
-        inserciones += f"\\{tamano}\n"
-
-    unidad_global = rf"\,\mathrm{{{unidad}}}" if unidad else ""
-
-    if envolver:
-        out = f"\\begin{{table}}[{posicion}]\n"
-        out += inserciones
-        if caption:
-            out += f"\\caption{{{caption}}}\n"
-        if label:
-            out += f"\\label{{{label}}}\n"
-        out += latex_tabular + "\n"
-        if unidad_global:
-            out += unidad_global + "\n"
-        out += "\\end{table}\n"
-        return out
-
-    out = inserciones + latex_tabular
-    if unidad_global:
-        out += "\n" + unidad_global
-    return out
-
-
-def tabla_pm(
-    columnas,
-    valores,
-    sigmas,
-    **kw
-):
-    valores = np.column_stack(valores)
-    sigmas = np.column_stack(
-        [np.full_like(valores[:, i], s) if np.isscalar(s) else s
-         for i, s in enumerate(sigmas)]
+    # Delegate the table layout to the shared table helper.
+    return tabla_latex(
+        filas_fmt,
+        headers=headers,
+        row_headers=row_headers,
+        caption=caption,
+        label=label,
+        centrar=centrar,
+        tamano=tamano,
+        lineas=lineas,
+        envolver=envolver,
+        posicion=posicion,
+        post=unidad_global or None,
     )
-    return valor_pm(valores, sigmas, headers=columnas, **kw)
 
 
 def latex_quantity(
-    mag: dict,
+    mag: dict | list[dict] | tuple[dict, ...],
     *,
     cifras: int = 2,
     siunitx: bool = False,
     **kw
 ) -> str:
     """
-    Format a magnitude/constant from the magnitudes registry.
+    Format a magnitude/constant or a list/tuple of magnitudes.
 
-        Expects mag to be a dict like:
+        Expects each magnitude to be a dict like:
             {
                 "measure": (value, sigma) | None,
                 "result": (value, sigma) | None,
                 "unit": "m",
                 "dimension": None | tuple,
-                "expr": None | str | sp.Expr
+                "expr": None
             }
 
     Notes:
-    - Uses mag["dimension"] (shape) to decide scalar vs vector/matrix.
-    - Assumes sigma is already vectorized when needed (checker does that).
-    - Delegates actual formatting to `valor_pm`.
+    - Expressions are resolved elsewhere; this function assumes numeric data.
+    - Uses value_quantity for numeric normalization only.
+    - Delegates all formatting to `valor_pm`.
     """
+    if isinstance(mag, (list, tuple)):
+        # Multiple quantities: delegate table rendering to valor_pm.
+        return valor_pm(mag, cifras=cifras, siunitx=siunitx, **kw)
 
-    if mag.get("measure", None) is None and mag.get("result", None) is None:
-        expr = mag.get("expr", None)
-        if expr is not None:
-            if isinstance(expr, sp.Expr):
-                return sp.latex(expr)
-            try:
-                return sp.latex(sp.sympify(expr))
-            except Exception:
-                # Assume expr is already LaTeX if SymPy cannot parse it
-                return str(expr)
-        raise ValueError("latex_quantity(): mag has no numeric value to format")
+    # Single quantity: delegate rendering to valor_pm.
+    return valor_pm(mag, cifras=cifras, siunitx=siunitx, **kw)
 
-    value, sigma = value_quantity(mag)
-    unit = mag.get("unit", None)
 
-    return valor_pm(
-        value,
-        sigma,
-        unidad=unit,
-        cifras=cifras,
-        siunitx=siunitx,
-        **kw
-    )
 def exportar(
     filename: str,
     contenido: str,
@@ -421,7 +660,7 @@ class _LatexTools:
     redondeo_incertidumbre = staticmethod(redondeo_incertidumbre)
     valor_pm = staticmethod(valor_pm)
     exportar = staticmethod(exportar)
-    tabla_pm = staticmethod(tabla_pm)
+    tabla_latex = staticmethod(tabla_latex)
     latex_quantity = staticmethod(latex_quantity)
 
 

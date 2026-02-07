@@ -52,45 +52,8 @@ def _es_banda_like(obj) -> bool:
 def _es_serie3d_like(obj) -> bool:
     return hasattr(obj, "x") and hasattr(obj, "y") and hasattr(obj, "z")
 
-def _es_path_collection(col) -> bool:
-    return col.__class__.__name__ == "PathCollection"
-
-
-def _es_poly_collection(col) -> bool:
-    return col.__class__.__name__ == "PolyCollection"
-
-
-def _match_scatter(ax, x: np.ndarray, y: np.ndarray):
-    target = np.column_stack([x, y])
-    for col in ax.collections:
-        if _es_path_collection(col):
-            offsets = col.get_offsets()
-            if offsets.shape == target.shape and np.allclose(offsets, target):
-                return col
-    return None
-
-
-def _match_line_2d(ax, x: np.ndarray, y: np.ndarray):
-    for line in ax.lines:
-        lx = np.asarray(line.get_xdata())
-        ly = np.asarray(line.get_ydata())
-        if lx.shape == x.shape and ly.shape == y.shape and np.allclose(lx, x) and np.allclose(ly, y):
-            return line
-    return None
-
-
-def _match_line_3d(ax, x: np.ndarray, y: np.ndarray, z: np.ndarray):
-    for line in ax.lines:
-        if hasattr(line, "get_data_3d"):
-            lx, ly, lz = line.get_data_3d()
-            lx = np.asarray(lx)
-            ly = np.asarray(ly)
-            lz = np.asarray(lz)
-            if (lx.shape == x.shape and ly.shape == y.shape and lz.shape == z.shape and
-                np.allclose(lx, x) and np.allclose(ly, y) and np.allclose(lz, z)):
-                return line
-    return None
-
+def _es_serie_con_error_like(obj) -> bool:
+    return hasattr(obj, "x") and hasattr(obj, "y") and (hasattr(obj, "sy") or hasattr(obj, "sx"))
 
 def _build_band_verts(x: np.ndarray, y_low: np.ndarray, y_high: np.ndarray) -> np.ndarray:
     x = np.asarray(x)
@@ -101,25 +64,22 @@ def _build_band_verts(x: np.ndarray, y_low: np.ndarray, y_high: np.ndarray) -> n
     return np.vstack([upper, lower])
 
 
-def _match_band(ax, x: np.ndarray, y_low: np.ndarray, y_high: np.ndarray):
-    target = _build_band_verts(x, y_low, y_high)
-    for col in ax.collections:
-        if _es_poly_collection(col):
-            paths = col.get_paths()
-            if not paths:
-                continue
-            verts = paths[0].vertices
-            if verts.shape == target.shape and np.allclose(verts, target):
-                return col
-    return None
-
-
 def _collect_scene_objects(scene: Scene):
     objetos = []
     for panel in scene.paneles:
         for obj in panel.objetos:
             objetos.append(obj)
     return objetos
+
+
+def _get_artist_map(scene: Scene) -> Dict[int, Any]:
+    artist_map = getattr(scene, "_artist_map_by_id", None)
+    if not isinstance(artist_map, dict):
+        raise TypeError(
+            "Scene has no artist map. Ensure the scene was plotted with graficos.plot(scene, show=False) "
+            "from a version that supports animations."
+        )
+    return artist_map
 
 
 # ============================================================
@@ -134,7 +94,8 @@ def animate(
     fps: int = 30,
     speed: float = 1.0,
     loop: bool = False,
-    show: bool = True
+    show: bool = True,
+    blit: bool = False
 ) -> animation.FuncAnimation:
     """
     Declarative time engine.
@@ -151,6 +112,7 @@ def animate(
         speed: time scale factor (t = speed * frame / fps)
         loop: repeat animation when finished
         show: display interactive animation
+        blit: enable blitting (only if all artists support it)
 
     OUTPUT:
         matplotlib.animation.FuncAnimation
@@ -172,11 +134,13 @@ def animate(
     if speed <= 0:
         raise ValueError("speed must be > 0")
 
-    # Validate that evolve objects are in the scene
+    # Validate that evolve objects are in the scene (by identity)
     scene_objects = _collect_scene_objects(scene)
     for obj in evolve.keys():
-        if obj not in scene_objects:
+        if not any(obj is scene_obj for scene_obj in scene_objects):
             raise ValueError(f"evolve contains object not present in scene: {type(obj).__name__}")
+        if _es_serie_con_error_like(obj):
+            raise TypeError("SeriesWithError cannot be animated (static only)")
 
     # Initial render
     fig, axs = graficos.plot(scene, show=False)
@@ -189,35 +153,16 @@ def animate(
         if len(labels) > 0:
             ax.legend(loc='upper left', frameon=False)
 
-    # Create mapping object -> artist
+    artist_map = _get_artist_map(scene)
     obj_to_artist: Dict[Any, Any] = {}
-    for panel_idx, panel in enumerate(scene.paneles):
-        ax = axs[panel_idx]
-        for obj in panel.objetos:
-            if isinstance(obj, Serie) or _es_serie_like(obj):
-                artist = _match_scatter(ax, obj.x, obj.y)
-                if artist is not None:
-                    obj_to_artist[obj] = artist
-            elif isinstance(obj, Serie3D) or _es_serie3d_like(obj):
-                artist = _match_line_3d(ax, obj.x, obj.y, obj.z)
-                if artist is not None:
-                    obj_to_artist[obj] = artist
-            elif isinstance(obj, Banda) or _es_banda_like(obj):
-                artist = _match_band(ax, obj.x, obj.y_low, obj.y_high)
-                if artist is not None:
-                    obj_to_artist[obj] = artist
-            elif isinstance(obj, Ajuste) or _es_ajuste_like(obj):
-                artist = _match_line_2d(ax, obj.x, obj.yfit)
-                if artist is not None:
-                    obj_to_artist[obj] = artist
-
-    # Validate support for objects in evolve
     for obj in evolve.keys():
-        if obj not in obj_to_artist:
+        artist = artist_map.get(id(obj))
+        if artist is None:
             raise TypeError(
                 f"Could not associate an artist for {type(obj).__name__}. "
-                "Verify that the object is Serie, Serie3D, Banda, or Ajuste."
+                "Replot the scene before calling animate."
             )
+        obj_to_artist[obj] = artist
 
     total_frames = int(np.ceil(duration * fps))
     frames = range(total_frames)
@@ -237,7 +182,15 @@ def animate(
                 if y.shape != obj.y.shape:
                     raise TypeError("Serie: evolve must return y with the same length as x")
                 obj.y = y
-                artist.set_offsets(np.column_stack([obj.x, obj.y]))
+                if hasattr(artist, "set_offsets"):
+                    artist.set_offsets(np.column_stack([obj.x, obj.y]))
+                elif hasattr(artist, "set_data"):
+                    artist.set_data(obj.x, obj.y)
+                elif hasattr(artist, "set_xdata") and hasattr(artist, "set_ydata"):
+                    artist.set_xdata(obj.x)
+                    artist.set_ydata(obj.y)
+                else:
+                    raise TypeError("Serie artist does not support data updates")
                 modified.append(artist)
             elif isinstance(obj, Serie3D) or _es_serie3d_like(obj):
                 if not isinstance(new_data, Tuple) and not isinstance(new_data, list):
@@ -248,8 +201,11 @@ def animate(
                 if x.shape != y.shape or x.shape != z.shape:
                     raise TypeError("Serie3D: x, y, z must have the same length")
                 obj.x, obj.y, obj.z = x, y, z
-                artist.set_data(x, y)
-                artist.set_3d_properties(z)
+                if hasattr(artist, "set_data_3d"):
+                    artist.set_data_3d(x, y, z)
+                else:
+                    artist.set_data(x, y)
+                    artist.set_3d_properties(z)
                 modified.append(artist)
             elif isinstance(obj, Banda) or _es_banda_like(obj):
                 if not isinstance(new_data, Tuple) and not isinstance(new_data, list):
@@ -267,7 +223,12 @@ def animate(
                 if yfit.shape != obj.yfit.shape:
                     raise TypeError("Ajuste: evolve must return yfit with the same length as x")
                 obj.yfit = yfit
-                artist.set_ydata(obj.yfit)
+                if hasattr(artist, "set_ydata"):
+                    artist.set_ydata(obj.yfit)
+                elif hasattr(artist, "set_data"):
+                    artist.set_data(obj.x, obj.yfit)
+                else:
+                    raise TypeError("Ajuste artist does not support data updates")
                 modified.append(artist)
             else:
                 raise TypeError(f"Unsupported type in evolve: {type(obj).__name__}")
@@ -279,7 +240,7 @@ def animate(
         frames=frames,
         interval=int(1000 / fps),
         repeat=loop,
-        blit=False
+        blit=blit
     )
 
     if show:

@@ -414,25 +414,55 @@ def propagate_quantity(target, magnitudes, simplify=True):
     return _Uncertainties.propagate_quantity(target, magnitudes, simplify=simplify)
 
 
-def value_quantity(q: dict, prefer: str = "measure"):
+def value_quantity(q: dict):
     """
     Return numeric (value, sigma) from a quantity dict without mutation.
 
-    prefer="measure" returns measure if available; otherwise result.
-    Any other prefer value returns result if available; otherwise measure.
-    """
-    if prefer == "measure":
-        if q.get("measure", None) is not None:
-            return q["measure"]
-        if q.get("result", None) is not None:
-            return q["result"]
-    else:
-        if q.get("result", None) is not None:
-            return q["result"]
-        if q.get("measure", None) is not None:
-            return q["measure"]
+    If q is a list/tuple of quantity dicts, returns tuples of values and sigmas
+    in the same order.
 
-    raise ValueError("No numeric value available")
+    Rule:
+    - If result exists, return it
+    - Else if measure exists, return it
+    - Else raise ValueError
+    """
+    # Allow vectorized extraction from a list/tuple of quantity dicts.
+    if isinstance(q, (list, tuple)):
+        if len(q) == 0:
+            raise ValueError("value_quantity(): empty list/tuple")
+        values = []
+        sigmas = []
+        for i, item in enumerate(q):
+            if not isinstance(item, dict):
+                raise TypeError(
+                    f"value_quantity(): expected dict at index {i}, got {type(item).__name__}"
+                )
+            value, sigma = value_quantity(item)
+            values.append(value)
+            sigmas.append(sigma)
+        return tuple(values), tuple(sigmas)
+
+    if not isinstance(q, dict):
+        raise TypeError(
+            f"value_quantity(): expected quantity dict, got {type(q).__name__}"
+        )
+
+    if q.get("result", None) is not None:
+        value, sigma = q["result"]
+    elif q.get("measure", None) is not None:
+        value, sigma = q["measure"]
+    else:
+        raise ValueError("No numeric value available")
+
+    if np.any(np.asarray(sigma) < 0):
+        raise ValueError("sigma cannot be negative")
+
+    value_arr = np.asarray(value)
+    sigma_arr = np.asarray(sigma)
+    if value_arr.shape != () and sigma_arr.shape == ():
+        sigma = np.full(value_arr.shape, float(sigma_arr), dtype=float)
+
+    return value, sigma
 
 
 def register(*magnitudes):

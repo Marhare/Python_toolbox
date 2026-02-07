@@ -98,19 +98,28 @@ print(res["estadistico"], res["p_valor"])
 
 ---
 
-### incertidumbres.py
+### uncertainties.py
 **Purpose:** quantities with uncertainty and symbolic propagation.
 
 **API:**
-- `u(x, sigmax=0.0)`
-- `propagacion_incertidumbre_sympy(f, vars_, valores, sigmas, cov=None, simplify=True)`
+- `quantity(value, sigma, unit, expr=None, symbol=None)`
+- `register(*quantities)`
+- `propagate_quantity(target, magnitudes, simplify=True)`
+- `value_quantity(q)`
 
-**Notes:** integrates with `latex_tools` for LaTeX.
+**Notes:** integrates with `latex_quantity` for LaTeX.
 
 **Quick example:**
 ```python
-from incertidumbres import incertidumbres
-u = incertidumbres.u(10.0, 0.2)
+import marhare as mh
+
+V = mh.quantity(10.0, 0.2, "V")
+I = mh.quantity(2.0, 0.1, "A")
+R = mh.quantity("V/I", "ohm")
+
+mags = mh.register(V, I, R)
+res = mh.propagate_quantity("R", mags)
+print(res["value"], res["uncertainty"])
 ```
 
 ---
@@ -184,13 +193,13 @@ rk = numericos.rk4(f, (0, 5), y0=1.0, dt=0.1)
 **Main API:**
 - `redondeo_incertidumbre`
 - `valor_pm`
-- `expr_to_latex`
+- `latex_quantity`
 - `exportar`
 
 **Quick example:**
 ```python
-from latex_tools import latex_tools
-tex = latex_tools.valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
+import marhare as mh
+tex = mh.valor_pm(9.81, 0.05, unidad="m/s^2", cifras=2)
 ```
 
 ## 🛠️ Requirements

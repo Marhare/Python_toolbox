@@ -176,9 +176,9 @@ CONVENTIONS AND TYPICAL FLOW
 ============================
 
 1. Fit data:
-    res = fitting.linear_fit(x, y, sy=sy_data)
+    res = _Fitting.linear_fit(x, y, sy=sy_data)
    or
-    res = fitting.fit(modelo, x, y, sy=sy_data, p0=p0_inicial)
+    res = _Fitting.fit(modelo, x, y, sy=sy_data, p0=p0_inicial)
 
 2. Interpret results:
    params = res["parametros"]
@@ -186,12 +186,12 @@ CONVENTIONS AND TYPICAL FLOW
    chi2_red = res["chi2_red"]  -> if ~1, fit is good
 
 3. Build CI for parameters:
-    ic = fitting.parameter_confidence_interval(res, level=0.95)
+    ic = _Fitting.parameter_confidence_interval(res, level=0.95)
    for param_ic in ic["parametros"]:
        print(f"{param_ic['nombre']}: {param_ic['inferior']} - {param_ic['superior']}")
 
 4. Evaluate prediction uncertainty:
-    pred = fitting.prediction_uncertainty(res, modelo, x_nuevo)
+    pred = _Fitting.prediction_uncertainty(res, modelo, x_nuevo)
    print(f"y({x_nuevo}) = {pred['y']} ± {pred['sigma_modelo']}")
 
 5. Propagate to other observables (use incertidumbres.py):
@@ -202,6 +202,8 @@ CONVENTIONS AND TYPICAL FLOW
 import numpy as np
 from scipy import stats, optimize
 import sympy as sp
+
+from marhare.uncertainties import value_quantity
 
 class _Fitting:
 
@@ -598,5 +600,79 @@ class _Fitting:
         }
         
         return result
+    
+    ####Connection with uncertainties module for later propagation####
 
-fitting = _Fitting()
+
+class FitResult:
+    def __init__(self, raw, *, model, xq=None, yq=None, degree=None):
+        self._raw = raw
+        self.model = model
+        self.degree = degree
+
+        # metadatos opcionales (para plots, LaTeX futuro)
+        self.x_symbol = getattr(xq, "symbol", None) if xq is not None else None
+        self.y_symbol = getattr(yq, "symbol", None) if yq is not None else None
+        self.x_unit = getattr(xq, "unit", None) if xq is not None else None
+        self.y_unit = getattr(yq, "unit", None) if yq is not None else None
+
+    # acceso directo a los resultados numéricos
+    @property
+    def raw(self):
+        return self._raw
+
+    # --- Métodos de fitting.py ---
+
+    def confidence_interval(self, level=0.95):
+        return _Fitting.parameter_confidence_interval(self._raw, nivel=level)
+
+    def prediction(self, x0):
+        return _Fitting.prediction_uncertainty(self._raw, self.model, x0)
+
+
+def fit_quantity(model, xq, yq, *, degree=None, p0=None, variable="x"):
+    """
+    Fit yq vs xq to a model and return a FitResult wrapper.
+
+    INPUT:
+        model: "linear" | "polynomial" | callable | sympy.Expr
+        xq: quantity dict for the independent variable
+        yq: quantity dict for the dependent variable
+        degree: int | None -> required if model is "polynomial"
+        p0: initial guess for parameters (optional)
+        variable: str -> independent variable name for symbolic models
+
+    OUTPUT:
+        FitResult with access to raw fit results and helpers.
+    """
+    x, sx = value_quantity(xq)
+    y, sy = value_quantity(yq)
+
+    if isinstance(model, str):
+        if model == "linear":
+            raw = _Fitting.linear_fit(x, y, sy=sy)
+        elif model == "polynomial":
+            if degree is None:
+                raise ValueError("polynomial fit requires degree=")
+            raw = _Fitting.polynomial_fit(x, y, degree, sy=sy)
+        else:
+            raise ValueError(f"Unknown model shortcut: {model}")
+    elif callable(model) or isinstance(model, sp.Expr):
+        raw = _Fitting.fit(
+            model,
+            x,
+            y,
+            sy=sy,
+            p0=p0,
+            variable=variable,
+        )
+    else:
+        raise ValueError("model must be a string, callable, or sympy expression")
+
+    return FitResult(
+        raw,
+        model=model,
+        xq=xq,
+        yq=yq,
+        degree=degree,
+    )
