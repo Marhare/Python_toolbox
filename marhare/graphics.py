@@ -638,6 +638,90 @@ def _is_quantity_like(obj: Any) -> bool:
     return isinstance(obj, dict) and "unit" in obj and ("measure" in obj or "result" in obj)
 
 
+def _is_fit_result_like(obj: Any) -> bool:
+    return hasattr(obj, "model") and hasattr(obj, "raw")
+
+
+def _is_sympy_expr_like(obj: Any) -> bool:
+    return hasattr(obj, "free_symbols") and hasattr(obj, "subs")
+
+
+def _safe_len(obj: Any) -> Optional[int]:
+    try:
+        return len(obj)
+    except TypeError:
+        return None
+
+
+def _evaluate_fit_result_model(fit_result: Any, x: np.ndarray) -> np.ndarray:
+    model = fit_result.model
+    raw = fit_result.raw
+
+    if isinstance(model, str):
+        if model == "linear":
+            params = raw.get("parametros")
+            if isinstance(params, dict):
+                a = params.get("a")
+                b = params.get("b")
+            else:
+                a, b = params
+            return a + b * x
+        if model == "polynomial":
+            coef = raw.get("coeficientes")
+            return np.polyval(coef, x)
+        raise ValueError(f"Unknown model shortcut: {model}")
+
+    if callable(model) and not _is_sympy_expr_like(model):
+        params = raw.get("parametros")
+        return model(x, *params)
+
+    if _is_sympy_expr_like(model):
+        try:
+            import sympy as sp
+        except ImportError as exc:
+            raise ImportError("sympy is required to evaluate symbolic models") from exc
+
+        expr = raw.get("expresion", model)
+        params_symbols = raw.get("parametros_simbolicos")
+        if params_symbols is None:
+            raise ValueError("Symbolic fit results must include 'parametros_simbolicos'")
+
+        free_symbols = set(expr.free_symbols)
+        params_set = set(params_symbols)
+        var_symbols = list(free_symbols - params_set)
+        if len(var_symbols) != 1:
+            raise ValueError("Could not determine the independent variable symbol")
+
+        var_symbol = var_symbols[0]
+        func = sp.lambdify((var_symbol, *params_symbols), expr, "numpy")
+        params = raw.get("parametros")
+        return func(x, *params)
+
+    raise ValueError("Unsupported model type for fit evaluation")
+
+
+def _build_dense_fit(x: np.ndarray, y_fit: Any, n_points: int = 400) -> Fit:
+    if x.size == 0:
+        raise ValueError("Cannot build a dense fit from empty x")
+    x_dense = np.linspace(float(np.min(x)), float(np.max(x)), n_points)
+
+    if _is_fit_result_like(y_fit):
+        y_dense = _evaluate_fit_result_model(y_fit, x_dense)
+        label = getattr(y_fit, "label", None)
+        return Fit(x_dense, y_dense, label=label)
+
+    if callable(y_fit) and not _is_sympy_expr_like(y_fit):
+        try:
+            y_dense = y_fit(x_dense)
+        except TypeError as exc:
+            raise ValueError("y_fit callable must accept x or have bound parameters") from exc
+        return Fit(x_dense, y_dense)
+
+    if _is_sympy_expr_like(y_fit):
+        raise ValueError("Symbolic models require fit parameters; pass a FitResult instead")
+
+    raise ValueError("y_fit must be an evaluated array or a model/fit result")
+
 def _quantity_axis_label(q: dict) -> Optional[str]:
     symbol = q.get("symbol")
     unit = q.get("unit")
@@ -739,10 +823,25 @@ def plot(
                 hist = value_quantity(hist)[0]
             scene = Scene(_parse_histogram(hist))
         else:
-            if len(objetos) != 2:
-                raise ValueError("plot(x, y, ...) requires both x and y")
-            x, y = objetos
+            auto_index = False
             series_label = None
+            if len(objetos) == 1:
+                y = objetos[0]
+                if _is_quantity_like(y):
+                    y_value, y_sigma = value_quantity(y)
+                    ylabel = ylabel or _quantity_axis_label(y)
+                    series_label = y.get("symbol") or None
+                    y = y_value
+                    if yerr is None:
+                        yerr = y_sigma
+                if yerr is None:
+                    raise ValueError("plot(y, yerr=...) requires yerr when x is omitted")
+                x = np.arange(len(y))
+                auto_index = True
+            elif len(objetos) == 2:
+                x, y = objetos
+            else:
+                raise ValueError("plot(x, y, ...) requires both x and y")
             if _is_quantity_like(x):
                 x_value, _ = value_quantity(x)
                 xlabel = xlabel or _quantity_axis_label(x)
@@ -764,12 +863,21 @@ def plot(
                     objetos_scene.append(y_fit)
                 elif _is_quantity_like(y_fit):
                     y_fit_value, _ = value_quantity(y_fit)
-                    objetos_scene.append(Fit(x, y_fit_value))
+                    if _safe_len(y_fit_value) == _safe_len(x):
+                        objetos_scene.append(Fit(x, y_fit_value))
+                    else:
+                        objetos_scene.append(_build_dense_fit(np.asarray(x, dtype=float), y_fit_value))
                 else:
-                    objetos_scene.append(Fit(x, y_fit))
+                    fit_len = _safe_len(y_fit)
+                    if fit_len is not None and fit_len == _safe_len(x):
+                        objetos_scene.append(Fit(x, y_fit))
+                    else:
+                        objetos_scene.append(_build_dense_fit(np.asarray(x, dtype=float), y_fit))
             if bands is not None:
                 objetos_scene.append(_parse_band(x, bands))
             scene = Scene(*objetos_scene)
+            if auto_index and xlabel is None:
+                xlabel = "index"
         if xlabel is not None:
             scene.xlabel = xlabel
         if ylabel is not None:
