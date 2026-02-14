@@ -1,5 +1,12 @@
 # marhare/__init__.py
 
+# --- Functions ---
+from .functions import (
+    Function,
+    D,
+    I,
+)
+
 # --- Uncertainties ---
 from .uncertainties import (
     quantity,
@@ -40,6 +47,9 @@ ks_test = _statistics.ks_test
 
 
 __all__ = [
+    "Function",
+    "D",
+    "I",
     "quantity",
     "propagate",
     "propagate_quantity",
