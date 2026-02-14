@@ -39,6 +39,11 @@ try:
 except ImportError:
     from uncertainties import value_quantity
 
+try:
+    from .functions import Function
+except ImportError:
+    Function = None
+
 
 # ============================================================
 #  GLOBAL CONFIG
@@ -605,7 +610,7 @@ def _is_semantic_like(obj: Any) -> bool:
 
 
 def _looks_like_data(obj: Any) -> bool:
-    return isinstance(obj, (list, tuple, np.ndarray))
+    return isinstance(obj, (list, tuple, np.ndarray)) or (Function is not None and isinstance(obj, Function))
 
 
 def _looks_like_data_or_quantity(obj: Any) -> bool:
@@ -747,6 +752,7 @@ def plot(
     bands: Optional[Any] = None,
     hist: Optional[Any] = None,
     ax: Optional[plt.Axes] = None,
+    as_line: bool = False,
     **kwargs
 ) -> Union[Scene, Tuple[plt.Figure, Union[plt.Axes, np.ndarray]]]:
     """
@@ -761,7 +767,7 @@ def plot(
             Ignored if Scene is passed (uses scene.layout)
         dims: str -> "2D" (default) or "3D"
             Ignored if Scene is passed (uses scene.dims)
-        show: bool -> if True, calls plt.show()
+        show: bool -> if True, calls plt.show() (default: True)
         figsize: tuple | None -> figure size; if None uses PLOT_DEFAULTS
             Ignored if Scene is passed (uses scene.figsize)
         xlabel, ylabel, title: str | None -> global labels (if applicable)
@@ -771,32 +777,36 @@ def plot(
         bands: Band | (y_low, y_high) | dict | None -> band (constructor mode)
         hist: array_like | (data, bins) | Histogram | quantity dict | None -> histogram (constructor mode)
         ax: matplotlib.axes.Axes | None -> draw into a provided axis (single panel)
+        as_line: bool -> if True, draw array data as line instead of scatter (default: False)
+            Function objects are ALWAYS drawn as lines (evaluated on 400-point dense grid)
         **kwargs: style options (dpi, grid_alpha, lw, etc.)
             ALWAYS applied (even with Scene)
     
     OUTPUT:
-        Scene when used as constructor (plot(x, y, ...) or plot(hist=...))
         (fig, ax) si n_objetos == 1
         (fig, axs) si n_objetos > 1
+        
+        NOTA: Siempre retorna (fig, ax) de forma consistente, incluso en constructor_mode.
+        Si necesitas reutilizar la estructura de gráfica, crea explícitamente una Scene.
     
     EXAMPLES:
-        # Fast constructor
-        s1 = plot(x, y)
-        s2 = plot(x, y, y_fit=yfit)
-        s3 = plot(x, y, yerr=sy, bands=(y_low, y_high))
-        s4 = plot(hist=data)
-        s5 = plot(xq, yq)  # quantity dicts
-
-        # With Scene (recommended for reuse)
+        # Fast constructor - siempre retorna (fig, ax)
+        fig, ax = mh.plot(x, y)  # scatter plot (default for arrays)
+        fig, ax = mh.plot(x, y, as_line=True)  # draw as line
+        fig, ax = mh.plot(x, f)  # f is Function: draws as smooth curve (400 points)
+        fig, ax = mh.plot(x, y, show=False)  # no mostrar aún, guardar figura
+        
+        # Con Scene (manejo de estructura)
         scene = Scene(Series(x, y), Histogram(data), layout="1x2")
-        plot(scene)  # Scene structure
-        plot(scene, dpi=300)  # same content, different style
+        fig, axes = mh.plot(scene)  # Scene structure
+        fig, axes = mh.plot(scene, dpi=300, show=False)  # estilo diferente, no mostrar
     
     NOTES ABOUT Scene:
-        - Scene must be passed as a SINGLE ARGUMENT: plot(scene)
-        - Scene defines STRUCTURE (what objects, layout, dims, labels)
-        - kwargs define AESTHETICS (dpi, colors, line widths, etc.)
-        - layout/dims/figsize/labels parameters are ignored when Scene is provided
+        - Scene puede ser pasada como argumento: plot(scene)
+        - Scene define ESTRUCTURA (objetos, layout, dims, etiquetas)
+        - kwargs definen ESTÉTICA (dpi, colores, líneas, etc.)
+        - Si show=False: la figura se crea y se retorna (fig, ax) para manipulación manual
+        - Si show=True (default): plt.show() se ejecuta al final
     
     PURPOSE:
         The user only declares what they have; this engine:
@@ -814,7 +824,6 @@ def plot(
             constructor_mode = True
 
     if constructor_mode:
-        show = False
         if hist is not None:
             if len(objetos) > 0 or y_fit is not None or yerr is not None or bands is not None:
                 raise ValueError("Histogram must be plotted as its own Scene")
@@ -842,6 +851,21 @@ def plot(
                 x, y = objetos
             else:
                 raise ValueError("plot(x, y, ...) requires both x and y")
+            
+            # Handle Function objects: evaluate on dense x grid and draw as line
+            is_function = Function is not None and isinstance(y, Function)
+            if is_function:
+                if x is None:
+                    raise ValueError("Debes pasar dominio si y es Function.")
+                x_arr = np.asarray(x, dtype=float)
+                x_dense = np.linspace(np.min(x_arr), np.max(x_arr), 400)
+                y_dense = y(x_dense)
+                y = y_dense
+                x = x_dense
+                use_as_line = True
+            else:
+                use_as_line = as_line
+            
             if _is_quantity_like(x):
                 x_value, _ = value_quantity(x)
                 xlabel = xlabel or _quantity_axis_label(x)
@@ -853,9 +877,16 @@ def plot(
                 y = y_value
                 if yerr is None:
                     yerr = y_sigma
-            if yerr is not None:
+            
+            # Use Fit (line) if as_line=True or if y was a Function
+            if use_as_line and yerr is None:
+                # Draw as line (Fit object)
+                series_obj = Fit(x, y, label=series_label)
+            elif yerr is not None:
+                # Keep as SeriesWithError for error bars
                 series_obj = SeriesWithError(x, y, sy=yerr, label=series_label)
             else:
+                # Default: scatter for array data
                 series_obj = Series(x, y, label=series_label)
             objetos_scene = [series_obj]
             if y_fit is not None:
@@ -953,10 +984,6 @@ def plot(
             ax.set_title(title)
         if show:
             plt.show()
-        if return_scene:
-            if not show:
-                plt.close(ax.figure)
-            return scene
         return (ax.figure, ax)
 
     # Compute layout
@@ -1025,10 +1052,6 @@ def plot(
         plt.show()
 
     # Return consistent format
-    if return_scene:
-        if not show:
-            plt.close(fig)
-        return scene
     if n_grupos == 1:
         return fig, axs[0]
     else:

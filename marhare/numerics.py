@@ -1,7 +1,5 @@
 import numpy as np
 import sympy as sp
-from scipy.integrate import quad
-from scipy.optimize import newton
 
 
 class _Numericos:
@@ -103,8 +101,7 @@ class _Numericos:
     # =========================================================================
     # ORDINARY DIFFERENTIAL EQUATIONS
     # =========================================================================
-
-    
+    # (Placeholder for future ODE implementations)
 
 
 # =============================================================================
@@ -113,36 +110,16 @@ class _Numericos:
 
 numericos = _Numericos()
 
-# Module aliases: allow "from numericos import derivar" without friction
-# All of these are static methods of _Numericos exposed at module level
-derivar = _Numericos.derivar
-derivada = _Numericos.derivada
-
-integrar_indefinida = _Numericos.integrar_indefinida
-integrar_definida = _Numericos.integrar_definida
-integrar = _Numericos.integrar
-
-resolver_ecuacion = _Numericos.resolver_ecuacion
-raiz_numerica = _Numericos.raiz_numerica
-
+# Module aliases for public API
 evaluar = _Numericos.evaluar
-rk4 = _Numericos.rk4
 
-# Clear aliases for the user
+# Internal utilities for other modules (used in functions.py, etc.)
+_to_symbol = _Numericos._to_symbol
+_to_expr = _Numericos._to_expr
+
 __all__ = [
     "numericos",
-    # Differentiation
-    "derivar",
-    "derivada",
-    # Integration
-    "integrar_definida",
-    "integrar_indefinida",
-    "integrar",
-    # Solving
-    "resolver_ecuacion",
-    "raiz_numerica",
-    # Evaluation
     "evaluar",
-    # ODEs
-    "rk4",
+    "_to_symbol",
+    "_to_expr",
 ]

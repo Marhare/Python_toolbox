@@ -73,54 +73,88 @@ class _Uncertainties:
         Unified quantity constructor (positional-only).
 
         Accepted signatures:
-        1) quantity(value, sigma, unit)         -> measurement only
-        2) quantity(expr, unit)                 -> expression only
-        3) quantity(value, sigma, unit, expr)   -> measurement + expression
+        1) quantity(value, unit)              -> valor con sigma=zeros (sin incertidumbre)
+        2) quantity(value, sigma, unit)       -> valor con incertidumbre
+        3) quantity(expr, unit)               -> expresión solo (si expr es string)
+        4) quantity(value, sigma, unit, expr) -> valor + expresión
 
         Optional keyword:
         - symbol: str | None
 
         Returns a dict with stable keys:
-        - measure: (value, sigma) or None
+        - measure: (value, sigma) where sigma is always an array (never None)
         - result: (value, sigma) or None
         - expr:   None or sympy.Expr / str
         - unit:  str
         - dimension: shape tuple or None
         - symbol: str | None
+        
+        NOTE: If sigma is not provided, it's automatically set to zeros(value.shape)
         """
 
         if len(args) == 4:
+            # quantity(value, sigma, unit, expr)
             value, sigma, unit, expr = args
             if not isinstance(expr, (str, sp.Expr, type(None))):
                 raise TypeError("expr must be a string, sympy.Expr, or None")
+            has_sigma = sigma is not None
 
         elif len(args) == 3:
-            value, sigma, unit = args
-            expr = None
+            # Detectar: ¿es (value, sigma, unit) o (expr, unit, algo)?
+            # Si args[0] es string, es expresión
+            if isinstance(args[0], str):
+                # quantity(expr, unit, ???) - inválido en este contexto
+                raise TypeError(
+                    "quantity(...) with 3 args: use (value, sigma, unit) or (value, unit)"
+                )
+            else:
+                # quantity(value, sigma, unit)
+                value, sigma, unit = args
+                expr = None
+                has_sigma = sigma is not None
 
         elif len(args) == 2:
-            expr, unit = args
-            value = sigma = None
+            # quantity(value, unit) o quantity(expr, unit)
+            arg0, arg1 = args
+            expr = None
+            
+            if isinstance(arg0, str):
+                # quantity(expr_str, unit)
+                expr = arg0
+                value = sigma = None
+                unit = arg1
+                has_sigma = False
+            else:
+                # quantity(value, unit) - sin sigma
+                value = arg0
+                sigma = None
+                unit = arg1
+                has_sigma = False
 
         else:
             raise TypeError(
-                "quantity(...) expects (value, sigma, unit), (expr, unit), "
-                "or (value, sigma, unit, expr)"
+                "quantity(...) expects (value, unit), (value, sigma, unit), "
+                "(expr, unit), or (value, sigma, unit, expr)"
             )
 
-        if value is not None or sigma is not None:
-            if value is None or sigma is None:
-                raise TypeError("Both value and sigma must be provided for measurement")
-
-            # negative sigma check (works for scalars and arrays)
-            if np.any(np.asarray(sigma) < 0):
-                raise ValueError("sigma cannot be negative")
-
-            info = _Uncertainties.checker(value, sigma)
-            sigma_out = info["sigma_vec"] if info["kind"] == "vector" else sigma
-
-            measure = (value, sigma_out)
-            dimension = info["shape"]
+        # Validar measurement
+        if value is not None:
+            # Se proporcionó value
+            if has_sigma and sigma is not None:
+                # Validar que sigma sea válido
+                if np.any(np.asarray(sigma) < 0):
+                    raise ValueError("sigma cannot be negative")
+                info = _Uncertainties.checker(value, sigma)
+                sigma_out = info["sigma_vec"] if info["kind"] == "vector" else sigma
+                measure = (value, sigma_out)
+                dimension = info["shape"]
+            else:
+                # Sin sigma: crear array de zeros automáticamente
+                info = _Uncertainties.checker(value, None)
+                value_arr = np.asarray(value)
+                sigma_out = np.zeros_like(value_arr, dtype=float)
+                measure = (value, sigma_out)
+                dimension = info["shape"]
         else:
             measure = None
             dimension = None
