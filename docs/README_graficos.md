@@ -1,190 +1,337 @@
-# graficos.py
+# graficos.py – Scientific Visualization
 
 ## Purpose
-High‑level scientific visualization based on semantic objects. The user declares **what** to draw and the engine decides **how** to draw it.
 
-## Semantic objects
-- `Serie(x, y, label=None, marker=None)`
-- `SerieConError(x, y, sy=None, sx=None, label=None)`
-- `Histograma(data, bins=30, label=None)`
-- `Ajuste(x, yfit, label=None)`
-- `Banda(x, y_low, y_high, label=None)`
-- `Serie3D(x, y, z, label=None)`
-- `Panel(*objetos)`
-- `Scene(*paneles, layout=None, dims="2D", figsize=None, xlabel=None, ylabel=None, title=None)`
+High-level scientific visualization based on the universal `plot()` function. Express **what you want to visualize** and the engine decides **how to render it**. Supports measurements with uncertainty, symbolic functions, 2D/3D plots, heatmaps, surfaces, and complex multi-panel layouts.
 
-## Plotting engine
-- `plot(*objetos, layout=None, dims="2D", show=True, figsize=None, xlabel=None, ylabel=None, title=None, **kwargs)`
-  - Supports `Scene` as a single argument.
-  - `Panel` groups objects in the same subplot.
+---
 
-## Style
-- Global configuration in `PLOT_DEFAULTS` (palette, size, grid, typography).
-- Style is adjusted with `**kwargs` in `plot()`.
+## The Main Interface: `plot()`
 
-## Saving
-- Integration with `guardar()` (if present in the module) to export to PDF/PNG.
-
-## Notes
-- `Scene` is the recommended unit for animations.
-- `dims="3D"` requires `Serie3D`.
-
-## Examples
 ```python
-import numpy as np
-from graficos import graficos
-
-x = np.linspace(0, 1, 20)
-y = 1 + 2*x
-yfit = y
-serie = graficos.Serie(x, y, label="Datos")
-ajuste = graficos.Ajuste(x, yfit, label="Ajuste")
-graficos.plot(serie, ajuste, title="Datos + Ajuste")
+plot(*objetos, mode=None, layout=None, dims="2D", show=True, figsize=None, 
+     xlabel=None, ylabel=None, zlabel=None, title=None, **kwargs)
 ```
 
-## Mini examples (per function)
+**Parameters:**
+- `*objetos`: Data objects, quantities, Functions, arrays, or semantic types
+- `mode`: Visualization mode: `"scatter"` (default), `"line"`, `"heatmap"`, `"surface"`
+- `dims`: `"2D"` (default) or `"3D"` for 3D visualization
+- `show`: Display the plot (default `True`)
+- `figsize`, `xlabel`, `ylabel`, `title`: Standard plot parameters
+- `**kwargs`: Style customization (color, marker, linestyle, etc.)
 
-### Serie(x, y, label=None, marker=None)
-**Case 1 (typical):** If you do this:
+**Returns:** `(fig, ax)` tuple
+
+---
+
+## Quick Start: Plotting with Quantities
+
+Use `marhare.quantity()` to create measurements with uncertainty and units:
+
 ```python
+import marhare as mh
 import numpy as np
-from graficos import graficos
+
+# Create measurements with uncertainty
+length = mh.quantity(5.23, 0.05, "m", symbol="L")
+time = mh.quantity(2.1, 0.1, "s", symbol="t")
+
+# Plot directly – auto-labels with symbol and unit
+mh.plot(length, time, title="Measurement")
+# X-axis: "L [m]", Y-axis: "t [s]"
+```
+
+---
+
+## Core Visualization Modes
+
+### 1. **Default (Scatter) Mode**
+
+Plot points from arrays or quantities:
+
+```python
+x = np.array([1, 2, 3, 4])
+y = np.array([2, 4, 5.5, 8])
+
+# Simple scatter
+mh.plot(x, y, title="Data Points")
+
+# With error bars
+sy = np.array([0.3, 0.2, 0.4, 0.3])
+mh.plot(x, y, sy=sy, title="Data with Uncertainty")
+```
+
+### 2. **Line Mode: Smooth Curves**
+
+Use `mode="line"` for continuous curves, or pass a `Function`:
+
+```python
+# Fitted curve
+x_fit = np.linspace(0, 5, 100)
+y_fit = 2 * x_fit + 1
+
+mh.plot(x, y, mode="scatter")  # Data
+mh.plot(x_fit, y_fit, mode="line", label="Linear fit")  # Curve
+```
+
+### 3. **Function Mode: Symbolic Evaluation**
+
+Pass a symbolic `Function` – it auto-evaluates on a 400-point dense grid:
+
+```python
+from marhare import Function
+
+x = np.linspace(0, 2*np.pi, 50)
+f = Function("sin(x)")
+g = Function("cos(x)")
+
+# Functions auto-evaluate over the x range
+mh.plot(x, f, label="sin(x)")
+mh.plot(x, g, label="cos(x)", mode="line")
+```
+
+### 4. **Heatmap Mode: 2D Data**
+
+Visualize 2D matrices with color mapping:
+
+```python
+# Create a 2D matrix (e.g., image or temperature field)
+Z = np.random.randn(10, 10)
+
+# Method 1: mode parameter
+mh.plot(Z, mode="heatmap", title="2D Heatmap", figsize=(8, 6))
+
+# Method 2: Semantic object
+from marhare.graphics import Heatmap
+hm = Heatmap(Z, colorbar=True)
+mh.plot(hm, title="2D Heatmap")
+```
+
+**Parameters:** `cmap` (colormap), `colorbar` (show colorbar), `vmin/vmax` (color scale)
+
+### 5. **Surface Mode: 3D Mesh**
+
+Render 3D surfaces from 2D data:
+
+```python
+# 2D array → 3D surface
+Z = np.sin(np.linspace(0, 3, 30)[:, None]) * np.cos(np.linspace(0, 3, 30))
+
+# Method 1: mode parameter + dims="3D"
+mh.plot(Z, mode="surface", dims="3D", title="3D Surface")
+
+# Method 2: Semantic object
+from marhare.graphics import Surface
+surf = Surface(Z)
+mh.plot(surf, dims="3D", title="3D Surface")
+```
+
+---
+
+## Advanced: Working with Quantities
+
+### Auto-Labeled Axes
+
+Quantities automatically format labels as `"symbol [unit]"`:
+
+```python
+import marhare as mh
+
+# Create a measurement series
+x_vals = [10, 20, 30, 40]
+x_unc = [0.5, 0.5, 1.0, 1.0]
+x_qty = mh.quantity(x_vals, x_unc, "cm", symbol="x")
+
+y_vals = [5.2, 10.1, 15.3, 20.0]
+y_unc = [0.2, 0.2, 0.3, 0.3]
+y_qty = mh.quantity(y_vals, y_unc, "s", symbol="t")
+
+# X-axis shows "x [cm]", Y-axis shows "t [s]"
+mh.plot(x_qty, y_qty, title="Time vs Distance")
+```
+
+### Functions with Quantities
+
+Combine symbolic expressions with measured data:
+
+```python
+import marhare as mh
+import numpy as np
+
+# Measured voltage and current
+V = mh.quantity([1.0, 2.0, 3.0], [0.1, 0.1, 0.1], "V", symbol="V")
+I = mh.quantity([0.2, 0.4, 0.6], [0.01, 0.01, 0.01], "A", symbol="I")
+
+# Symbolic function for resistance law
+R_theory = mh.Function("5 * x")  # R = V/I, assuming I proportional to V/5
+
+# Plot measured data and theoretical curve
+mh.plot(I["value"], V["value"], sy=V["result"][1], label="Measured")
+mh.plot(I["value"], R_theory * I["value"], label="R=5Ω", mode="line")
+```
+
+---
+
+## Semantic Objects (Alternative Interface)
+
+For explicit control, use semantic classes:
+
+- **`Serie(x, y, label=None, marker=None)`** – Scatter points
+- **`SerieConError(x, y, sy=None, sx=None, label=None)`** – Points with error bars
+- **`Ajuste(x, yfit, label=None)`** – Smooth fitted curve
+- **`Banda(x, y_low, y_high, label=None)`** – Shaded confidence band
+- **`Histograma(data, bins=30, label=None)`** – Histogram
+- **`Serie3D(x, y, z, label=None)`** – 3D scatter points
+- **`Heatmap(Z, colorbar=True, cmap=None)`** – 2D matrix visualization
+- **`Surface(Z, cmap='viridis')`** – 3D mesh surface
+
+**Example:**
+
+```python
+from marhare.graphics import Serie, SerieConError, Ajuste
 
 x = np.array([1, 2, 3, 4])
-y = np.array([2, 4, 6, 8])
-s = graficos.Serie(x, y, label="y=2x")
-graficos.plot(s)
-```
-You do this: Create a series of points and plot it.
+y = np.array([2.1, 4.0, 5.8, 8.1])
+sy = np.array([0.2, 0.2, 0.3, 0.3])
+yfit = 2*x
 
-You get this:
-```
-Plot with 4 connected points, label "y=2x" in the legend
+data = SerieConError(x, y, sy=sy, label="Measured")
+fit = Ajuste(x, yfit, label="Linear fit y=2x")
+
+mh.plot(data, fit, ylabel="Y value", title="Data and Fit")
 ```
 
-**Case 2 (edge):** If you do this:
+---
+
+## Multi-Panel Layouts with `Panel` and `Scene`
+
+### `Panel`: Group objects in one subplot
+
 ```python
-s = graficos.Serie(np.array([0]), np.array([5]), marker="o")
-graficos.plot(s)
-```
-You do this: A series with a single point and a specific marker.
+from marhare.graphics import Panel
 
-You get this:
-```
-Plot with a circular point at (0, 5)
+data_panel = Panel(
+    SerieConError(x, y, sy=sy, label="Data"),
+    Ajuste(x, yfit, label="Fit")
+)
+residual_panel = Panel(
+    Serie(x, y - yfit, label="Residuals")
+)
+
+mh.plot(data_panel, residual_panel, layout=(1, 2), title="Analysis")
 ```
 
-### SerieConError(x, y, sy=None, sx=None, label=None)
-**Case 1 (typical):** If you do this:
+### `Scene`: Build complex layouts
+
 ```python
-x = np.array([1.0, 2.0, 3.0])
-y = np.array([2.0, 4.1, 5.9])
-sy = np.array([0.2, 0.2, 0.3])
-s = graficos.SerieConError(x, y, sy=sy, label="Datos ±σ")
-graficos.plot(s)
-```
-You do this: Series with error bars in y.
+from marhare.graphics import Scene
 
-You get this:
-```
-Plot with 3 points, each with a vertical uncertainty bar
+scene = Scene(
+    Panel(data, fit, ylabel="Y", title="Data"),
+    Panel(Serie(x, y - yfit), ylabel="Residual", title="Residuals"),
+    layout=(1, 2),
+    figsize=(12, 5),
+    title="Complete Analysis"
+)
+
+mh.plot(scene)
 ```
 
-**Case 2 (edge):** If you do this:
+---
+
+## Style Customization
+
+All style options from `PLOT_DEFAULTS` can be overridden:
+
 ```python
-x = np.array([1.0, 2.0])
-y = np.array([3.0, 4.0])
-sy = np.array([0.0, 0.0])
-s = graficos.SerieConError(x, y, sy=sy)
-graficos.plot(s)
-```
-You do this: SerieConError with zero errors.
-
-You get this:
-```
-Plot without visible error bars (like a normal Serie)
+mh.plot(x, y, 
+    color='red', 
+    marker='s',           # square marker
+    linestyle='--',       # dashed line
+    linewidth=2,
+    markersize=8,
+    grid=True,
+    legend=True
+)
 ```
 
-### Histograma(data, bins=30, label=None)
-**Case 1 (typical):** If you do this:
+---
+
+## Practical Examples
+
+### Example 1: Experimental Data with Fit
+
 ```python
+import marhare as mh
 import numpy as np
-from graficos import graficos
 
-data = np.random.default_rng(0).normal(0, 1, 1000)
-hist = graficos.Histograma(data, bins=40, label="Normal(0,1)")
-graficos.plot(hist)
-```
-You do this: Histogram of 1000 normal samples.
+# Experimental measurements
+x_exp = mh.quantity([1, 2, 3, 4], [0.1, 0.1, 0.1, 0.1], "m", symbol="x")
+y_exp = mh.quantity([2.1, 4.0, 5.9, 8.2], [0.3, 0.3, 0.4, 0.4], "s", symbol="t")
 
-You get this:
-```
-Plot with 40 bins, bell shape centered at 0
+# Fitted model
+x_fit = np.linspace(0.5, 4.5, 100)
+y_fit = 2.05 * x_fit - 0.05
+
+mh.plot(
+    x_exp, y_exp,
+    x_fit, y_fit, mode="line", label="Linear fit",
+    title="Kinematics: Position vs Time"
+)
 ```
 
-**Case 2 (edge):** If you do this:
+### Example 2: 2D Heat Distribution
+
 ```python
-hist = graficos.Histograma(np.array([5.0, 5.0, 5.0]), bins=10)
-graficos.plot(hist)
-```
-You do this: Histogram with identical values.
+# Temperature field
+T = 25 + 10*np.sin(np.linspace(0, np.pi, 50)[:, None]) * \
+        np.cos(np.linspace(0, np.pi, 50))
 
-You get this:
-```
-A single bin with height 3, the rest empty
+mh.plot(T, mode="heatmap", title="Temperature Distribution [°C]", figsize=(8, 6))
 ```
 
-### Ajuste(x, yfit, label=None)
-**Case 1 (typical):** If you do this:
+### Example 3: Function Family
+
 ```python
-x = np.linspace(0, 2, 50)
-yfit = 1 + 0.5*x
-ajuste = graficos.Ajuste(x, yfit, label="y=1+0.5x")
-graficos.plot(ajuste)
-```
-You do this: Plot a fitted curve.
+x = np.linspace(0, 10, 200)
 
-You get this:
-```
-Continuous line from (0,1) to (2,2), labeled
-```
+# Multiple symbolic functions
+f1 = mh.Function("sin(x)")
+f2 = mh.Function("sin(x/2)")
+f3 = mh.Function("sin(2*x)")
 
-**Case 2 (edge):** If you do this:
-```python
-ayuste = graficos.Ajuste(np.array([1.0]), np.array([1.0]))
-graficos.plot(ajuste)
-```
-You do this: Fit with a single point.
-
-You get this:
-```
-A point without a visible line
+mh.plot(x, f1, label="sin(x)", mode="line")
+mh.plot(x, f2, label="sin(x/2)", mode="line", linestyle='--')
+mh.plot(x, f3, label="sin(2x)", mode="line", linestyle=':')
 ```
 
-### Banda(x, y_low, y_high, label=None)
-**Case 1 (typical):** If you do this:
-```python
-x = np.linspace(0, 1, 20)
-y_low = x
-y_high = x + 0.2
-banda = graficos.Banda(x, y_low, y_high, label="Intervalo")
-graficos.plot(banda)
-```
-You do this: Shaded area between two curves.
+---
 
-You get this:
+## Visualization Decision Tree
+
 ```
-Gray or colored area between y=x and y=x+0.2
+Do you have...
+├─ Arrays (x, y)? → Use default scatter or mode="line"
+├─ Uncertainties (σ)? → Quantities auto-label axes
+├─ Symbolic expression? → Use Function class, auto-evaluates
+├─ 2D matrix (Z)? → Use mode="heatmap" or Heatmap object
+├─ 3D surface? → Use mode="surface" or Surface object
+├─ Multiple plots? → Use Panel or Scene
+└─ Error bars + fit + residuals? → Combine semantic objects
 ```
 
-**Case 2 (edge):** If you do this:
-```python
-banda = graficos.Banda(np.array([0, 1]), np.array([1, 1]), np.array([1, 1]))
-graficos.plot(banda)
-```
-You do this: Band with zero thickness (y_low = y_high).
+---
 
-You get this:
-```
-Horizontal line at y=1
-```
+## Common Patterns
+
+| Task | Code |
+|------|------|
+| Simple scatter | `plot(x, y)` |
+| Scatter + error bars | `plot(x, y, sy=sy)` |
+| Smooth curve | `plot(x, y_fit, mode="line")` |
+| Symbolic function | `plot(x, Function("sin(x)"))` |
+| With quantities | `plot(qty_x, qty_y)` → auto-labels |
+| 2D matrix | `plot(Z, mode="heatmap")` |
+| 3D surface | `plot(Z, mode="surface", dims="3D")` |
+| Multiple panels | `plot(Panel(...), Panel(...), layout=(1,2))` |

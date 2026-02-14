@@ -367,17 +367,17 @@ class Scene:
         if dims == "3D":
             for panel in self.paneles:
                 for obj in panel.objetos:
-                    if not isinstance(obj, Series3D):
+                    if not isinstance(obj, (Series3D, Surface)) and not _is_series3d_like(obj) and not _is_surface_like(obj):
                         raise TypeError(
-                            f"Scene con dims='3D' solo acepta objetos Series3D. "
+                            f"Scene con dims='3D' solo acepta objetos Series3D o Surface. "
                             f"Encontrado: {type(obj).__name__}"
                         )
         elif dims == "2D":
             for panel in self.paneles:
                 for obj in panel.objetos:
-                    if isinstance(obj, Series3D):
+                    if isinstance(obj, (Series3D, Surface)) or _is_series3d_like(obj) or _is_surface_like(obj):
                         raise TypeError(
-                            f"Scene con dims='2D' no acepta objetos Series3D. "
+                            f"Scene con dims='2D' no acepta objetos Series3D ni Surface. "
                             f"Usa dims='3D' o cambia a objetos 2D."
                         )
         
@@ -387,6 +387,79 @@ class Scene:
         self.xlabel = xlabel
         self.ylabel = ylabel
         self.title = title
+
+
+@dataclass
+class Heatmap:
+    """
+    2D grid with color intensity (matrix visualization).
+    
+    INPUT:
+        data: array_like -> 2D array (m x n) with values to display as colors
+        x_edges: array_like | None -> bin edges or positions in X (optional)
+        y_edges: array_like | None -> bin edges or positions in Y (optional)
+        label: str | None -> label for colorbar
+        cmap: str -> colormap name ('viridis', 'plasma', 'hot', etc.)
+    
+    PURPOSE:
+        "I want to visualize a 2D distribution or matrix as a color intensity plot"
+        The engine automatically applies colorbar and scaling.
+    """
+    data: np.ndarray = field(default_factory=lambda: np.array([]))
+    x_edges: Optional[np.ndarray] = None
+    y_edges: Optional[np.ndarray] = None
+    label: Optional[str] = None
+    cmap: str = "viridis"
+
+    def __post_init__(self):
+        self.data = np.asarray(self.data, dtype=float)
+        if self.data.ndim != 2:
+            raise ValueError(f"Heatmap data must be 2D, got shape {self.data.shape}")
+        if self.x_edges is not None:
+            self.x_edges = np.asarray(self.x_edges, dtype=float)
+        if self.y_edges is not None:
+            self.y_edges = np.asarray(self.y_edges, dtype=float)
+    
+    def __hash__(self):
+        return id(self)
+
+
+@dataclass
+class Surface:
+    """
+    3D surface plot (mesh grid visualization).
+    
+    INPUT:
+        x: array_like -> X coordinates (1D or 2D grid)
+        y: array_like -> Y coordinates (1D or 2D grid)  
+        z: array_like -> Z values (2D grid, m x n)
+        label: str | None -> label for colorbar
+        cmap: str -> colormap name ('viridis', 'plasma', 'hot', etc.)
+        alpha: float -> transparency (0-1)
+    
+    PURPOSE:
+        "I want to visualize a 3D surface or mesh"
+        Requires dims="3D" in plot().
+        The engine automatically creates a 3D mesh and applies colormap.
+    """
+    x: np.ndarray = field(default_factory=lambda: np.array([]))
+    y: np.ndarray = field(default_factory=lambda: np.array([]))
+    z: np.ndarray = field(default_factory=lambda: np.array([]))
+    label: Optional[str] = None
+    cmap: str = "viridis"
+    alpha: float = 0.9
+
+    def __post_init__(self):
+        self.x = np.asarray(self.x, dtype=float)
+        self.y = np.asarray(self.y, dtype=float)
+        self.z = np.asarray(self.z, dtype=float)
+        if self.z.ndim != 2:
+            raise ValueError(f"Surface z must be 2D, got shape {self.z.shape}")
+        if self.alpha < 0 or self.alpha > 1:
+            raise ValueError(f"Surface alpha must be in [0,1], got {self.alpha}")
+    
+    def __hash__(self):
+        return id(self)
 
 
 # ============================================================
@@ -592,18 +665,31 @@ def _is_band_like(obj: Any) -> bool:
 
 
 def _is_series_like(obj: Any) -> bool:
-    return hasattr(obj, "x") and hasattr(obj, "y")
+    return hasattr(obj, "x") and hasattr(obj, "y") and not hasattr(obj, "z")
+
+
+def _is_heatmap_like(obj: Any) -> bool:
+    return hasattr(obj, "data") and getattr(obj.data, "ndim", 0) == 2
+
+
+def _is_surface_like(obj: Any) -> bool:
+    return (
+        hasattr(obj, "x") and hasattr(obj, "y") and hasattr(obj, "z") 
+        and getattr(obj.z, "ndim", 0) == 2
+    )
 
 
 def _is_semantic_like(obj: Any) -> bool:
     return (
         _is_scene_like(obj)
         or _is_panel_like(obj)
-        or isinstance(obj, (Series, SeriesWithError, Histogram, Fit, Band, Series3D))
+        or isinstance(obj, (Series, SeriesWithError, Histogram, Fit, Band, Series3D, Heatmap, Surface))
         or _is_series_with_error_like(obj)
         or _is_histogram_like(obj)
         or _is_fit_like(obj)
         or _is_band_like(obj)
+        or _is_heatmap_like(obj)
+        or _is_surface_like(obj)
         or _is_series3d_like(obj)
         or _is_series_like(obj)
     )
@@ -753,6 +839,7 @@ def plot(
     hist: Optional[Any] = None,
     ax: Optional[plt.Axes] = None,
     as_line: bool = False,
+    mode: Optional[str] = None,
     **kwargs
 ) -> Union[Scene, Tuple[plt.Figure, Union[plt.Axes, np.ndarray]]]:
     """
@@ -779,6 +866,9 @@ def plot(
         ax: matplotlib.axes.Axes | None -> draw into a provided axis (single panel)
         as_line: bool -> if True, draw array data as line instead of scatter (default: False)
             Function objects are ALWAYS drawn as lines (evaluated on 400-point dense grid)
+        mode: str | None -> visualization mode: None (auto), "scatter", "line", "heatmap", "surface"
+            "heatmap": plot(Z, mode="heatmap") - creates Heatmap from 2D array
+            "surface": plot(x, y, Z, mode="surface") - creates Surface from 1D x, y and 2D Z
         **kwargs: style options (dpi, grid_alpha, lw, etc.)
             ALWAYS applied (even with Scene)
     
@@ -794,6 +884,8 @@ def plot(
         fig, ax = mh.plot(x, y)  # scatter plot (default for arrays)
         fig, ax = mh.plot(x, y, as_line=True)  # draw as line
         fig, ax = mh.plot(x, f)  # f is Function: draws as smooth curve (400 points)
+        fig, ax = mh.plot(Z, mode="heatmap")  # heatmap from 2D array
+        fig, ax = mh.plot(x, y, Z, mode="surface")  # 3D surface
         fig, ax = mh.plot(x, y, show=False)  # no mostrar aún, guardar figura
         
         # Con Scene (manejo de estructura)
@@ -817,6 +909,48 @@ def plot(
     # Constructor mode: build a Scene from raw data
     return_scene = False
     constructor_mode = False
+    
+    # Check for mode-specific constructor calls (BEFORE normal constructor_mode detection)
+    if mode == "heatmap":
+        if len(objetos) != 1:
+            raise ValueError("plot(Z, mode='heatmap') requires exactly 1 argument (2D array)")
+        Z = objetos[0]
+        if _is_quantity_like(Z):
+            Z_value, _ = value_quantity(Z)
+            Z = Z_value
+        Z_arr = np.asarray(Z, dtype=float)
+        if Z_arr.ndim != 2:
+            raise ValueError(f"Heatmap requires 2D array, got shape {Z_arr.shape}")
+        heatmap_obj = Heatmap(data=Z_arr)
+        scene = Scene(heatmap_obj, dims="2D")
+        objetos = (scene,)
+        # Don't set constructor_mode=True; let the Scene be processed normally below
+    
+    elif mode == "surface":
+        if len(objetos) != 3:
+            raise ValueError("plot(x, y, Z, mode='surface') requires exactly 3 arguments")
+        x, y, Z = objetos
+        if _is_quantity_like(x):
+            x, _ = value_quantity(x)
+        if _is_quantity_like(y):
+            y, _ = value_quantity(y)
+        if _is_quantity_like(Z):
+            Z, _ = value_quantity(Z)
+        x_arr = np.asarray(x, dtype=float)
+        y_arr = np.asarray(y, dtype=float)
+        Z_arr = np.asarray(Z, dtype=float)
+        if Z_arr.ndim != 2:
+            raise ValueError(f"Surface Z must be 2D, got shape {Z_arr.shape}")
+        surface_obj = Surface(x=x_arr, y=y_arr, z=Z_arr)
+        scene = Scene(surface_obj, dims="3D")
+        dims = "3D"  # Force 3D for surface
+        objetos = (scene,)
+        # Don't set constructor_mode=True; let the Scene be processed normally below
+    
+    elif mode and mode not in (None, "scatter", "line"):
+        raise ValueError(f"Invalid mode: {mode}. Choose from: None, 'scatter', 'line', 'heatmap', 'surface'")
+    
+    # Normal constructor_mode detection (only if not already handled by mode)
     if hist is not None or y_fit is not None or yerr is not None or bands is not None:
         constructor_mode = True
     elif len(objetos) == 2 and not _is_semantic_like(objetos[0]) and not _is_semantic_like(objetos[1]):
@@ -879,7 +1013,16 @@ def plot(
                     yerr = y_sigma
             
             # Use Fit (line) if as_line=True or if y was a Function
-            if use_as_line and yerr is None:
+            if mode == "line":
+                # Force line mode
+                series_obj = Fit(x, y, label=series_label)
+            elif mode == "scatter":
+                # Force scatter mode
+                if yerr is not None:
+                    series_obj = SeriesWithError(x, y, sy=yerr, label=series_label)
+                else:
+                    series_obj = Series(x, y, label=series_label)
+            elif use_as_line and yerr is None:
                 # Draw as line (Fit object)
                 series_obj = Fit(x, y, label=series_label)
             elif yerr is not None:
@@ -1063,7 +1206,7 @@ def _plot_object(obj: Any, ax: plt.Axes, cfg: Dict[str, Any]):
     Internal dispatcher: draw object on axis by type.
     
     INPUT:
-        obj: Series, SeriesWithError, Histogram, Fit, Band, Series3D
+        obj: Series, SeriesWithError, Histogram, Fit, Band, Series3D, Heatmap, Surface
         ax: matplotlib.axes.Axes or Axes3D
         cfg: configuration dictionary
     
@@ -1077,20 +1220,25 @@ def _plot_object(obj: Any, ax: plt.Axes, cfg: Dict[str, Any]):
     is_3d_axis = _is_axis_3d(ax)
     
     # Validar compatibilidad 2D/3D
-    if isinstance(obj, Series3D) or _is_series3d_like(obj):
+    if isinstance(obj, (Series3D, Surface)) or _is_series3d_like(obj) or _is_surface_like(obj):
         if not is_3d_axis:
-            raise TypeError("Series3D requires dims='3D'. Use plot(..., dims='3D')")
-        return _plot_series3d(obj, ax, cfg)
+            raise TypeError("Series3D and Surface require dims='3D'. Use plot(..., dims='3D')")
+        if isinstance(obj, Surface) or _is_surface_like(obj):
+            return _plot_surface(obj, ax, cfg)
+        else:
+            return _plot_series3d(obj, ax, cfg)
     else:
-        # 2D objects (Series, SeriesWithError, etc.)
+        # 2D objects (Series, SeriesWithError, Histogram, Fit, Band, Heatmap)
         if is_3d_axis:
-            tipos_2d = "Series, SeriesWithError, Histogram, Fit, Band"
-            raise TypeError(f"2D objects ({tipos_2d}) cannot be drawn on 3D axes. Use dims='2D' or Series3D")
+            tipos_2d = "Series, SeriesWithError, Histogram, Fit, Band, Heatmap"
+            raise TypeError(f"2D objects ({tipos_2d}) cannot be drawn on 3D axes. Use dims='2D' or Series3D/Surface")
 
         if isinstance(obj, SeriesWithError) or _is_series_with_error_like(obj):
             return _plot_series_with_error(obj, ax, cfg)
         elif isinstance(obj, Histogram) or _is_histogram_like(obj):
             return _plot_histogram(obj, ax, cfg)
+        elif isinstance(obj, Heatmap) or _is_heatmap_like(obj):
+            return _plot_heatmap(obj, ax, cfg)
         elif isinstance(obj, Fit) or _is_fit_like(obj):
             return _plot_fit(obj, ax, cfg)
         elif isinstance(obj, Band) or _is_band_like(obj):
@@ -1165,6 +1313,44 @@ def _plot_histogram(obj: Histogram, ax: plt.Axes, cfg: Dict[str, Any]):
     return artist
 
 
+def _plot_heatmap(obj: Heatmap, ax: plt.Axes, cfg: Dict[str, Any]):
+    """
+    Draw a 2D heatmap (matrix visualization with color intensity).
+    
+    INPUT:
+        obj: Heatmap with data (2D array), x_edges, y_edges
+        ax: matplotlib.axes.Axes (2D)
+        cfg: configuration dictionary
+    
+    NOTES:
+        - Uses ax.imshow() or pcolormesh() depending on edge arrays
+        - Automatically adds colorbar
+        - Respects aspect='auto' for non-square grids
+    """
+    if obj.x_edges is not None and obj.y_edges is not None:
+        # Use pcolormesh for explicit edges
+        artist = ax.pcolormesh(
+            obj.x_edges, obj.y_edges, obj.data.T,
+            cmap=obj.cmap,
+            shading='auto'
+        )
+    else:
+        # Use imshow for regular array
+        artist = ax.imshow(
+            obj.data,
+            cmap=obj.cmap,
+            aspect='auto',
+            origin='lower',
+            interpolation='nearest'
+        )
+    
+    cbar = plt.colorbar(artist, ax=ax)
+    if obj.label:
+        cbar.set_label(obj.label)
+    
+    return artist
+
+
 def _plot_fit(obj: Fit, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a fitted curve (smooth line).
@@ -1190,6 +1376,44 @@ def _plot_band(obj: Band, ax: plt.Axes, cfg: Dict[str, Any]):
         alpha=0.2,
         linewidth=0,
     )
+    return artist
+
+
+def _plot_surface(obj: Surface, ax, cfg: Dict[str, Any]):
+    """
+    Draw a 3D surface (mesh with color mapping).
+    
+    INPUT:
+        obj: Surface with x, y, z (2D grids or 1D arrays)
+        ax: Axes3D (axis with projection="3d")
+        cfg: configuration dictionary
+    
+    NOTES:
+        - Requires mpl_toolkits.mplot3d
+        - x, y can be 1D arrays (will be meshgrid-ed) or 2D arrays
+        - z must be 2D array matching the grid shape
+        - Adds colorbar for Z values
+    """
+    # Handle 1D arrays: convert to 2D meshgrid
+    if obj.x.ndim == 1 and obj.y.ndim == 1:
+        X, Y = np.meshgrid(obj.x, obj.y)
+    else:
+        X, Y = obj.x, obj.y
+    
+    # Create surface
+    artist = ax.plot_surface(
+        X, Y, obj.z,
+        cmap=obj.cmap,
+        alpha=obj.alpha,
+        linewidth=0,
+        antialiased=True
+    )
+    
+    # Add colorbar
+    cbar = plt.colorbar(artist, ax=ax, shrink=0.5, aspect=5)
+    if obj.label:
+        cbar.set_label(obj.label)
+    
     return artist
 
 
@@ -1561,6 +1785,8 @@ class _Graphics:
     Fit = Fit
     Band = Band
     Series3D = Series3D
+    Heatmap = Heatmap
+    Surface = Surface
     Panel = Panel
     Scene = Scene
     Figure = Figure
