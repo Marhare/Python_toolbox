@@ -1,251 +1,182 @@
-# estadistica.py
+# statistics.py - Statistics with Quantity Support
 
 ## Purpose
-Descriptive statistics, confidence intervals, and hypothesis tests with a simple API.
+Descriptive statistics, confidence intervals, and hypothesis tests, designed to work naturally with `quantity` objects. The workflow is:
 
-## Descriptive statistics
-- `media(x)`
-- `varianza(x, ddof=1)`
-- `desviacion_tipica(x, ddof=1)`
-- `error_estandar(x)`
+1. Build measurements with `quantity()`
+2. Extract numeric arrays with `value_quantity()`
+3. Apply statistical functions on the numeric arrays
+4. Wrap results back into a `quantity` for reporting or LaTeX
 
-## Weighted statistics
-- `media_ponderada(x, w=None, sigma=None)`
-- `varianza_ponderada(x, w=None, sigma=None, ddof=1, tipo="frecuentista")`
+---
 
-## Confidence intervals
-- `intervalo_confianza(x, nivel=0.95, distribucion="normal", sigma=None)`
-  - Normal, Poisson, or Binomial depending on `distribucion`.
+## Quick Start (Quantity Workflow)
 
-## Hypothesis tests
-- `test_media(x, mu0, alternativa="dos_colas", distribucion="normal", sigma=None)`
-  - Normal: z‑test if `sigma` is known, t‑test otherwise.
-  - Poisson: exact test for the rate.
-  - Binomial: exact test for the probability.
-
-- `test_ks(x, distribucion="normal")`
-  - KS goodness‑of‑fit for normal or uniform.
-
-## Output
-Methods return dictionaries with statistics, p‑values, and metadata (`n`, `df`, etc.).
-
-## Typical errors
-- Empty samples or invalid sizes.
-- Parameters out of range (e.g. `sigma <= 0`, `nivel` outside (0,1)).
-- Unsupported distributions.
-
-## Examples
 ```python
+import marhare as mh
 import numpy as np
-from estadistica import estadistica
 
-x = np.random.default_rng(0).normal(0, 1, 30)
-media = estadistica.media(x)
-ic = estadistica.intervalo_confianza(x, nivel=0.95, distribucion="normal")
-test = estadistica.test_media(x, mu0=0.0, distribucion="normal")
+# 1) Create a quantity with repeated measurements
+times = mh.quantity(
+    np.array([2.15, 2.18, 2.12, 2.20, 2.16]),
+    np.array([0.05, 0.05, 0.05, 0.05, 0.05]),
+    "s",
+    symbol="t"
+)
+
+# 2) Extract numeric values
+values, sigmas = mh.value_quantity(times)
+
+# 3) Compute statistics
+t_mean = mh.mean(values)
+t_se = mh.standard_error(values)
+ci = mh.confidence_interval(values, nivel=0.95, distribucion="normal")
+
+# 4) Wrap back into a quantity
+t_summary = mh.quantity(t_mean, t_se, "s", symbol="\\bar{t}")
+
+print(t_summary)
+print(ci)
 ```
 
-## Mini examples (per function)
+---
 
-### media(x)
-**Case 1 (typical):** If you do this:
+## Descriptive Statistics
+
+All functions accept `array_like` numeric data. When using a `quantity`, extract its values first.
+
+- `mean(x)`
+- `variance(x, ddof=1)`
+- `standard_deviation(x, ddof=1)`
+- `standard_error(x)`
+
+**Example (from quantity):**
+
 ```python
-x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-media = estadistica.media(x)
-```
-You do this: Calculates the average of 5 values.
-
-You get this:
-```
-3.0
+values, _ = mh.value_quantity(times)
+mu = mh.mean(values)
+s = mh.standard_deviation(values)
+se = mh.standard_error(values)
 ```
 
-**Case 2 (edge):** If you do this:
+---
+
+## Weighted Statistics
+
+Use measurement uncertainties as inverse-variance weights with `sigma=`.
+
+- `weighted_mean(x, w=None, sigma=None)`
+- `weighted_variance(x, w=None, sigma=None, ddof=1, tipo="frecuentista")`
+
+**Example (weights from quantity sigmas):**
+
 ```python
-x = np.array([0.0])
-media = estadistica.media(x)
-```
-You do this: Calculates the mean of a single value.
-
-You get this:
-```
-0.0
+values, sigmas = mh.value_quantity(times)
+mu_w = mh.weighted_mean(values, sigma=sigmas)
+var_w = mh.weighted_variance(values, sigma=sigmas)
 ```
 
-### varianza(x, ddof=1)
-**Case 1 (typical):** If you do this:
+---
+
+## Confidence Intervals
+
+- `confidence_interval(x, nivel=0.95, distribucion="normal", sigma=None)`
+
+Supported distributions:
+- `"normal"`
+- `"poisson"`
+- `"binomial"`
+
+**Example:**
+
 ```python
-x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-varianza = estadistica.varianza(x, ddof=1)
-```
-You do this: Calculates the sample variance (n-1).
-
-You get this:
-```
-2.5
+values, _ = mh.value_quantity(times)
+ci = mh.confidence_interval(values, nivel=0.95, distribucion="normal")
+print(ci)
 ```
 
-**Case 2 (edge):** If you do this:
+---
+
+## Hypothesis Tests
+
+- `mean_test(x, mu0, alternativa="dos_colas", distribucion="normal", sigma=None)`
+- `ks_test(x, distribucion="normal")`
+
+**Example (mean test with quantity):**
+
 ```python
-x = np.array([5.0, 5.0, 5.0])
-varianza = estadistica.varianza(x)
-```
-You do this: Calculates variance when all values are identical.
-
-You get this:
-```
-0.0
+values, _ = mh.value_quantity(times)
+test = mh.mean_test(values, mu0=2.0, alternativa="dos_colas", distribucion="normal")
+print(test)
 ```
 
-### desviacion_tipica(x, ddof=1)
-**Case 1 (typical):** If you do this:
+---
+
+## Full Example: Quantity -> Stats -> LaTeX
+
 ```python
-x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-std = estadistica.desviacion_tipica(x)
-```
-You do this: Calculates the standard deviation.
+import marhare as mh
+import numpy as np
 
-You get this:
-```
-1.5811388...
-```
+measurements = mh.quantity(
+    np.array([9.78, 9.81, 9.79, 9.82, 9.80]),
+    np.array([0.04, 0.04, 0.05, 0.04, 0.04]),
+    "m/s^2",
+    symbol="g"
+)
 
-**Case 2 (edge):** If you do this:
-```python
-x = np.array([0.0, 0.0])
-std = estadistica.desviacion_tipica(x, ddof=0)
-```
-You do this: Population standard deviation.
+values, sigmas = mh.value_quantity(measurements)
 
-You get this:
-```
-0.0
-```
+g_mean = mh.weighted_mean(values, sigma=sigmas)
+g_se = mh.standard_error(values)
 
-### error_estandar(x)
-**Case 1 (typical):** If you do this:
-```python
-x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-se = estadistica.error_estandar(x)
-```
-You do this: Calculates standard error (σ/√n).
+g_summary = mh.quantity(g_mean, g_se, "m/s^2", symbol="\\bar{g}")
+tex = mh.latex_quantity(g_summary, cifras=2)
 
-You get this:
-```
-0.7071067...
+print(tex)
 ```
 
-**Case 2 (edge):** If you do this:
-```python
-x = np.array([10.0])
-se = estadistica.error_estandar(x)
-```
-You do this: Standard error with a single sample (σ/√1).
+---
 
-You get this:
-```
-nan
-```
+## Output Format
 
-### media_ponderada(x, w=None, sigma=None)
-**Case 1 (typical):** If you do this:
-```python
-x = np.array([1.0, 2.0, 3.0])
-w = np.array([1.0, 2.0, 1.0])
-mean_w = estadistica.media_ponderada(x, w=w)
-```
-You do this: Calculates weighted mean with weights [1, 2, 1].
+Statistical tests and confidence intervals return dictionaries with:
 
-You get this:
-```
-2.0
-```
+- `estadistico`
+- `p_valor`
+- `rechaza`
+- `n`
+- `grados_libertad`
 
-**Case 2 (edge):** If you do this:
-```python
-x = np.array([5.0, 10.0])
-sigma = np.array([1.0, 0.1])
-mean_w = estadistica.media_ponderada(x, sigma=sigma)
-```
-You do this: Uses inverse‑variance weights to minimize error.
+---
 
-You get this:
-```
-9.917355...
-```
+## Typical Errors
 
-### intervalo_confianza(x, nivel=0.95, distribucion="normal", sigma=None)
-**Case 1 (typical):** If you do this:
-```python
-x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-ic = estadistica.intervalo_confianza(x, nivel=0.95)
-```
-You do this: Computes a 95% CI with a normal distribution.
+- Empty samples or invalid sizes
+- Non-finite values (NaN or inf)
+- Parameters out of range (e.g., `sigma <= 0`, `nivel` outside (0, 1))
+- Unsupported distribution names
 
-You get this:
-```
-{'media': 3.0, 'lower': 0.627..., 'upper': 5.372..., 'error': 2.372..., 'n': 5, 'sigma': 1.581...}
-```
+---
 
-**Case 2 (edge):** If you do this:
-```python
-x = np.array([2.0, 2.0, 2.0, 2.0])
-ic = estadistica.intervalo_confianza(x, nivel=0.99)
-```
-You do this: CI with zero variance and high confidence.
+## Reference
 
-You get this:
-```
-{'media': 2.0, 'lower': 2.0, 'upper': 2.0, 'error': 0.0, ...}
-```
+| Function | Purpose |
+|----------|---------|
+| `mean(x)` | Arithmetic mean |
+| `variance(x, ddof)` | Sample variance |
+| `standard_deviation(x, ddof)` | Sample standard deviation |
+| `standard_error(x)` | Standard error of the mean |
+| `weighted_mean(x, w, sigma)` | Weighted mean (use `sigma` for inverse-variance weights) |
+| `weighted_variance(x, w, sigma, ddof, tipo)` | Weighted variance |
+| `confidence_interval(x, nivel, distribucion, sigma)` | Confidence interval |
+| `mean_test(x, mu0, alternativa, distribucion, sigma)` | Mean hypothesis test |
+| `ks_test(x, distribucion)` | Kolmogorov-Smirnov test |
 
-### test_media(x, mu0, alternativa="dos_colas", distribucion="normal", sigma=None)
-**Case 1 (typical):** If you do this:
-```python
-x = np.array([1.1, 1.9, 2.1, 1.8, 2.0])
-test = estadistica.test_media(x, mu0=2.0, alternativa="dos_colas")
-```
-You do this: Two‑sided t‑test against μ₀=2.0.
+---
 
-You get this:
-```
-{'media': 1.78, 'sigma_x': 0.450..., 't': -1.094..., 'p_valor': 0.346..., 'rechaza': False}
-```
+## Next Steps
 
-**Case 2 (edge):** If you do this:
-```python
-x = np.array([5.0, 5.0, 5.0])
-test = estadistica.test_media(x, mu0=5.0)
-```
-You do this: Test against a value equal to the data.
-
-You get this:
-```
-{'media': 5.0, 'sigma_x': 0.0, 't': 'inf' or 'nan', 'p_valor': 1.0 or nan, 'rechaza': False}
-```
-
-### test_ks(x, distribucion="normal")
-**Case 1 (typical):** If you do this:
-```python
-rng = np.random.default_rng(42)
-x = rng.normal(0, 1, 50)
-test = estadistica.test_ks(x, distribucion="normal")
-```
-You do this: Kolmogorov‑Smirnov test on a normal sample.
-
-You get this:
-```
-{'estadistico': 0.089..., 'p_valor': 0.689..., 'rechaza': False}
-```
-
-**Case 2 (edge):** If you do this:
-```python
-x = np.linspace(0, 100, 100)
-test = estadistica.test_ks(x, distribucion="uniforme")
-```
-You do this: KS test for a uniform distribution.
-
-You get this:
-```
-{'estadistico': ~0.0, 'p_valor': > 0.9, 'rechaza': False}
-```
+- See [README_incertidumbres.md](README_incertidumbres.md) to build `quantity` objects
+- See [README_latex_tools.md](README_latex_tools.md) to export statistical results to LaTeX
+- See [README_graficos.md](README_graficos.md) to plot measurements and summaries

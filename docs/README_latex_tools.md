@@ -45,6 +45,56 @@ print(tex)
 # Output: $g = 9.81 \pm 0.01 \, \mathrm{m/s^2}$
 ```
 
+**Tables from multiple magnitudes (auto column names):**
+
+`latex_quantity()` accepts a list of quantity dicts. Column names are derived
+automatically from each magnitude symbol and unit.
+
+```python
+import marhare as mh
+import numpy as np
+
+# Two vector magnitudes with symbols and units
+V = mh.quantity(np.array([1.0, 2.0, 3.0]), np.array([0.1, 0.1, 0.1]), "V", symbol="V")
+I = mh.quantity(np.array([0.2, 0.4, 0.6]), np.array([0.01, 0.01, 0.01]), "A", symbol="I")
+
+tex = mh.latex_quantity([V, I], cifras=2)
+print(tex)
+# Output:
+# \begin{tabular}{cc}
+# \hline
+# V (V) & I (A) \\
+# \hline
+# (1.00 \pm 0.10) & (0.20 \pm 0.01) \\
+# (2.00 \pm 0.10) & (0.40 \pm 0.01) \\
+# (3.00 \pm 0.10) & (0.60 \pm 0.01) \\
+# \hline
+# \end{tabular}
+```
+
+**Scalar magnitudes table (auto headers):**
+
+```python
+import marhare as mh
+
+m = mh.quantity(1.250, 0.010, "kg", symbol="m")
+v = mh.quantity(2.50, 0.05, "m/s", symbol="v")
+E = mh.quantity(3.90, 0.10, "J", symbol="E_k")
+
+tex = mh.latex_quantity([m, v, E], cifras=2)
+print(tex)
+# Output:
+# \begin{tabular}{cc}
+# \hline
+# Magnitud & Valor \\
+# \hline
+# m & (1.25 \pm 0.01)\,\mathrm{kg} \\
+# v & (2.50 \pm 0.05)\,\mathrm{m/s} \\
+# E_k & (3.90 \pm 0.10)\,\mathrm{J} \\
+# \hline
+# \end{tabular}
+```
+
 ---
 
 ### 2. **`valor_pm(value, sigma=None, unidad=None, cifras=2, siunitx=False, ...)`** — Scalar & Vector Formatting
@@ -129,40 +179,6 @@ print(f"{v} ± {s}")
 
 ---
 
-### 4. **`exportar(filename, contenido, modo="w")`** — Save to File
-
-**Purpose:** Write LaTeX strings to `.tex` files for document inclusion.
-
-**Syntax:**
-```python
-exportar(filename, contenido, modo="w")
-```
-
-**Example:**
-
-```python
-import marhare as mh
-
-# Create several measurements
-measurements_tex = """\\section{Results}
-
-\\subsection{Electrical Properties}
-
-$R = 4.7 \\pm 0.2 \\, \\Omega$
-
-$P = 21.5 \\pm 0.8 \\, \\text{W}$
-
-\\subsection{Thermal Data}
-
-$T = (25.3 \\pm 0.5) \\, ^\\circ\\text{C}$
-"""
-
-# Export to file
-mh.exportar("results.tex", measurements_tex)
-```
-
----
-
 ## Practical Workflows
 
 ### Workflow 1: Single Scalar Measurement
@@ -178,17 +194,6 @@ g_exp = mh.quantity(9.754, 0.084, "m/s²", symbol="g_{\\text{exp}}")
 # 2. Format for LaTeX
 tex = mh.latex_quantity(g_exp, cifras=2)
 # Output: $g_{\text{exp}} = 9.75 \pm 0.08 \, \mathrm{m/s^2}$
-
-# 3. Write to document
-with open("measurements.tex", "w") as f:
-    f.write(f"\\newcommand{{\\gexp}}{{{tex}}}\n")
-
-# In LaTeX source:
-# \documentclass{article}
-# \input{measurements.tex}
-# \begin{document}
-# Experimental result: \gexp
-# \end{document}
 ```
 
 ---
@@ -214,9 +219,6 @@ R_computed = mh.propagate_quantity("R", magnitudes)
 # 4. Format for publication
 tex = mh.latex_quantity(R_computed, cifras=2)
 # Output: $R = 5.0 \pm 0.2 \, \Omega$
-
-# Export
-mh.exportar("ohms_law_result.tex", tex)
 ```
 
 ---
@@ -238,33 +240,31 @@ times = mh.quantity(
 )
 
 # Calculate mean and std dev
-t_mean = times['measure'][0].mean()
-t_std = times['measure'][0].std() / np.sqrt(len(times['measure'][0]))
+# Extract numeric values from quantity
+values, _ = mh.value_quantity(times)
+
+# Calculate statistics using statistics.py
+t_mean = mh.mean(values)
+t_se = mh.standard_error(values)
 
 # Create summary quantity
-t_summary = mh.quantity(t_mean, t_std, "s", symbol="\\bar{t}")
+t_summary = mh.quantity(t_mean, t_se, "s", symbol="\\bar{t}")
 tex = mh.latex_quantity(t_summary, cifras=2)
 
-# Use in table
-with open("table_results.tex", "w") as f:
-    f.write(f"""
-\\begin{{table}}
-\\centering
-\\begin{{tabular}}{{ll}}
-\\hline
-Measurement & Time (s) \\\\
-\\hline
-1 & 2.15 ± 0.05 \\\\
-2 & 2.18 ± 0.05 \\\\
-3 & 2.12 ± 0.05 \\\\
-4 & 2.20 ± 0.05 \\\\
-5 & 2.16 ± 0.05 \\\\
-\\hline
-Mean & {tex} \\\\
-\\hline
-\\end{{tabular}}
-\\end{{table}}
-""")
+# Output:
+# \begin{tabular}{ll}
+# \hline
+# Measurement & Time (s) \\
+# \hline
+# 1 & $2.15 \pm 0.05$ \\
+# 2 & $2.18 \pm 0.05$ \\
+# 3 & $2.12 \pm 0.05$ \\
+# 4 & $2.20 \pm 0.05$ \\
+# 5 & $2.16 \pm 0.05$ \\
+# \hline
+# Mean & {tex} \\
+# \hline
+# \end{tabular}
 ```
 
 ---
@@ -290,11 +290,13 @@ for name, qty in properties.items():
     tex = mh.latex_quantity(qty, cifras=2)
     tex_lines.append(f"\\item {name.replace('_', ' ').title()}: {tex}")
 
-# Write to document
-with open("material_properties.tex", "w") as f:
-    f.write("\\begin{itemize}\n")
-    f.write("\n".join(tex_lines))
-    f.write("\n\\end{itemize}\n")
+# Output:
+# \begin{itemize}
+# \item Density: ...
+# \item Melting Point: ...
+# \item Conductivity: ...
+# \item Resistivity: ...
+# \end{itemize}
 ```
 
 ---
@@ -331,7 +333,7 @@ print(f"{v} ± {s}")
 
 ## Integration with Graphics
 
-Plot measurements and export to LaTeX:
+Plot measurements and format for LaTeX:
 
 ```python
 import marhare as mh
@@ -351,10 +353,9 @@ y_mean = mh.quantity(y['measure'][0].mean(), 0.15, "s", symbol="\\bar{t}")
 tex_x = mh.latex_quantity(x_mean)
 tex_y = mh.latex_quantity(y_mean)
 
-# Write summary to file
-with open("summary.tex", "w") as f:
-    f.write(f"Mean distance: {tex_x}\n")
-    f.write(f"Mean time: {tex_y}\n")
+# Output:
+# Mean distance: {tex_x}
+# Mean time: {tex_y}
 ```
 
 ---
@@ -371,10 +372,6 @@ g = mh.quantity(9.81, 0.02, "m/s^2", symbol="g")
 tex = mh.latex_quantity(g, cifras=2, siunitx=True)
 print(tex)
 # Output: \SI{9.81 \pm 0.02}{\meter\per\second\squared}
-
-# In preamble:
-# \usepackage{siunitx}
-# \sisetup{uncertainty-mode=separate}
 ```
 
 ---
@@ -388,8 +385,7 @@ print(tex)
 | Format array as table | `valor_pm(arr, arr_unc)` |
 | Round before formatting | `redondeo_incertidumbre(v, s)` then format |
 | With siunitx | `latex_quantity(q, siunitx=True)` |
-| Save to file | `exportar("file.tex", tex)` |
-| Include in document | `\documentclass{...} \input{file.tex}` |
+| Vector magnitudes table | `latex_quantity([q1, q2, ...])` |
 
 ---
 
@@ -398,7 +394,7 @@ print(tex)
 | Problem | Cause | Solution |
 |---------|-------|----------|
 | Uncertainty has too many decimals | `cifras` too high | Reduce `cifras` parameter |
-| Can't include in LaTeX | Missing special chars | Use raw strings: `r"unit"` |
+| Can't compile units | Missing escapes | Use raw strings: `r"unit"` |
 | siunitx format looks wrong | Package not loaded | Add `\usepackage{siunitx}` |
 | Super large/small numbers | No scientific notation | Use `cifras=1` for aggressive rounding |
 
@@ -411,7 +407,6 @@ print(tex)
 | `latex_quantity(q, cifras, siunitx)` | Format quantity dict |
 | `valor_pm(v, σ, unit, cifras, siunitx)` | Format scalar/array |
 | `redondeo_incertidumbre(v, σ, cifras)` | Metrological rounding |
-| `exportar(file, content, modo)` | Save to `.tex` file |
 
 ---
 

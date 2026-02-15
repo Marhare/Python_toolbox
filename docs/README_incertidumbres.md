@@ -74,6 +74,24 @@ times = mh.quantity(
 )
 ```
 
+#### 2b. **Importing from Excel (pandas)**
+
+```python
+import pandas as pd
+import marhare as mh
+
+df = pd.read_excel(
+    r"G:\My Drive\Universidad\python\3ro\electrodina\electron.xlsx",
+    sheet_name="Hoja1"
+)
+
+# Example columns: V, sV, I, sI
+V = mh.quantity(df["V"].to_numpy(), df["sV"].to_numpy(), "V", symbol="V")
+I = mh.quantity(df["I"].to_numpy(), df["sI"].to_numpy(), "A", symbol="I")
+
+# Use quantities normally from here
+```
+
 #### 3. **Measured Quantity Without Explicit Symbol**
 
 The `register()` function can infer the symbol from variable names:
