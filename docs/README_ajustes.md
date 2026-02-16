@@ -1,80 +1,132 @@
-# ajustes.py
+# ajustes.py - Curve Fitting with Quantity Objects
 
 ## Purpose
-Weighted least‑squares (WLS) curve fitting with covariance calculation for uncertainty propagation. Designed for known experimental uncertainties in `y`.
+Weighted least-squares (WLS) curve fitting designed to work naturally with `quantity` objects. The key idea: pass measured `x` and `y` as quantities (values + uncertainties), and use `fit_quantity()` to handle extraction, weighting, and metadata.
 
-## Assumptions
-- `sy` are known absolute uncertainties in `y`.
-- Residuals are independent and Gaussian.
-- Uses `absolute_sigma=True` (no automatic rescaling).
+---
 
-## Main API
-- `ajuste_lineal(x, y, sy=None)`
-  - Analytic fit of `y = a + b·x`.
-  - Returns parameters, errors, covariance, `yfit`, `chi2`, `ndof`, `chi2_red`, `p`.
+## Quantity-First Workflow
 
-- `ajuste_polinomico(x, y, grado, sy=None)`
-  - WLS polynomial fit (coefficients in descending order).
-  - Returns coefficients, errors, covariance, and chi‑square metrics.
+```python
+import marhare as mh
+import numpy as np
 
-- `ajuste(modelo, x, y, sy=None, p0=None, variable="x")`
-  - Generic fit with `callable` or `sympy.Expr`.
-  - If `sympy.Expr`, lambdifies and sorts symbolic parameters.
+# Measured data with uncertainties
+xq = mh.quantity(
+    np.array([0.5, 1.0, 1.5, 2.0]),
+    np.array([0.02, 0.02, 0.03, 0.03]),
+    "s",
+    symbol="t"
+)
 
-- `intervalo_confianza_parametros(resultado_ajuste, nivel=0.95)`
-  - Parameter CI using Student‑t or normal depending on `ndof`.
+yq = mh.quantity(
+    np.array([1.2, 2.1, 3.1, 4.0]),
+    np.array([0.1, 0.1, 0.1, 0.1]),
+    "m",
+    symbol="x"
+)
 
-- `incertidumbre_prediccion(resultado_ajuste, modelo, x0)`
-  - Model confidence band (parameter uncertainty only).
+# Fit a linear model using quantities
+fit = mh.fit_quantity("linear", xq, yq)
 
-## Typical errors
-- Incompatible lengths among `x`, `y`, `sy`.
-- Non‑positive `sy` values.
-- Symbolic model without a valid variable.
+print(fit.raw["parametros"], fit.raw["chi2_red"], fit.raw["p"])
+```
 
-## Recommended workflow
-1. Fit (`ajuste_lineal`, `ajuste_polinomico`, or `ajuste`).
-2. Inspect `chi2_red` and `p`.
-3. Compute parameter CI.
-4. Compute prediction uncertainty.
+---
 
-## Output
-Results are always returned as dictionaries with stable keys for easy downstream use.
+## Main Quantity API
+
+### `fit_quantity(model, xq, yq, *, degree=None, p0=None, variable="x")`
+
+**Purpose:** Fit `yq` vs `xq` directly from quantities. It extracts values and uncertainties, applies WLS, and returns a `FitResult` wrapper.
+
+**Inputs:**
+- `model`: `"linear"` | `"polynomial"` | callable | `sympy.Expr`
+- `xq`, `yq`: quantity dicts
+- `degree`: required for polynomial fits
+- `p0`: initial guess for non-linear models
+- `variable`: variable name for symbolic models
+
+**Output:** `FitResult`
+- `fit.raw`: dict with parameters, errors, covariance, chi2, ndof, chi2_red, p, yfit
+- `fit.confidence_interval(level=0.95)`
+- `fit.prediction(x0)`
+
+---
 
 ## Examples
+
+### 1) Linear Fit (Quantity)
+
 ```python
-import numpy as np
-from ajustes import ajustes
+fit = mh.fit_quantity("linear", xq, yq)
+print(fit.raw["parametros"])  # [a, b] for y = a + b x
+```
 
-x = np.linspace(0, 10, 40)
-y = 1.5 + 2.0*x
-sy = 0.5*np.ones_like(x)
+### 2) Polynomial Fit (Quantity)
 
-res = ajustes.ajuste_lineal(x, y, sy=sy)
-print(res["parametros"], res["chi2_red"], res["p"])
+```python
+fit = mh.fit_quantity("polynomial", xq, yq, degree=2)
+print(fit.raw["parametros"])  # [a2, a1, a0]
+```
 
-pred = ajustes.incertidumbre_prediccion(res, lambda xv, a, b: a + b*xv, x0=7.5)
+### 3) Symbolic Model Fit
+
+```python
+import sympy as sp
+x = sp.Symbol("x")
+model = sp.exp(-x) * sp.Symbol("A") + sp.Symbol("B")
+
+fit = mh.fit_quantity(model, xq, yq, p0=[1.0, 0.0], variable="x")
+print(fit.raw["parametros"])  # [A, B]
+```
+
+### 4) Prediction Uncertainty
+
+```python
+pred = fit.prediction(1.25)
 print(pred["y"], pred["sigma_modelo"])
 ```
 
-## Mini examples (per function)
+### 5) Parameter Confidence Interval
+
 ```python
-from ajustes import ajustes
-
-# ajuste_lineal
-res_lin = ajustes.ajuste_lineal(x, y, sy=sy)
-
-# ajuste_polinomico
-res_poly = ajustes.ajuste_polinomico(x, y, grado=2, sy=sy)
-
-# ajuste (modelo callable)
-def modelo(xv, a, b):
-  return a + b*xv
-res_gen = ajustes.ajuste(modelo, x, y, sy=sy, p0=[1, 1])
-
-# intervalo_confianza_parametros
-ic = ajustes.intervalo_confianza_parametros(res_gen, nivel=0.95)
-
-# incertidumbre_prediccion
-pred = ajustes.incertidumbre_prediccion(res_gen, modelo, x0=5.0)
+ci = fit.confidence_interval(level=0.95)
+print(ci)
 ```
+
+---
+
+## When to Use the Low-Level API
+
+If you already have numeric arrays (not quantities), you can still use:
+
+- `ajuste_lineal(x, y, sy=None)`
+- `ajuste_polinomico(x, y, grado, sy=None)`
+- `ajuste(modelo, x, y, sy=None, p0=None, variable="x")`
+
+But for experimental data with uncertainties, prefer `fit_quantity()`.
+
+---
+
+## Typical Errors
+
+- Incompatible lengths among `x`, `y`, `sy`
+- Non-positive `sy` values
+- Missing `degree` for polynomial fit
+- Symbolic model without a valid variable
+
+---
+
+## Notes
+
+- `fit_quantity()` uses `value_quantity()` internally; uncertainties are treated as absolute.
+- Returned `FitResult` is a lightweight wrapper with convenience helpers.
+
+---
+
+## Next Steps
+
+- See [README_incertidumbres.md](README_incertidumbres.md) to build `quantity` objects
+- See [README_graficos.md](README_graficos.md) to plot data and fits
+- See [README_estadistica.md](README_estadistica.md) to analyze residuals
