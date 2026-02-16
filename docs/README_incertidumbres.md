@@ -81,7 +81,7 @@ import pandas as pd
 import marhare as mh
 
 df = pd.read_excel(
-    r"G:\My Drive\Universidad\python\3ro\electrodina\electron.xlsx",
+    r"C:\...\electron.xlsx",
     sheet_name="Hoja1"
 )
 
