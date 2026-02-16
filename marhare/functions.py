@@ -1,5 +1,27 @@
 import sympy as sp
-from .numerics import _to_expr, _to_symbol
+
+
+def _to_symbol(var):
+    """Convert var to sympy.Symbol if needed."""
+    if isinstance(var, sp.Symbol):
+        return var
+    return sp.Symbol(str(var))
+
+
+def _to_expr(expr):
+    """Convert expr to sympy.Expr when possible; None if callable."""
+    if isinstance(expr, sp.Lambda):
+        return expr.expr
+    if isinstance(expr, sp.Expr):
+        return expr
+    if isinstance(expr, sp.Equality):
+        return expr.lhs - expr.rhs
+    if isinstance(expr, str):
+        try:
+            return sp.sympify(expr)
+        except Exception:
+            return None
+    return None
 
 class Function:
     """
@@ -76,6 +98,23 @@ class Function:
         float or array
             Evaluated result.
         """
+         # Composición funcional
+        if len(args) == 1 and isinstance(args[0], Function):
+            g = args[0]
+
+            if len(self.vars) != 1:
+                raise ValueError("Composición solo soportada para funciones univariantes.")
+
+            # Sustituimos variable de f por la expresión de g
+            new_expr = self.expr.subs(self.vars[0], g.expr)
+
+            # Variables nuevas = unión ordenada
+            new_vars = sorted(list(new_expr.free_symbols), key=lambda s: s.name)
+
+            return Function(new_expr, vars=new_vars, backend=self.backend)
+            
+        
+        
         f = self.compile()
 
         if kwargs:
