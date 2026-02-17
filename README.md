@@ -16,11 +16,11 @@ A collection of utilities and tools for Python, designed to simplify common task
 - [docs/README_animaciones.md](docs/README_animaciones.md)
 - [docs/README_estadistica.md](docs/README_estadistica.md)
 - [docs/README_fft_tools.md](docs/README_fft_tools.md)
+- [docs/README_functions.md](docs/README_functions.md)
 - [docs/README_graficos.md](docs/README_graficos.md)
 - [docs/README_incertidumbres.md](docs/README_incertidumbres.md)
 - [docs/README_latex_tools.md](docs/README_latex_tools.md)
 - [docs/README_montecarlo.md](docs/README_montecarlo.md)
-- [docs/README_numericos.md](docs/README_numericos.md)
 
 ### ajustes.py
 **Purpose:** weighted least‑squares (WLS) curve fitting with covariances for uncertainty propagation.
@@ -183,6 +183,34 @@ from numericos import numericos
 def f(t, y):
 	return -0.8*y
 rk = numericos.rk4(f, (0, 5), y0=1.0, dt=0.1)
+```
+
+---
+
+### functions.py
+**Purpose:** lightweight symbolic `Function` object with lazy compilation, operator overloading, and calculus helpers.
+
+**Core objects:**
+- `Function(expr_str, vars=None, backend="numpy")` — symbolic expression wrapper
+- `D(f, *vars)` — derivative operator
+- `I(f, var=None, interval=None)` — integration operator
+
+**Interactions:**
+- **Graphics:** `plot()` accepts `Function` objects and evaluates them on dense grids
+- **LaTeX:** `Function.latex()` generates SymPy LaTeX strings for documents
+- **Operators:** combine functions with `+`, `-`, `*`, `/`, `**`
+
+**Quick example:**
+```python
+from marhare import Function, D, I
+
+f = Function("x**2 + sin(x)")
+df = D(f, "x")
+F = I(f, "x")
+
+# Evaluate and plot
+print(df(1.5))
+marhare.plot(x, f, label="f(x)")
 ```
 
 ---

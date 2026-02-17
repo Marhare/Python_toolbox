@@ -49,20 +49,33 @@ class Function:
     7
     """
     
-    def __init__(self, expr_str: str, *, vars=None, backend="numpy"):
+    def __init__(self, expr_str: str, *, vars=None, params= None, backend="numpy"):
         # 1) parse
         expr = _to_expr(expr_str)  # usa tu base
         if expr is None:
-            raise TypeError("Function espera un str o una expresión simbólica.")
+            raise TypeError("Function needs symbolic expression or str")
         self.expr = expr
 
+        free = sorted(list(self.expr.free_symbols), key=lambda s:s.name)
         # 2) variables
         if vars is None:
-            self.vars = sorted(list(self.expr.free_symbols), key=lambda s: s.name)
+            if len(free) <= 1:
+                self.vars = free
+            else:
+                raise ValueError(
+                    "Expresion with >1 free symbols: specify vars=[...]."
+                    f"Free symbols: {[s.name for s in free]}"
+                )
         else:
             self.vars = [_to_symbol(v) for v in vars]
+        
+        #Parameters
+        if params is None:
+            self.params = [s for s in free if s not in self.vars]
+        else:
+            self.params = [_to_symbol(p) for p in params]
 
-        # 3) compilación perezosa
+        # 3) Compilation
         self.backend = backend
         self._call = None
 
@@ -79,7 +92,7 @@ class Function:
     def compile(self):
         """Compile the expression to a callable function using the specified backend."""
         if self._call is None:
-            self._call = sp.lambdify(self.vars, self.expr, self.backend)
+            self._call = sp.lambdify(self.vars+self.params, self.expr, self.backend)
         return self._call
 
     def __call__(self, *args, **kwargs):
@@ -103,7 +116,7 @@ class Function:
             g = args[0]
 
             if len(self.vars) != 1:
-                raise ValueError("Composición solo soportada para funciones univariantes.")
+                raise ValueError("Composition doesn't support for unidimension functions")
 
             # Sustituimos variable de f por la expresión de g
             new_expr = self.expr.subs(self.vars[0], g.expr)
@@ -118,16 +131,16 @@ class Function:
         f = self.compile()
 
         if kwargs:
-            values = []
-            for s in self.vars:
+            ordered = []
+            for s in (self.vars+self.params):
                 key = str(s)
                 if key in kwargs:
-                    values.append(kwargs[key])
+                    ordered.append(kwargs[key])
                 elif s in kwargs:
-                    values.append(kwargs[s])
+                    ordered.append(kwargs[s])
                 else:
-                    raise ValueError(f"Falta valor para variable {s}")
-            return f(*values)
+                    raise ValueError(f"Missing value for {s}")
+            return f(*ordered)
 
         return f(*args)
 
