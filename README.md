@@ -269,14 +269,41 @@ This toolbox primarily relies on the scientific Python stack:
 
 ## ⚙️ Installation
 
-To use these tools in your local environment, clone the repository:
+### Option 1: Install Directly from GitHub (Recommended)
+
+No need to clone - install directly using pip:
 
 ```bash
-
-git clone https://github.com/Marhare/Python_toolbox
-
+pip install git+https://github.com/Marhare/Python_toolbox.git
 ```
-Import module
+
+Or with a specific branch:
+
 ```bash
-python -m pip install -e "C:\Users\...\Python_toolbox"    
+pip install git+https://github.com/Marhare/Python_toolbox.git@main
+```
+
+### Option 2: Install Locally (For Development)
+
+Clone the repository and install in editable mode:
+
+```bash
+git clone https://github.com/Marhare/Python_toolbox
+cd Python_toolbox
+pip install -e .
+```
+
+### Usage
+
+After installation, import and use the module:
+
+```python
+import marhare as mh
+
+# Create quantities with units
+V = mh.quantity(5000, 100, "mV", symbol="V")
+
+# Use any module
+fit_result = mh.fit("y ~ a + b*x", x, y, sy)
+plot_data = mh.plot(*objects)
 ```
