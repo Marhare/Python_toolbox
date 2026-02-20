@@ -41,7 +41,7 @@ LaTeX and graphics use `unit` and `measure` directly:
 ```python
 # With normalize=True (default)
 tex = mh.latex_quantity(V)
-# Output: $V = 5.0 \pm 0.1 \, \mathrm{volt}$
+# Output: $V = 5.0 \pm 0.1 \, \mathrm{V}$
 # Shows SI units
 
 # With normalize=False  

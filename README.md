@@ -49,7 +49,7 @@ See [docs/UNIT_CONVERSION_IMPLEMENTATION.md](docs/UNIT_CONVERSION_IMPLEMENTATION
 - [docs/README_latex_tools.md](docs/README_latex_tools.md)
 - [docs/README_monte_carlo.md](docs/README_monte_carlo.md)
 
-### ajustes.py
+### fitting.py
 **Purpose:** weighted least‑squares (WLS) curve fitting with covariances for uncertainty propagation.
 
 **Assumptions:**
@@ -58,20 +58,20 @@ See [docs/UNIT_CONVERSION_IMPLEMENTATION.md](docs/UNIT_CONVERSION_IMPLEMENTATION
 - `absolute_sigma=True` (no error rescaling).
 
 **Main API:**
-- `ajuste_lineal(x, y, sy=None)`
-- `ajuste_polinomico(x, y, grado, sy=None)`
-- `ajuste(modelo, x, y, sy=None, p0=None, variable="x")`
-- `intervalo_confianza_parametros(resultado_ajuste, nivel=0.95)`
-- `incertidumbre_prediccion(resultado_ajuste, modelo, x0)`
+- `linear_fit(x, y, sy=None)`
+- `polynomial_fit(x, y, degree, sy=None)`
+- `fit(model, x, y, sy=None, p0=None, variable="x")`
+- `parameter_confidence_interval(fit_result, level=0.95)`
+- `prediction_uncertainty(fit_result, model, x0)`
 
 **Typical errors:** incompatible lengths, non‑positive `sy`, invalid model.
 
 **Quick example:**
 ```python
-from ajustes import ajustes
+from marhare.fitting import _Fitting
 
-res = ajustes.ajuste_lineal(x, y, sy=sy)
-print(res["parametros"], res["chi2_red"], res["p"])
+res = _Fitting.linear_fit(x, y, sy=sy)
+print(res["parameters"], res["chi2_red"], res["p"])
 ```
 
 ---
@@ -104,24 +104,24 @@ anim = animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0)
 
 ---
 
-### estadistica.py
+### statistics.py
 **Purpose:** descriptive statistics, confidence intervals, and hypothesis tests.
 
-**Descriptive:** `media`, `varianza`, `desviacion_tipica`, `error_estandar`.
+**Descriptive:** `mean`, `variance`, `standard_deviation`, `standard_error`.
 
-**Weighted:** `media_ponderada`, `varianza_ponderada`.
+**Weighted:** `weighted_mean`, `weighted_variance`.
 
-**Confidence intervals:** `intervalo_confianza` (normal/poisson/binomial).
+**Confidence intervals:** `confidence_interval` (normal/poisson/binomial).
 
 **Tests:**
-- `test_media` (z/t, Poisson exacto, Binomial exacto)
-- `test_ks` (normal o uniforme)
+- `mean_test` (z/t, Poisson exact, Binomial exact)
+- `ks_test` (normal or uniform)
 
 **Quick example:**
 ```python
-from estadistica import estadistica
+from marhare.statistics import statistics
 
-res = estadistica.test_media(x, mu0=0.0, distribucion="normal")
+res = statistics.mean_test(x, mu0=0.0, distribucion="normal")
 print(res["estadistico"], res["p_valor"])
 ```
 
@@ -184,7 +184,7 @@ mh.plot(serie)
 
 ---
 
-### montecarlo.py
+### monte_carlo.py
 **Purpose:** Monte Carlo integration and propagation.
 
 **API:**
@@ -193,25 +193,26 @@ mh.plot(serie)
 
 **Quick example:**
 ```python
-from montecarlo import montecarlo
+from marhare.monte_carlo import montecarlo
 res = montecarlo.integral_1d(lambda t: t**2, 0, 1, n=5000)
 ```
 
 ---
 
-### numericos.py
-**Purpose:** numeric‑symbolic calculator with auto‑detection.
+### numerics.py
+**Purpose:** numeric‑symbolic evaluator with auto‑detection.
 
 **Main API:**
-- `derivar`, `integrar_indefinida`, `integrar_definida`
-- `raiz_numerica`, `evaluar`, `rk4`
+- `evaluar`
 
-**Quick example (ODE with RK4):**
+**Quick example:**
 ```python
-from numericos import numericos
-def f(t, y):
-	return -0.8*y
-rk = numericos.rk4(f, (0, 5), y0=1.0, dt=0.1)
+from marhare.numerics import numericos
+import sympy as sp
+
+x = sp.Symbol("x")
+expr = sp.sin(x) + x**2
+val = numericos.evaluar(expr, {"x": 1.5})
 ```
 
 ---
@@ -304,6 +305,7 @@ import marhare as mh
 V = mh.quantity(5000, 100, "mV", symbol="V")
 
 # Use any module
-fit_result = mh.fit("y ~ a + b*x", x, y, sy)
+# xq, yq are quantity objects
+fit_result = mh.fit_quantity("linear", xq, yq)
 plot_data = mh.plot(*objects)
 ```
