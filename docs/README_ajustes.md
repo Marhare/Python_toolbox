@@ -99,11 +99,11 @@ print(ci)
 
 ## When to Use the Low-Level API
 
-If you already have numeric arrays (not quantities), you can still use:
+If you already have numeric arrays (not quantities), you can still use these functions from the `_Fitting` class (access via `from marhare.fitting import _Fitting`):
 
-- `ajuste_lineal(x, y, sy=None)`
-- `ajuste_polinomico(x, y, grado, sy=None)`
-- `ajuste(modelo, x, y, sy=None, p0=None, variable="x")`
+- `_Fitting.linear_fit(x, y, sy=None)`
+- `_Fitting.polynomial_fit(x, y, grado, sy=None)`
+- `_Fitting.fit(modelo, x, y, sy=None, p0=None, variable="x")`
 
 But for experimental data with uncertainties, prefer `fit_quantity()`.
 
@@ -114,7 +114,8 @@ But for experimental data with uncertainties, prefer `fit_quantity()`.
 - Incompatible lengths among `x`, `y`, `sy`
 - Non-positive `sy` values
 - Missing `degree` for polynomial fit
-- Symbolic model without a valid variable
+- Symbolic model without params list or variable name
+- Insufficient data points for the model complexity
 
 ---
 

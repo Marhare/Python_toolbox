@@ -177,27 +177,27 @@ mh.plot(I["value"], R_theory * I["value"], label="R=5Ω", mode="line")
 
 For explicit control, use semantic classes:
 
-- **`Serie(x, y, label=None, marker=None)`** – Scatter points
-- **`SerieConError(x, y, sy=None, sx=None, label=None)`** – Points with error bars
-- **`Ajuste(x, yfit, label=None)`** – Smooth fitted curve
-- **`Banda(x, y_low, y_high, label=None)`** – Shaded confidence band
-- **`Histograma(data, bins=30, label=None)`** – Histogram
-- **`Serie3D(x, y, z, label=None)`** – 3D scatter points
+- **`Series(x, y, label=None, marker=None)`** – Scatter points
+- **`SeriesWithError(x, y, sy=None, sx=None, label=None)`** – Points with error bars
+- **`Fit(x, yfit, label=None)`** – Smooth fitted curve
+- **`Band(x, y_low, y_high, label=None)`** – Shaded confidence band
+- **`Histogram(data, bins=30, label=None)`** – Histogram
+- **`Series3D(x, y, z, label=None)`** – 3D scatter points
 - **`Heatmap(Z, colorbar=True, cmap=None)`** – 2D matrix visualization
 - **`Surface(Z, cmap='viridis')`** – 3D mesh surface
 
 **Example:**
 
 ```python
-from marhare.graphics import Serie, SerieConError, Ajuste
+from marhare.graphics import Series, SeriesWithError, Fit
 
 x = np.array([1, 2, 3, 4])
 y = np.array([2.1, 4.0, 5.8, 8.1])
 sy = np.array([0.2, 0.2, 0.3, 0.3])
 yfit = 2*x
 
-data = SerieConError(x, y, sy=sy, label="Measured")
-fit = Ajuste(x, yfit, label="Linear fit y=2x")
+data = SeriesWithError(x, y, sy=sy, label="Measured")
+fit = Fit(x, yfit, label="Linear fit y=2x")
 
 mh.plot(data, fit, ylabel="Y value", title="Data and Fit")
 ```
@@ -212,11 +212,11 @@ mh.plot(data, fit, ylabel="Y value", title="Data and Fit")
 from marhare.graphics import Panel
 
 data_panel = Panel(
-    SerieConError(x, y, sy=sy, label="Data"),
-    Ajuste(x, yfit, label="Fit")
+    SeriesWithError(x, y, sy=sy, label="Data"),
+    Fit(x, yfit, label="Fit")
 )
 residual_panel = Panel(
-    Serie(x, y - yfit, label="Residuals")
+    Series(x, y - yfit, label="Residuals")
 )
 
 mh.plot(data_panel, residual_panel, layout=(1, 2), title="Analysis")
@@ -229,7 +229,7 @@ from marhare.graphics import Scene
 
 scene = Scene(
     Panel(data, fit, ylabel="Y", title="Data"),
-    Panel(Serie(x, y - yfit), ylabel="Residual", title="Residuals"),
+    Panel(Series(x, y - yfit), ylabel="Residual", title="Residuals"),
     layout=(1, 2),
     figsize=(12, 5),
     title="Complete Analysis"
@@ -297,9 +297,9 @@ mh.plot(T, mode="heatmap", title="Temperature Distribution [°C]", figsize=(8, 6
 x = np.linspace(0, 10, 200)
 
 # Multiple symbolic functions
-f1 = mh.Function("sin(x)")
-f2 = mh.Function("sin(x/2)")
-f3 = mh.Function("sin(2*x)")
+f1 = mh.Function("sin(x)", vars=["x"])
+f2 = mh.Function("sin(x/2)", vars=["x"])
+f3 = mh.Function("sin(2*x)", vars=["x"])
 
 mh.plot(x, f1, label="sin(x)", mode="line")
 mh.plot(x, f2, label="sin(x/2)", mode="line", linestyle='--')

@@ -421,4 +421,8 @@ def jacobian(f, vars=None):
         return Function(J, *f.vars, params=f.params, backend=f.backend)
 
 
+# Alias for backward compatibility with documentation
+D = dt
+
+
 

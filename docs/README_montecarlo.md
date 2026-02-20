@@ -18,7 +18,7 @@ Monte Carlo utilities for integration and uncertainty propagation.
 
 ## Examples
 ```python
-from montecarlo import montecarlo
+from marhare.monte_carlo import montecarlo
 
 res = montecarlo.integral_1d(lambda x: x**2, 0, 1, n=5000)
 print(res["valor"], res["error"])
@@ -29,7 +29,7 @@ print(res["valor"], res["error"])
 ### integral_1d(f, a, b, n=10000)
 **Case 1 (typical):** If you do this:
 ```python
-from montecarlo import montecarlo
+from marhare.monte_carlo import montecarlo
 import numpy as np
 
 def f(x):
@@ -44,7 +44,7 @@ You do this: Estimate ∫₀¹ x² dx by uniform sampling (10k samples).
 
 You get this:
 ```
-Valor: 0.3346 (aprox)
+Valor: 0.3346 (approx)
 Error: 0.0032
 Theoretical value: 0.3333
 ```
@@ -62,19 +62,19 @@ You do this: Trivial integral of a constant function (width * height).
 
 You get this:
 ```
-Valor: 2.9825 (aprox, cercano a 3.0)
+Valor: 2.9825 (approx, close to 3.0)
 Theoretical: 3.0
 ```
 
 ### propagacion(fun, generadores, n=10000)
 **Case 1 (typical):** If you do this:
 ```python
-from montecarlo import montecarlo
+from marhare.monte_carlo import montecarlo
 import numpy as np
 
-# x ~ N(2, 0.1), y ~ N(3, 0.2), calcular z = x*y
-gen_x = lambda: np.random.normal(2.0, 0.1)
-gen_y = lambda: np.random.normal(3.0, 0.2)
+# x ~ N(2, 0.1), y ~ N(3, 0.2), compute z = x*y
+gen_x = lambda n: np.random.normal(2.0, 0.1, n)
+gen_y = lambda n: np.random.normal(3.0, 0.2, n)
 
 def fun(x, y):
     return x * y
@@ -86,7 +86,7 @@ res = montecarlo.propagacion(
 )
 print(f"Media: {res['media']:.4f}")
 print(f"Sigma: {res['sigma']:.4f}")
-print(f"Valor esperado: 6.0 ± √(0.01*9 + 0.04*4) ≈ 6.0 ± 0.514")
+print(f"Expected value: 6.0 ± √(0.01*9 + 0.04*4) ≈ 6.0 ± 0.514")
 ```
 You do this: Propagate uncertainty from x and y through z=x*y.
 

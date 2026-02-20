@@ -18,21 +18,28 @@ print(f(2))  # 9
 ### Constructor
 
 ```python
-Function(expr_str, *, vars=None, backend="numpy")
+Function(expr, *args, vars=None, params=None, backend="numpy", symbol=None, indices=None)
 ```
 
-- `expr_str`: string or SymPy expression.
-- `vars`: optional list of variables (order matters). If omitted, variables are sorted by name.
-- `backend`: backend passed to `sympy.lambdify`.
+- `expr`: string, SymPy expression, list, or tuple (for vectors/matrices).
+- `vars`: optional list of variables (order matters). If omitted for single-variable expressions, auto-detected.
+- `params`: optional list of parameters (distinct from variables).
+- `backend`: backend passed to `sympy.lambdify` (default "numpy").
+- `symbol`: optional symbol name for LaTeX rendering.
+- `indices`: optional index notation for LaTeX (e.g., `["cov", "contra"]`).
 
 ### Evaluation
 
 `Function` is callable and supports positional or named arguments:
 
 ```python
-f = Function("x**2 + y")
-print(f(2, 3))
-print(f(x=2, y=3))
+f = Function("x**2 + y", vars=["x", "y"])
+print(f(2, 3))       # 7
+print(f(x=2, y=3))   # 7
+
+# Single-variable functions auto-detect vars
+g = Function("sin(x)")
+print(g(0))  # 0.0
 ```
 
 ---
@@ -42,27 +49,40 @@ print(f(x=2, y=3))
 You can combine `Function` objects with scalars or other functions:
 
 ```python
-f = Function("x")
-g = Function("sin(x)")
+f = Function("x", vars=["x"])
+g = Function("sin(x)", vars=["x"])
 
 h = 3*f + g - 2
 k = f**2 / (1 + g)
+print(h(1))  # Evaluates 3*1 + sin(1) - 2
 ```
 
-All results are new `Function` objects with merged variables.
+All results are new `Function` objects with merged variables when necessary.
 
 ---
 
 ## Calculus Helpers
 
-### Derivative: `D`
+### Derivative: `D` or `dt`
+
+Both `D` and `dt` compute the total derivative (with chain rule). Use `D` for brevity or `dt` for clarity.
 
 ```python
-from marhare import Function, D
+from marhare import Function, D, dt
 
-f = Function("x**3")
-df = D(f, "x")
+f = Function("x**3", vars=["x"])
+df = D(f, "x")  # Same as dt(f, "x")
 print(df(2))  # 12
+```
+
+**Note:** For partial derivatives (without chain rule), use `dp` instead:
+
+```python
+from marhare import Function, dp
+
+f = Function("x**2 + y**2", vars=["x", "y"])
+df_dx = dp(f, "x")  # 2*x
+print(df_dx(3, 4))  # 6
 ```
 
 ### Integral: `I`
@@ -70,7 +90,7 @@ print(df(2))  # 12
 ```python
 from marhare import Function, I
 
-f = Function("3*x")
+f = Function("3*x", vars=["x"])
 F = I(f, "x")
 print(F.expr)  # 3*x**2/2
 
@@ -89,9 +109,12 @@ If you want $f(x-3)$, substitute in the SymPy expression:
 import sympy as sp
 from marhare import Function, I
 
-f = Function("3*x")
-shifted = Function(f.expr.subs({"x": "x-3"}))
+x = sp.Symbol("x")
+f = Function("3*x", vars=["x"])
+# Substitute x -> x-3
+shifted = Function(f.expr.subs(x, x-3), vars=["x"])
 F = I(shifted, "x")
+print(F.expr)  # 3*(x-3)**2/2
 ```
 
 ---
@@ -104,8 +127,9 @@ F = I(shifted, "x")
 
 ```python
 import marhare as mh
-import numpy as np
+import numpy as np, vars=["x"])
 
+# Plot symbolic function over the x range
 x = np.linspace(0, 2*np.pi, 50)
 f = mh.Function("sin(x)")
 
@@ -118,7 +142,7 @@ mh.plot(x, f, label="sin(x)")
 
 ```python
 from marhare import Function
-
+, vars=["x"]
 f = Function("x**2 + 2*x + 1")
 print(f.latex())  # x^{2} + 2 x + 1
 ```

@@ -23,8 +23,8 @@ Every quantity is a Python dictionary with these stable keys:
     'symbol': 'R',
     'unit': 'ohm',
     'expr': 'V/I',
-    'measure': None,          # Computed quantity
-    'result': (5.0, 0.1)      # Value ± uncertainty
+    'measure': (None, None),     # No direct measurement
+    'result': (5.0, 0.1)         # Computed value ± uncertainty
 }
 ```
 
@@ -32,19 +32,23 @@ Every quantity is a Python dictionary with these stable keys:
 
 ## Creating Quantities: `quantity()`
 
-### Syntax
+### Syntaxes
 
 ```python
-quantity(value, sigma=None, unit="", expr=None, symbol=None)
+# Basic patterns (positional args)
+quantity(value, unit, symbol=None)                    # No uncertainty (sigma=0)
+quantity(value, sigma, unit, symbol=None)             # With uncertainty
+quantity(expr_str, unit, symbol=None)                 # Expression only (for computed quantities)
+quantity(value, sigma, unit, expr_str, symbol=None)   # Value + expression
 ```
 
 ### Parameters
 
-- **`value`**: Numeric value (scalar, list, array, or SymPy expression as string)
-- **`sigma`**: Uncertainty (same shape as `value`); default `None` (treated as 0)
-- **`unit`**: Physical unit string; default `""`
-- **`expr`**: Optional formula (string or SymPy); ignored if `measure` is provided
-- **`symbol`**: Optional variable name; if `None`, tries auto-detection via `register()`
+- **`value`**: Numeric value (scalar, list, array)
+- **`sigma`**: Uncertainty (same shape as `value`); if not provided, treated as 0
+- **`unit`**: Physical unit string (e.g., `"V"`, `"kg"`, `"m/s²"`)
+- **`expr_str`**: Optional formula (string or SymPy expression) for computed quantities
+- **`symbol`**: Optional variable name (keyword-only); if `None`, can be auto-detected via `register()`
 
 ### Common Patterns
 
@@ -106,17 +110,17 @@ registry = mh.register(measurement)  # Infers symbol='measurement'
 ```python
 # Ohm's law: R = V/I
 # Define as a formula; will compute when propagating
-R = mh.quantity(expr="V/I", unit="ohm", symbol="R")
+R = mh.quantity("V/I", "ohm", symbol="R")
 
 print(R)
-# {'symbol': 'R', 'unit': 'ohm', 'expr': V/I, 'measure': None, 'result': None}
+# {'symbol': 'R', 'unit': 'ohm', 'expr': V/I, 'measure': (None, None), 'result': None}
 ```
 
-#### 5. **Measured + Formula (Rare)**
+#### 5. **Measured + Formula (Advanced)**
 
 ```python
 # Quantity with both direct measure AND a formula (formula takes precedence in propagation)
-Q = mh.quantity(5.0, 0.1, "J", expr="F*d", symbol="work")
+Q = mh.quantity(5.0, 0.1, "J", "F*d", symbol="work")
 ```
 
 ---
@@ -230,7 +234,7 @@ V = mh.quantity(10.0, 0.5, "V", symbol="V")           # Voltage measured
 I = mh.quantity(2.0, 0.1, "A", symbol="I")            # Current measured
 
 # Step 2: Define computed quantity (formula)
-R = mh.quantity(expr="V/I", unit="ohm", symbol="R")   # Resistance = V/I
+R = mh.quantity("V/I", "ohm", symbol="R")             # Resistance = V/I
 
 # Step 3: Register all
 magnitudes = mh.register(V, I, R)
@@ -271,7 +275,7 @@ velocity = mh.quantity(2.5, 0.05, "m/s", symbol="v")
 
 # ============ STEP 2: DEFINE FORMULAS ============
 # Kinetic energy: KE = 0.5 * m * v²
-kinetic_energy = mh.quantity(expr="0.5*m*v**2", unit="J", symbol="KE")
+kinetic_energy = mh.quantity("0.5*m*v**2", "J", symbol="KE")
 
 # ============ STEP 3: REGISTER (Auto-detect symbols) ============
 magnitudes = mh.register(mass, velocity, kinetic_energy)
@@ -344,7 +348,7 @@ height = mh.quantity(10.0, 0.2, "m", symbol="h")
 g = mh.quantity(9.81, 0.01, "m/s²", symbol="g")  # Constant, but with precision
 
 # Define energy formula
-PE = mh.quantity(expr="m * g * h", unit="J", symbol="PE")
+PE = mh.quantity("m * g * h", "J", symbol="PE")
 
 # Propagate
 magnitudes = mh.register(mass, height, g, PE)
@@ -371,7 +375,9 @@ print(f"PE = {v:.1f} ± {s:.1f} J")
 
 | Function | Purpose |
 |----------|---------|
-| `quantity(value, sigma, unit, expr, symbol)` | Create a quantity |
+| `quantity(value, unit, symbol=None)` | Create scalar/vector with sigma=0 |
+| `quantity(value, sigma, unit, symbol=None)` | Create with uncertainty |
+| `quantity(expr_str, unit, symbol=None)` | Create computed quantity with formula |
 | `register(*quantities)` | Auto-detect symbols from variable names |
 | `value_quantity(q)` | Extract `(value, sigma)` from quantity |
 | `propagate_quantity(target, magnitudes, simplify)` | Compute derived quantity with error |
