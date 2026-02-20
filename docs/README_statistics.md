@@ -177,6 +177,6 @@ Statistical tests and confidence intervals return dictionaries with:
 
 ## Next Steps
 
-- See [README_incertidumbres.md](README_incertidumbres.md) to build `quantity` objects
+- See [README_uncertainties.md](README_uncertainties.md) to build `quantity` objects
 - See [README_latex_tools.md](README_latex_tools.md) to export statistical results to LaTeX
-- See [README_graficos.md](README_graficos.md) to plot measurements and summaries
+- See [README_graphics.md](README_graphics.md) to plot measurements and summaries

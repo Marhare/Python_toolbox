@@ -103,6 +103,17 @@ PLOT_DEFAULTS = {
 #  LAYER 1: SEMANTIC OBJECTS (NO calculations, NO plotting)
 # ============================================================
 
+def _ensure_1d_array(arr, name="array"):
+    """Convert input to 1D numpy array, handling scalars properly."""
+    arr = np.asarray(arr, dtype=float)
+    # Handle 0-d arrays (scalars) by wrapping them
+    if arr.ndim == 0:
+        arr = np.atleast_1d(arr)
+    if arr.ndim != 1:
+        raise ValueError(f"{name} must be 1D, got shape {arr.shape}")
+    return arr
+
+
 @dataclass
 class Series:
     """
@@ -124,10 +135,10 @@ class Series:
     marker: Optional[str] = None
 
     def __post_init__(self):
-        self.x = np.asarray(self.x, dtype=float)
-        self.y = np.asarray(self.y, dtype=float)
-        if self.x.shape[0] != self.y.shape[0]:
-            raise ValueError("Series: 'x' and 'y' must have the same length")
+        self.x = _ensure_1d_array(self.x, "x")
+        self.y = _ensure_1d_array(self.y, "y")
+        if len(self.x) != len(self.y):
+            raise ValueError(f"Series: 'x' and 'y' must have the same length (got {len(self.x)} and {len(self.y)})")
     
     def __hash__(self):
         return id(self)
@@ -156,18 +167,18 @@ class SeriesWithError:
     label: Optional[str] = None
 
     def __post_init__(self):
-        self.x = np.asarray(self.x, dtype=float)
-        self.y = np.asarray(self.y, dtype=float)
+        self.x = _ensure_1d_array(self.x, "x")
+        self.y = _ensure_1d_array(self.y, "y")
         if self.sy is not None:
-            self.sy = np.asarray(self.sy, dtype=float)
+            self.sy = _ensure_1d_array(self.sy, "sy")
         if self.sx is not None:
-            self.sx = np.asarray(self.sx, dtype=float)
-        if self.x.shape[0] != self.y.shape[0]:
-            raise ValueError("SeriesWithError: 'x' and 'y' must have the same length")
-        if self.sy is not None and self.sy.shape[0] != self.y.shape[0]:
-            raise ValueError("SeriesWithError: 'sy' must have the same length as 'y'")
-        if self.sx is not None and self.sx.shape[0] != self.x.shape[0]:
-            raise ValueError("SeriesWithError: 'sx' must have the same length as 'x'")
+            self.sx = _ensure_1d_array(self.sx, "sx")
+        if len(self.x) != len(self.y):
+            raise ValueError(f"SeriesWithError: 'x' and 'y' must have the same length (got {len(self.x)} and {len(self.y)})")
+        if self.sy is not None and len(self.sy) != len(self.y):
+            raise ValueError(f"SeriesWithError: 'sy' must have the same length as 'y' (got {len(self.sy)} and {len(self.y)})")
+        if self.sx is not None and len(self.sx) != len(self.x):
+            raise ValueError(f"SeriesWithError: 'sx' must have the same length as 'x' (got {len(self.sx)} and {len(self.x)})")
     
     def __hash__(self):
         return id(self)
@@ -217,10 +228,10 @@ class Fit:
     label: Optional[str] = None
 
     def __post_init__(self):
-        self.x = np.asarray(self.x, dtype=float)
-        self.yfit = np.asarray(self.yfit, dtype=float)
-        if self.x.shape[0] != self.yfit.shape[0]:
-            raise ValueError("Fit: 'x' and 'yfit' must have the same length")
+        self.x = _ensure_1d_array(self.x, "x")
+        self.yfit = _ensure_1d_array(self.yfit, "yfit")
+        if len(self.x) != len(self.yfit):
+            raise ValueError(f"Fit: 'x' and 'yfit' must have the same length (got {len(self.x)} and {len(self.yfit)})")
     
     def __hash__(self):
         return id(self)
@@ -247,11 +258,11 @@ class Band:
     label: Optional[str] = None
 
     def __post_init__(self):
-        self.x = np.asarray(self.x, dtype=float)
-        self.y_low = np.asarray(self.y_low, dtype=float)
-        self.y_high = np.asarray(self.y_high, dtype=float)
-        if self.x.shape[0] != self.y_low.shape[0] or self.x.shape[0] != self.y_high.shape[0]:
-            raise ValueError("Band: 'x', 'y_low' and 'y_high' must have the same length")
+        self.x = _ensure_1d_array(self.x, "x")
+        self.y_low = _ensure_1d_array(self.y_low, "y_low")
+        self.y_high = _ensure_1d_array(self.y_high, "y_high")
+        if len(self.x) != len(self.y_low) or len(self.x) != len(self.y_high):
+            raise ValueError(f"Band: 'x', 'y_low' and 'y_high' must have the same length (got {len(self.x)}, {len(self.y_low)}, {len(self.y_high)})")
     
     def __hash__(self):
         return id(self)
@@ -279,11 +290,11 @@ class Series3D:
     label: Optional[str] = None
 
     def __post_init__(self):
-        self.x = np.asarray(self.x, dtype=float)
-        self.y = np.asarray(self.y, dtype=float)
-        self.z = np.asarray(self.z, dtype=float)
-        if self.x.shape[0] != self.y.shape[0] or self.x.shape[0] != self.z.shape[0]:
-            raise ValueError("Series3D: 'x', 'y' and 'z' must have the same length")
+        self.x = _ensure_1d_array(self.x, "x")
+        self.y = _ensure_1d_array(self.y, "y")
+        self.z = _ensure_1d_array(self.z, "z")
+        if len(self.x) != len(self.y) or len(self.x) != len(self.z):
+            raise ValueError(f"Series3D: 'x', 'y' and 'z' must have the same length (got {len(self.x)}, {len(self.y)}, {len(self.z)})")
     
     def __hash__(self):
         return id(self)
@@ -835,6 +846,8 @@ def plot(
     title: Optional[str] = None,
     y_fit: Optional[np.ndarray] = None,
     yerr: Optional[np.ndarray] = None,
+    sy: Optional[np.ndarray] = None,
+    sx: Optional[np.ndarray] = None,
     bands: Optional[Any] = None,
     hist: Optional[Any] = None,
     ax: Optional[plt.Axes] = None,
@@ -861,6 +874,8 @@ def plot(
             Ignored if Scene is passed (uses scene.xlabel, etc.)
         y_fit: array_like | Fit | quantity dict | None -> fitted curve (constructor mode)
         yerr: array_like | None -> symmetric y errors (constructor mode)
+        sy: array_like | None -> alias for yerr (SeriesWithError API compatibility)
+        sx: array_like | None -> symmetric x errors (constructor mode)
         bands: Band | (y_low, y_high) | dict | None -> band (constructor mode)
         hist: array_like | (data, bins) | Histogram | quantity dict | None -> histogram (constructor mode)
         ax: matplotlib.axes.Axes | None -> draw into a provided axis (single panel)
@@ -906,6 +921,13 @@ def plot(
         - Plots existing Scene/Panel/semantic objects
         - Applies consistent styling
     """
+    # Handle sy/sx aliases for backwards compatibility with SeriesWithError API
+    if sy is not None and yerr is None:
+        yerr = sy
+    if sx is not None:
+        # sx is stored but used when creating SeriesWithError objects
+        kwargs['sx'] = sx  # Pass to SeriesWithError internally
+    
     # Constructor mode: build a Scene from raw data
     return_scene = False
     constructor_mode = False
@@ -954,7 +976,13 @@ def plot(
     if hist is not None or y_fit is not None or yerr is not None or bands is not None:
         constructor_mode = True
     elif len(objetos) == 2 and not _is_semantic_like(objetos[0]) and not _is_semantic_like(objetos[1]):
-        if _looks_like_data_or_quantity(objetos[0]) and _looks_like_data_or_quantity(objetos[1]):
+        # Check if it's x, y data OR x, callable(function/lambda)
+        x_candidate, y_candidate = objetos
+        x_is_data = _looks_like_data_or_quantity(x_candidate)
+        y_is_data = _looks_like_data_or_quantity(y_candidate)
+        y_is_callable = callable(y_candidate)
+        
+        if x_is_data and (y_is_data or y_is_callable):
             constructor_mode = True
 
     if constructor_mode:
@@ -988,6 +1016,10 @@ def plot(
             
             # Handle Function objects: evaluate on dense x grid and draw as line
             is_function = Function is not None and isinstance(y, Function)
+            
+            # Handle generic callables (lambdas, functions): evaluate and draw as line
+            is_callable = callable(y) and not is_function
+            
             if is_function:
                 if x is None:
                     raise ValueError("Debes pasar dominio si y es Function.")
@@ -996,6 +1028,15 @@ def plot(
                 y_dense = y(x_dense)
                 y = y_dense
                 x = x_dense
+                use_as_line = True
+            elif is_callable:
+                # Handle generic callables (lambdas, regular functions)
+                if x is None:
+                    raise ValueError("You must provide x domain for callable y.")
+                x_arr = np.asarray(x, dtype=float)
+                # Evaluate the callable on x
+                y_evaluated = y(x_arr)
+                y = np.asarray(y_evaluated, dtype=float)
                 use_as_line = True
             else:
                 use_as_line = as_line
@@ -1019,7 +1060,8 @@ def plot(
             elif mode == "scatter":
                 # Force scatter mode
                 if yerr is not None:
-                    series_obj = SeriesWithError(x, y, sy=yerr, label=series_label)
+                    sx_param = kwargs.pop('sx', None)
+                    series_obj = SeriesWithError(x, y, sy=yerr, sx=sx_param, label=series_label)
                 else:
                     series_obj = Series(x, y, label=series_label)
             elif use_as_line and yerr is None:
@@ -1027,7 +1069,8 @@ def plot(
                 series_obj = Fit(x, y, label=series_label)
             elif yerr is not None:
                 # Keep as SeriesWithError for error bars
-                series_obj = SeriesWithError(x, y, sy=yerr, label=series_label)
+                sx_param = kwargs.pop('sx', None)
+                series_obj = SeriesWithError(x, y, sy=yerr, sx=sx_param, label=series_label)
             else:
                 # Default: scatter for array data
                 series_obj = Series(x, y, label=series_label)

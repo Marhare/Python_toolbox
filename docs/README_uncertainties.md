@@ -388,6 +388,6 @@ print(f"PE = {v:.1f} ± {s:.1f} J")
 
 ## Next Steps
 
-- See [README_graficos.md](README_graficos.md) to plot quantities with auto-labeled axes
+- See [README_graphics.md](README_graphics.md) to plot quantities with auto-labeled axes
 - See [README_latex_tools.md](README_latex_tools.md) to format for scientific papers
-- See [README_montecarlo.md](README_montecarlo.md) for Monte Carlo uncertainty estimation
+- See [README_monte_carlo.md](README_monte_carlo.md) for Monte Carlo uncertainty estimation

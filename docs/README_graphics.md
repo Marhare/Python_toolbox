@@ -33,13 +33,22 @@ Use `marhare.quantity()` to create measurements with uncertainty and units:
 import marhare as mh
 import numpy as np
 
-# Create measurements with uncertainty
-length = mh.quantity(5.23, 0.05, "m", symbol="L")
-time = mh.quantity(2.1, 0.1, "s", symbol="t")
+# Create arrays of measurements with uncertainty
+length = mh.quantity([5.20, 5.23, 5.25], [0.05, 0.05, 0.05], "m", symbol="L")
+time = mh.quantity([2.08, 2.10, 2.12], [0.1, 0.1, 0.1], "s", symbol="t")
 
 # Plot directly – auto-labels with symbol and unit
 mh.plot(length, time, title="Measurement")
 # X-axis: "L [m]", Y-axis: "t [s]"
+```
+
+You can also plot single scalar measurements (automatically wrapped as single-point series):
+
+```python
+# Single measurements
+length = mh.quantity(5.23, 0.05, "m", symbol="L")
+time = mh.quantity(2.1, 0.1, "s", symbol="t")
+mh.plot(length, time, title="Measurement")  # Creates a 1-point scatter plot
 ```
 
 ---
@@ -57,9 +66,10 @@ y = np.array([2, 4, 5.5, 8])
 # Simple scatter
 mh.plot(x, y, title="Data Points")
 
-# With error bars
+# With error bars (two equivalent syntaxes)
 sy = np.array([0.3, 0.2, 0.4, 0.3])
-mh.plot(x, y, sy=sy, title="Data with Uncertainty")
+mh.plot(x, y, yerr=sy, title="Data with Uncertainty")
+mh.plot(x, y, sy=sy, title="Data with Uncertainty")  # alias for yerr
 ```
 
 ### 2. **Line Mode: Smooth Curves**
@@ -99,16 +109,16 @@ Visualize 2D matrices with color mapping:
 # Create a 2D matrix (e.g., image or temperature field)
 Z = np.random.randn(10, 10)
 
-# Method 1: mode parameter
+# Method 1: mode parameter (automatically includes colorbar)
 mh.plot(Z, mode="heatmap", title="2D Heatmap", figsize=(8, 6))
 
 # Method 2: Semantic object
 from marhare.graphics import Heatmap
-hm = Heatmap(Z, colorbar=True)
+hm = Heatmap(Z)
 mh.plot(hm, title="2D Heatmap")
 ```
 
-**Parameters:** `cmap` (colormap), `colorbar` (show colorbar), `vmin/vmax` (color scale)
+**Parameters:** `cmap` (colormap, default 'viridis'). Colorbar is added automatically.
 
 ### 5. **Surface Mode: 3D Mesh**
 
@@ -158,17 +168,28 @@ Combine symbolic expressions with measured data:
 ```python
 import marhare as mh
 import numpy as np
+from marhare.uncertainties import value_quantity
+from marhare.graphics import SeriesWithError, Fit, Panel, Scene
 
 # Measured voltage and current
 V = mh.quantity([1.0, 2.0, 3.0], [0.1, 0.1, 0.1], "V", symbol="V")
 I = mh.quantity([0.2, 0.4, 0.6], [0.01, 0.01, 0.01], "A", symbol="I")
 
-# Symbolic function for resistance law
-R_theory = mh.Function("5 * x")  # R = V/I, assuming I proportional to V/5
+# Plot measured data directly – quantities auto-extract values and errors
+mh.plot(I, V, title="Voltage vs Current")  # Auto-labels "I [A]" and "V [V]"
 
-# Plot measured data and theoretical curve
-mh.plot(I["value"], V["value"], sy=V["result"][1], label="Measured")
-mh.plot(I["value"], R_theory * I["value"], label="R=5Ω", mode="line")
+# Plot with a fitted line overlay
+I_val, I_err = value_quantity(I)
+V_val, V_err = value_quantity(V)
+
+x_fit = np.linspace(0.1, 0.7, 50)
+y_fit = 5 * x_fit  # Theory: R = 5Ω
+
+panel = Panel(
+    SeriesWithError(I_val, V_val, sy=V_err, label="Measured"),
+    Fit(x_fit, y_fit, label="R=5Ω")
+)
+mh.plot(panel, xlabel="I [A]", ylabel="V [V]", title="V-I Curve with Theory")
 ```
 
 ---
@@ -189,17 +210,29 @@ For explicit control, use semantic classes:
 **Example:**
 
 ```python
-from marhare.graphics import Series, SeriesWithError, Fit
+from marhare.graphics import Series, SeriesWithError, Fit, Panel, Scene
 
 x = np.array([1, 2, 3, 4])
 y = np.array([2.1, 4.0, 5.8, 8.1])
 sy = np.array([0.2, 0.2, 0.3, 0.3])
 yfit = 2*x
 
-data = SeriesWithError(x, y, sy=sy, label="Measured")
-fit = Fit(x, yfit, label="Linear fit y=2x")
+# Method 1: Plan + Scene for labels and title
+scene = Scene(
+    Panel(
+        SeriesWithError(x, y, sy=sy, label="Measured"),
+        Fit(x, yfit, label="Linear fit y=2x")
+    ),
+    ylabel="Y value", title="Data and Fit"
+)
+mh.plot(scene)
 
-mh.plot(data, fit, ylabel="Y value", title="Data and Fit")
+# Method 2: If no specific labels needed, Panel alone
+panel = Panel(
+    SeriesWithError(x, y, sy=sy, label="Measured"),
+    Fit(x, yfit, label="Linear fit y=2x")
+)
+mh.plot(panel)
 ```
 
 ---
@@ -328,7 +361,7 @@ Do you have...
 | Task | Code |
 |------|------|
 | Simple scatter | `plot(x, y)` |
-| Scatter + error bars | `plot(x, y, sy=sy)` |
+| Scatter + error bars | `plot(x, y, yerr=sy)` or `plot(x, y, sy=sy)` |
 | Smooth curve | `plot(x, y_fit, mode="line")` |
 | Symbolic function | `plot(x, Function("sin(x)"))` |
 | With quantities | `plot(qty_x, qty_y)` → auto-labels |

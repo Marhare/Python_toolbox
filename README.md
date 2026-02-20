@@ -12,15 +12,15 @@ A collection of utilities and tools for Python, designed to simplify common task
 ## 🚀 Main Modules (Detailed)
 
 **Module documentation:**
-- [docs/README_ajustes.md](docs/README_ajustes.md)
-- [docs/README_animaciones.md](docs/README_animaciones.md)
-- [docs/README_estadistica.md](docs/README_estadistica.md)
+- [docs/README_fitting.md](docs/README_fitting.md)
+- [docs/README_animations.md](docs/README_animations.md)
+- [docs/README_statistics.md](docs/README_statistics.md)
 - [docs/README_fft_tools.md](docs/README_fft_tools.md)
 - [docs/README_functions.md](docs/README_functions.md)
-- [docs/README_graficos.md](docs/README_graficos.md)
-- [docs/README_incertidumbres.md](docs/README_incertidumbres.md)
+- [docs/README_graphics.md](docs/README_graphics.md)
+- [docs/README_uncertainties.md](docs/README_uncertainties.md)
 - [docs/README_latex_tools.md](docs/README_latex_tools.md)
-- [docs/README_montecarlo.md](docs/README_montecarlo.md)
+- [docs/README_monte_carlo.md](docs/README_monte_carlo.md)
 
 ### ajustes.py
 **Purpose:** weighted least‑squares (WLS) curve fitting with covariances for uncertainty propagation.

@@ -412,6 +412,6 @@ print(tex)
 
 ## Next Steps
 
-- See [README_incertidumbres.md](README_incertidumbres.md) to create and propagate quantities
-- See [README_graficos.md](README_graficos.md) to visualize measurements
-- See [README_estadistica.md](README_estadistica.md) for statistical analysis tools
+- See [README_uncertainties.md](README_uncertainties.md) to create and propagate quantities
+- See [README_graphics.md](README_graphics.md) to visualize measurements
+- See [README_statistics.md](README_statistics.md) for statistical analysis tools
