@@ -100,6 +100,80 @@ PLOT_DEFAULTS = {
 
 
 # ============================================================
+#  SHARED FIGURE REGISTRY (figure/subplot grouping)
+# ============================================================
+
+_FIGURE_REGISTRY: Dict[int, Dict[str, Any]] = {}
+
+
+def _get_or_create_grouped_axis(
+    figure_id: int,
+    subplot: int,
+    dims: str,
+    figsize: Tuple[float, float],
+    layout: Optional[str],
+    cfg: Dict[str, Any],
+) -> Tuple[plt.Figure, plt.Axes]:
+    if subplot < 1:
+        raise ValueError("subplot must be >= 1")
+
+    if figure_id not in _FIGURE_REGISTRY:
+        if layout is None:
+            nrows, ncols = _layout_shape(subplot)
+        else:
+            nrows, ncols = _parse_layout(layout)
+        if subplot > nrows * ncols:
+            raise ValueError("subplot index exceeds layout capacity")
+
+        is_multipanel = nrows * ncols > 1
+        use_constrained = cfg.get("tight", True) and not is_multipanel
+        fig = plt.figure(figsize=figsize, constrained_layout=use_constrained)
+
+        if is_multipanel:
+            fig.subplots_adjust(
+                left=0.10,
+                right=0.95,
+                top=0.92,
+                bottom=0.10,
+                wspace=0.35,
+                hspace=0.40
+            )
+
+        _FIGURE_REGISTRY[figure_id] = {
+            "fig": fig,
+            "nrows": nrows,
+            "ncols": ncols,
+            "axes": {},
+        }
+
+    entry = _FIGURE_REGISTRY[figure_id]
+    fig = entry["fig"]
+    nrows = entry["nrows"]
+    ncols = entry["ncols"]
+
+    if layout is not None:
+        req_nrows, req_ncols = _parse_layout(layout)
+        if (req_nrows, req_ncols) != (nrows, ncols):
+            raise ValueError("figure already exists with a different layout")
+
+    if subplot > nrows * ncols:
+        raise ValueError("subplot index exceeds layout capacity for this figure")
+
+    axes_map = entry["axes"]
+    if subplot not in axes_map:
+        ax = _create_axis(fig, subplot, nrows, ncols, dims)
+        axes_map[subplot] = ax
+    else:
+        ax = axes_map[subplot]
+        if dims == "3D" and not _is_axis_3d(ax):
+            raise TypeError("dims='3D' requires a 3D axis")
+        if dims == "2D" and _is_axis_3d(ax):
+            raise TypeError("dims='2D' cannot be drawn on a 3D axis")
+
+    return fig, ax
+
+
+# ============================================================
 #  LAYER 1: SEMANTIC OBJECTS (NO calculations, NO plotting)
 # ============================================================
 
@@ -842,6 +916,8 @@ def plot(
     dims: str = "2D",
     show: bool = True,
     figsize: Optional[Tuple[float, float]] = None,
+    figure: Optional[int] = None,
+    subplot: Optional[int] = None,
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None,
     title: Optional[str] = None,
@@ -871,6 +947,10 @@ def plot(
         show: bool -> if True, calls plt.show() (default: True)
         figsize: tuple | None -> figure size; if None uses PLOT_DEFAULTS
             Ignored if Scene is passed (uses scene.figsize)
+        figure: int | None -> figure id for grouping calls (same id reuses figure)
+            If None, each call creates a new figure (default)
+        subplot: int | None -> subplot index (1..N) inside the grouped figure
+            Requires figure; if omitted defaults to 1
         xlabel, ylabel, title: str | None -> global labels (if applicable)
             Ignored if Scene is passed (uses scene.xlabel, etc.)
         y_fit: array_like | Fit | quantity dict | None -> fitted curve (constructor mode)
@@ -880,6 +960,7 @@ def plot(
         bands: Band | (y_low, y_high) | dict | None -> band (constructor mode)
         hist: array_like | (data, bins) | Histogram | quantity dict | None -> histogram (constructor mode)
         ax: matplotlib.axes.Axes | None -> draw into a provided axis (single panel)
+            Ignored if figure/subplot is provided
         as_line: bool -> if True, draw array data as line instead of scatter (default: False)
             Function objects are ALWAYS drawn as lines (evaluated on 400-point dense grid)
         mode: str | None -> visualization mode: None (auto), "scatter", "line", "heatmap", "surface"
@@ -1137,6 +1218,14 @@ def plot(
     if figsize is None:
         figsize = cfg["figsize"]
 
+    if subplot is not None and figure is None:
+        raise ValueError("subplot requires figure")
+    if figure is not None:
+        if not isinstance(figure, int):
+            raise ValueError("figure must be an int")
+        if subplot is None:
+            subplot = 1
+
     # Normalize to Panels (each Panel corresponds to a subplot)
     paneles: List[Panel] = []
     for obj in objetos:
@@ -1146,6 +1235,36 @@ def plot(
             paneles.append(Panel(obj))
     if len(paneles) == 0:
         raise ValueError("plot() needs at least one object (Series, Histogram, etc.)")
+
+    # Plot into a grouped figure/subplot (single panel only)
+    if figure is not None:
+        if len(paneles) != 1:
+            raise ValueError("figure/subplot requires a single panel")
+        fig, ax_grouped = _get_or_create_grouped_axis(
+            figure_id=figure,
+            subplot=subplot,
+            dims=dims,
+            figsize=figsize,
+            layout=layout,
+            cfg=cfg,
+        )
+        if scene_ref is not None:
+            scene_ref._artist_map_by_id = {}
+        for obj in paneles[0].objetos:
+            artist = _plot_object(obj, ax_grouped, cfg)
+            if scene_ref is not None:
+                scene_ref._artist_map_by_id[id(obj)] = artist
+        _post_process_axis(ax_grouped, cfg)
+        _apply_legend(ax_grouped, cfg)
+        if xlabel is not None:
+            ax_grouped.set_xlabel(xlabel)
+        if ylabel is not None:
+            ax_grouped.set_ylabel(ylabel)
+        if title is not None:
+            ax_grouped.set_title(title)
+        if show:
+            plt.show()
+        return fig, ax_grouped
 
     # Plot with a provided axis (single panel only)
     if ax is not None:

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
+  <rect width="100%" height="100%" fill="#f7f7f5"/>
+  <rect x="50" y="50" width="250" height="260" fill="#ffffff" stroke="#b0b0b0"/>
+  <rect x="340" y="50" width="250" height="260" fill="#ffffff" stroke="#b0b0b0"/>
+  <line x1="70" y1="280" x2="270" y2="280" stroke="#444" stroke-width="2"/>
+  <line x1="70" y1="280" x2="70" y2="80" stroke="#444" stroke-width="2"/>
+  <line x1="360" y1="280" x2="560" y2="280" stroke="#444" stroke-width="2"/>
+  <line x1="360" y1="280" x2="360" y2="80" stroke="#444" stroke-width="2"/>
+  <polyline points="70,260 120,220 170,200 220,160 270,130" fill="none" stroke="#1f4e79" stroke-width="3"/>
+  <polyline points="360,120 410,150 460,190 510,230 560,260" fill="none" stroke="#6c2c2c" stroke-width="3"/>
+  <text x="50" y="25" font-family="Arial" font-size="16" fill="#333">Two subplots (layout 1x2) - placeholder</text>
+</svg>

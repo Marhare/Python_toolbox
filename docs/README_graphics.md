@@ -9,8 +9,8 @@ High-level scientific visualization based on the universal `plot()` function. Ex
 ## The Main Interface: `plot()`
 
 ```python
-plot(*objetos, mode=None, layout=None, dims="2D", show=True, figsize=None, 
-     xlabel=None, ylabel=None, zlabel=None, title=None, **kwargs)
+plot(*objetos, mode=None, layout=None, dims="2D", show=True, figsize=None,
+    figure=None, subplot=None, xlabel=None, ylabel=None, zlabel=None, title=None, **kwargs)
 ```
 
 **Parameters:**
@@ -19,6 +19,8 @@ plot(*objetos, mode=None, layout=None, dims="2D", show=True, figsize=None,
 - `dims`: `"2D"` (default) or `"3D"` for 3D visualization
 - `show`: Display the plot (default `True`)
 - `figsize`, `xlabel`, `ylabel`, `title`: Standard plot parameters
+- `figure`: Integer id to group multiple calls into the same figure
+- `subplot`: Subplot index (1..N) inside the grouped figure (requires `figure`)
 - `**kwargs`: Style customization (color, marker, linestyle, etc.)
 
 **Returns:** `(fig, ax)` tuple
@@ -72,6 +74,8 @@ mh.plot(x, y, yerr=sy, title="Data with Uncertainty")
 mh.plot(x, y, sy=sy, title="Data with Uncertainty")  # alias for yerr
 ```
 
+![Scatter with errors](img/plot_errorbar_placeholder.svg)
+
 ### 2. **Line Mode: Smooth Curves**
 
 Use `mode="line"` for continuous curves, or pass a `Function`:
@@ -117,6 +121,8 @@ from marhare.graphics import Heatmap
 hm = Heatmap(Z)
 mh.plot(hm, title="2D Heatmap")
 ```
+
+![Heatmap](img/plot_heatmap_placeholder.svg)
 
 **Parameters:** `cmap` (colormap, default 'viridis'). Colorbar is added automatically.
 
@@ -169,7 +175,7 @@ Combine symbolic expressions with measured data:
 import marhare as mh
 import numpy as np
 from marhare.uncertainties import value_quantity
-from marhare.graphics import SeriesWithError, Fit, Panel, Scene
+from marhare.uncertainties import value_quantity
 
 # Measured voltage and current
 V = mh.quantity([1.0, 2.0, 3.0], [0.1, 0.1, 0.1], "V", symbol="V")
@@ -185,11 +191,18 @@ V_val, V_err = value_quantity(V)
 x_fit = np.linspace(0.1, 0.7, 50)
 y_fit = 5 * x_fit  # Theory: R = 5Ω
 
-panel = Panel(
-    SeriesWithError(I_val, V_val, sy=V_err, label="Measured"),
-    Fit(x_fit, y_fit, label="R=5Ω")
+mh.plot(
+    I_val, V_val,
+    yerr=V_err,
+    label="Measured",
+    figure=1,
+    subplot=1,
+    show=False,
+    xlabel="I [A]",
+    ylabel="V [V]",
+    title="V-I Curve with Theory"
 )
-mh.plot(panel, xlabel="I [A]", ylabel="V [V]", title="V-I Curve with Theory")
+mh.plot(x_fit, y_fit, mode="line", label="R=5 ohm", figure=1, subplot=1)
 ```
 
 ---
@@ -207,69 +220,43 @@ For explicit control, use semantic classes:
 - **`Heatmap(Z, colorbar=True, cmap=None)`** – 2D matrix visualization
 - **`Surface(Z, cmap='viridis')`** – 3D mesh surface
 
-**Example:**
-
-```python
-from marhare.graphics import Series, SeriesWithError, Fit, Panel, Scene
-
-x = np.array([1, 2, 3, 4])
-y = np.array([2.1, 4.0, 5.8, 8.1])
-sy = np.array([0.2, 0.2, 0.3, 0.3])
-yfit = 2*x
-
-# Method 1: Plan + Scene for labels and title
-scene = Scene(
-    Panel(
-        SeriesWithError(x, y, sy=sy, label="Measured"),
-        Fit(x, yfit, label="Linear fit y=2x")
-    ),
-    ylabel="Y value", title="Data and Fit"
-)
-mh.plot(scene)
-
-# Method 2: If no specific labels needed, Panel alone
-panel = Panel(
-    SeriesWithError(x, y, sy=sy, label="Measured"),
-    Fit(x, yfit, label="Linear fit y=2x")
-)
-mh.plot(panel)
-```
+You can pass these semantic objects directly to `plot()`. `Panel` and `Scene`
+are available for advanced, reusable layouts, but most workflows do not need them.
 
 ---
 
-## Multi-Panel Layouts with `Panel` and `Scene`
+## Grouping by `figure` and `subplot`
 
-### `Panel`: Group objects in one subplot
-
-```python
-from marhare.graphics import Panel
-
-data_panel = Panel(
-    SeriesWithError(x, y, sy=sy, label="Data"),
-    Fit(x, yfit, label="Fit")
-)
-residual_panel = Panel(
-    Series(x, y - yfit, label="Residuals")
-)
-
-mh.plot(data_panel, residual_panel, layout=(1, 2), title="Analysis")
-```
-
-### `Scene`: Build complex layouts
+Use `figure` to reuse the same Matplotlib figure across multiple `plot()` calls.
+Use `subplot` to target a specific panel inside that figure. Calls that share
+the same `figure` + `subplot` draw on the same `Axes`.
 
 ```python
-from marhare.graphics import Scene
+import marhare as mh
+import numpy as np
 
-scene = Scene(
-    Panel(data, fit, ylabel="Y", title="Data"),
-    Panel(Series(x, y - yfit), ylabel="Residual", title="Residuals"),
-    layout=(1, 2),
-    figsize=(12, 5),
-    title="Complete Analysis"
-)
+x = np.linspace(0, 10, 50)
+y1 = np.sin(x)
+y2 = np.cos(x)
 
-mh.plot(scene)
+# Same subplot: overlay lines
+mh.plot(x, y1, mode="line", figure=1, subplot=1, label="sin", show=False)
+mh.plot(x, y2, mode="line", figure=1, subplot=1, label="cos")
+
+# Two panels in the same figure (set layout on the first call)
+mh.plot(x, y1, mode="line", figure=2, subplot=1, layout="1x2", show=False, title="sin")
+mh.plot(x, y2, mode="line", figure=2, subplot=2, layout="1x2", title="cos")
 ```
+
+![Overlay same subplot](img/plot_overlay_placeholder.svg)
+![Layout 1x2](img/plot_layout_placeholder.svg)
+
+---
+
+## Panel and Scene (advanced)
+
+Use `Panel` and `Scene` only if you need a reusable layout object or want to
+bundle multiple semantic objects into a single subplot explicitly.
 
 ---
 
