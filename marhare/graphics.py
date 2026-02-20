@@ -826,6 +826,7 @@ def _build_dense_fit(x: np.ndarray, y_fit: Any, n_points: int = 400) -> Fit:
 
 def _quantity_axis_label(q: dict) -> Optional[str]:
     symbol = q.get("symbol")
+    # Use unit (which contains SI if normalize=True, original if normalize=False)
     unit = q.get("unit")
     if symbol and unit:
         return f"{symbol} [{unit}]"

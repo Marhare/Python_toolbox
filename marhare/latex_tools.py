@@ -339,7 +339,8 @@ def valor_pm(
         if sigma is None:
             # Single quantity dict: normalize first, then format as scalar or 1D table.
             v, s = value_quantity(valor)
-            unit = valor.get("unit", None)
+            # Use display unit (original) if available, else internal unit
+            unit = valor.get("unit_display", None) or valor.get("unit", None)
             symbol = valor.get("symbol", "") or ""
             v_arr = np.asarray(v)
             s_arr = np.asarray(s)
@@ -435,6 +436,7 @@ def valor_pm(
             values.append(v_arr)
             sigmas.append(s_arr)
             symbols.append(mag.get("symbol", "") or "")
+            # Use unit (which contains SI if normalize=True, original if normalize=False)
             units.append(mag.get("unit", None))
 
         if any_vector:

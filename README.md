@@ -9,6 +9,33 @@ A collection of utilities and tools for Python, designed to simplify common task
 
 `python_toolbox` is my personal library that centralizes functions I frequently use across different projects. The main purpose of this library is to avoid code duplication and maintain a set of optimized and tested tools. Through this development process, I continue to deepen my knowledge of Python architecture and numerical calculation.
 
+### ✨ New Feature: Automatic Unit Conversion
+
+The library now includes **automatic unit conversion** for all quantity-based calculations:
+- **SI Prefixes**: Use `"mV"`, `"GHz"`, `"mm^3"` naturally
+- **Transparent**: No API changes - it just works!
+- **Intelligent**: Converts to SI base internally, displays original units
+- **Validated**: Dimensional analysis prevents unit errors
+
+```python
+import marhare as mh
+
+# Create quantities with any SI prefix
+V = mh.quantity(5000, 100, "mV", symbol="V")  # millivolts
+I = mh.quantity(2000, 50, "mA", symbol="I")   # milliamps
+
+# Calculations work automatically - no manual conversion!
+R = mh.quantity("V/I", "ohm", symbol="R")
+magnitudes = mh.register(V, I, R)
+R_result = mh.propagate_quantity("R", magnitudes)
+
+# LaTeX output preserves your original units
+print(mh.latex_quantity(V))
+# Output: $V = 5000 \pm 100 \, \mathrm{mV}$
+```
+
+See [docs/UNIT_CONVERSION_IMPLEMENTATION.md](docs/UNIT_CONVERSION_IMPLEMENTATION.md) for details.
+
 ## 🚀 Main Modules (Detailed)
 
 **Module documentation:**

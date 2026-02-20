@@ -7,6 +7,14 @@ import numpy as np
 
 import sympy as sp
 
+# Unit conversion system (optional, graceful degradation if pint unavailable)
+try:
+    from . import unit_converter
+    UNIT_CONVERSION_AVAILABLE = unit_converter.is_unit_conversion_enabled()
+except ImportError:
+    UNIT_CONVERSION_AVAILABLE = False
+    unit_converter = None
+
 
 
 
@@ -68,7 +76,7 @@ class _Uncertainties:
         return {"shape": value.shape, "kind": "vector", "sigma_vec": sigma_vec}
     
     @staticmethod
-    def quantity(*args, symbol=None):
+    def quantity(*args, symbol=None, normalize=True):
         """
         Unified quantity constructor (positional-only).
 
@@ -78,8 +86,10 @@ class _Uncertainties:
         3) quantity(expr, unit)               -> expresión solo (si expr es string)
         4) quantity(value, sigma, unit, expr) -> valor + expresión
 
-        Optional keyword:
+        Optional keywords:
         - symbol: str | None
+        - normalize: bool (default True) - If True, converts units to SI base.
+                                          If False, keeps original units (e.g., "cm" stays "cm").
 
         Returns a dict with stable keys:
         - measure: (value, sigma) where sigma is always an array (never None)
@@ -163,11 +173,68 @@ class _Uncertainties:
         if expr is not None and not isinstance(expr, (str, sp.Expr)):
             raise TypeError("expr must be a string or sympy.Expr")
 
+        # ========== UNIT CONVERSION ==========
+        # Strategy: always store measure_si (SI-normalized) for internal calculations
+        # Then decide what to display (SI or original) based on normalize flag
+        measure_si = None
+        unit_display = unit  # Default: what to display
+        
+        # Convert to SI base units and store in measure_si
+        if UNIT_CONVERSION_AVAILABLE and measure is not None:
+            try:
+                value_orig, sigma_orig = measure
+                # Get SI-normalized version
+                value_si, sigma_si, unit_base = unit_converter._converter.normalize_value_with_uncertainty(
+                    value_orig, sigma_orig, unit
+                )
+                
+                # Always store SI version for internal calculations
+                if unit_base is not None:
+                    measure_si = (value_si, sigma_si)
+                    unit_si = unit_base
+                else:
+                    measure_si = measure
+                    unit_si = unit
+                    
+            except Exception as e:
+                # If conversion fails, use original as both
+                import warnings
+                warnings.warn(
+                    f"Unit conversion failed for '{unit}': {e}. Using original units.",
+                    UserWarning
+                )
+                measure_si = measure
+                unit_si = unit
+        else:
+            # No conversion available: SI version is the same as original
+            measure_si = measure
+            unit_si = unit
+        
+        # Now decide what to display based on normalize flag
+        if normalize and measure_si is not None:
+            # normalize=True: display SI units with SI SYMBOLS (V not volt, A not ampere, etc.)
+            unit_display = unit_si
+            measure = measure_si
+            # Convert SI unit name to symbol (volt → V, ampere → A, etc.)
+            if UNIT_CONVERSION_AVAILABLE:
+                try:
+                    unit_display = unit_converter._converter.get_unit_symbol(unit_si) or unit_si
+                except Exception:
+                    # If symbol conversion fails, use full name
+                    unit_display = unit_si
+            unit = unit_display
+        else:
+            # normalize=False: display original units (keep as is)
+            unit_display = unit
+            # measure stays as original
+            # unit stays as original
+
         return {
-            "measure": measure,
+            "measure": measure,               # What to display (SI if normalize=True, else original)
+            "measure_si": measure_si,         # Always SI for internal calculations
             "result": None,
             "expr": expr,
-            "unit": unit,
+            "unit": unit,                      # Display unit
             "dimension": dimension,
             "symbol": symbol,
         }
@@ -295,16 +362,32 @@ class _Uncertainties:
             "sigma_latex": res["sigma_latex"],
         }
     @staticmethod
-    def propagate_quantity(target, magnitudes, simplify=True):
+    def propagate_quantity(target, magnitudes, simplify=True, compact=False):
         """
         High-level uncertainty propagation for a derived quantity.
+
+        Parameters
+        ----------
+        target : dict or str
+            Target quantity (with "symbol" key)
+        magnitudes : dict or iterable
+            Dictionary or iterable of magnitude dicts
+        simplify : bool, default True
+            Whether to simplify symbolic expressions
+        compact : bool, default False
+            If True, converts result units to compact SI prefixes (e.g., 5000 mV → 5 V).
+            If False, keeps units from quantity definition.
 
         Returns:
             value
             uncertainty
             analytic expression (latex)
             analytic uncertainty expression (latex)
-
+        
+        Notes
+        -----
+        When compact=True, automatically applies to_compact() to result units, showing
+        the most readable SI prefix (1e-9 m → 1 nm, 2.4e9 Hz → 2.4 GHz, etc.).
         """
         # 1) Normalize magnitudes and target
         if isinstance(magnitudes, dict):
@@ -346,13 +429,14 @@ class _Uncertainties:
 
             q = registry[key]
             expr = q.get("expr", None)
-            measure = q.get("measure", None)
+            # Use measure_si (SI-normalized) for calculations, fallback to measure
+            measure_to_use = q.get("measure_si", None) or q.get("measure", None)
 
             # Base quantities are identified by having no expression.
             if expr is None:
-                if measure is None:
+                if measure_to_use is None:
                     raise ValueError(f"{key} has no measure or expression")
-                val, sig = measure
+                val, sig = measure_to_use
                 info = _Uncertainties.checker(val, sig)
                 sig_out = info["sigma_vec"] if info["kind"] == "vector" else sig
                 res = {
@@ -399,7 +483,27 @@ class _Uncertainties:
         res = resolve_quantity(name)
 
         # 3) Return the updated quantity dictionary with the result cached
-        return registry[name]
+        target_qty = registry[name]
+        
+        # 4) Apply compact units if requested
+        if compact and UNIT_CONVERSION_AVAILABLE:
+            unit_str = target_qty.get("unit", None)
+            if unit_str is not None:
+                value, sigma = res["value"], res["sigma"]
+                try:
+                    compact_value, compact_sigma, compact_unit = unit_converter.get_compact_units(
+                        value, sigma, unit_str
+                    )
+                    # Update the target quantity with compact units
+                    target_qty["measure"] = (compact_value, compact_sigma)
+                    target_qty["unit"] = compact_unit if compact_unit else unit_str
+                    target_qty["result"] = (compact_value, compact_sigma)
+                except Exception as e:
+                    # If compacting fails, keep original result
+                    import warnings
+                    warnings.warn(f"Could not apply compact units: {e}", UserWarning)
+        
+        return target_qty
 
 
     # --------- Accessors ---------
@@ -410,7 +514,7 @@ incertidumbres = _Uncertainties()
 
 
 @functools.wraps(_Uncertainties.quantity)
-def quantity(*args, symbol=None):
+def quantity(*args, symbol=None, normalize=True):
     """
     Unified quantity constructor (positional-only).
 
@@ -419,8 +523,10 @@ def quantity(*args, symbol=None):
     2) quantity(expr, unit)                 -> expression only
     3) quantity(value, sigma, unit, expr)   -> measurement + expression
 
-    Optional keyword:
+    Optional keywords:
     - symbol: str | None
+    - normalize: bool (default True) - If True, converts units to SI base.
+                                      If False, keeps original units unchanged.
 
     Returns a dict with stable keys:
     - measure: (value, sigma) or None
@@ -430,7 +536,7 @@ def quantity(*args, symbol=None):
     - dimension: shape tuple or None
     - symbol: str | None
     """
-    return _Uncertainties.quantity(*args, symbol=symbol)
+    return _Uncertainties.quantity(*args, symbol=symbol, normalize=normalize)
 
 
 @functools.wraps(_Uncertainties.propagate)
@@ -439,8 +545,37 @@ def propagate(expr, values: dict, sigmas: dict, simplify=True):
 
 
 @functools.wraps(_Uncertainties.propagate_quantity)
-def propagate_quantity(target, magnitudes, simplify=True):
-    return _Uncertainties.propagate_quantity(target, magnitudes, simplify=simplify)
+def propagate_quantity(target, magnitudes, simplify=True, compact=False):
+    """
+    High-level uncertainty propagation for a derived quantity.
+    
+    Parameters
+    ----------
+    target : dict or str
+        Target quantity (with "symbol" key)
+    magnitudes : dict or iterable
+        Dictionary or iterable of magnitude dicts
+    simplify : bool, default True
+        Whether to simplify symbolic expressions
+    compact : bool, default False
+        If True, converts result units to compact SI prefixes (e.g., 5000 mV → 5 V).
+        If False, keeps units from quantity definition.
+    
+    Returns
+    -------
+    dict
+        Updated quantity dict with computed result
+        
+    Examples
+    --------
+    >>> V = quantity(5.0, 0.1, "V", symbol="V")
+    >>> R = quantity(1000.0, 10.0, "ohm", symbol="R")
+    >>> I = {"symbol": "I", "expr": "V/R", "unit": "A"}
+    >>> result = propagate_quantity(I, [V, R])
+    >>> # With compact=True, would convert to mA if result is in milliamperes
+    >>> result_compact = propagate_quantity(I, [V, R], compact=True)
+    """
+    return _Uncertainties.propagate_quantity(target, magnitudes, simplify=simplify, compact=compact)
 
 
 def value_quantity(q: dict):

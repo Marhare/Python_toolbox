@@ -11,22 +11,59 @@ Define and propagate measurements with uncertainty and units. Create quantities 
 Every quantity is a Python dictionary with these stable keys:
 
 - **`symbol`** (str): Variable name (e.g., `"V"`, `"mass"`)
-- **`unit`** (str): Measurement unit (e.g., `"V"`, `"kg"`, `"m/s²"`)
+- **`unit`** (str): Display unit 
+  - If `normalize=True` (default): SI SYMBOL (e.g., `"V"`, `"A"`, `"Hz"`, `"m"`)
+  - If `normalize=False`: original user-specified unit (e.g., `"mV"`, `"mA"`, `"mm"`)
+- **`measure`** (tuple): Displayed measurement `(value, sigma)` 
+  - If `normalize=True`: values in SI base units
+  - If `normalize=False`: values in original units
+- **`measure_si`** (tuple): **Internal only** — always in SI base units for calculations
 - **`expr`** (SymPy expression or str): Formula definition (e.g., `"V/I"` for resistance)
-- **`measure`** (tuple): Experimental measurement `(value, sigma)` or `None`
-- **`result`** (tuple): Computed result `(value, sigma)` or `None` (cached, never used as input)
+- **`result`** (tuple): Computed result `(value, sigma)` in SI base units, or `None` (cached, never used as input)
+
+**Critical Guarantee:** `value ± sigma` in `measure` and `measure_si` ALWAYS have **exactly the same units** within their respective tuples.
 
 ### Example
 
 ```python
+# User creates quantity with "mV"
+V = mh.quantity(5000.0, 100.0, "mV", symbol="V")
+# (normalize=True by default)
+
+# Internal storage:
 {
-    'symbol': 'R',
-    'unit': 'ohm',
-    'expr': 'V/I',
-    'measure': (None, None),     # No direct measurement
-    'result': (5.0, 0.1)         # Computed value ± uncertainty
+    'symbol': 'V',
+    'unit': 'V',                 # SI SYMBOL, not "volt"!
+    'measure': (5.0, 0.1),       # Displayed as SI: 5.0 ± 0.1 V
+    'measure_si': (5.0, 0.1),    # Calculations use SI
+    'expr': None,
+    'result': None
 }
+
+# With normalize=False:
+V = mh.quantity(5000.0, 100.0, "mV", symbol="V", normalize=False)
+{
+    'symbol': 'V',
+    'unit': 'mV',                # Original unit (display unit)
+    'measure': (5000, 100),      # Displayed as original: 5000 ± 100 mV
+    'measure_si': (5.0, 0.1),    # Calculations still use SI: 5.0V±0.1V
+    'expr': None,
+    'result': None
+}
+
+# When displayed:
+tex = mh.latex_quantity(V_normalized)
+# Output: $V = 5.0 \pm 0.1 \, \mathrm{V}$  ← SI SYMBOL
+tex = mh.latex_quantity(V_original)
+# Output: $V = 5000 \pm 100 \, \mathrm{mV}$  ← Original unit
 ```
+
+**Key Insight:** 
+- **Calculations always use SI base units** (from `measure_si`)
+- **Display shows SI SYMBOLS when normalize=True** (V, A, Hz, not volt, ampere, hertz)
+- **Display shows original units when normalize=False** (mV, mA, mm)
+- No conversion overhead during propagation
+- Dimensional analysis always works correctly
 
 ---
 
@@ -46,11 +83,238 @@ quantity(value, sigma, unit, expr_str, symbol=None)   # Value + expression
 
 - **`value`**: Numeric value (scalar, list, array)
 - **`sigma`**: Uncertainty (same shape as `value`); if not provided, treated as 0
-- **`unit`**: Physical unit string (e.g., `"V"`, `"kg"`, `"m/s²"`)
+- **`unit`**: Physical unit string (e.g., `"V"`, `"kg"`, `"m/s²"`) - supports SI prefixes like `"mV"`, `"GHz"`, `"mm^3"`
 - **`expr_str`**: Optional formula (string or SymPy expression) for computed quantities
 - **`symbol`**: Optional variable name (keyword-only); if `None`, can be auto-detected via `register()`
 
+---
+
+## Automatic Unit Conversion
+
+The module automatically handles unit conversion using [pint](https://pint.readthedocs.io/) as backend:
+
+### Supported Features
+
+✅ **SI Prefixes**: `m`, `k`, `M`, `G`, `T`, etc.
+- `"mV"` → millivolt
+- `"GHz"` → gigahertz  
+- `"µm"` or `"um"` → micrometer
+
+✅ **Compound Units**: 
+- `"m/s"` → meter per second
+- `"kg*m/s^2"` → kilogram·meter/second²
+- `"mm^3"` → cubic millimeter
+
+✅ **Automatic Conversion**: Values are converted to SI base units internally
+- You specify: `5000 mV`
+- Stored internally as: `5.0 V` (SI symbol)
+- Displayed as: `5.0 ± 0.1 V` (if normalize=True)
+- Displayed as: `5000 ± 100 mV` (if normalize=False)
+
+### Examples
+
+```python
+import marhare as mh
+
+# Voltage in millivolts (normalize=True by default)
+V = mh.quantity(5000.0, 100.0, "mV", symbol="V")
+# Internally: 5.0 ± 0.1 V (SI symbol)
+# Display: 5.0 ± 0.1 V (SI)
+
+# Same voltage, keep original units
+V_orig = mh.quantity(5000.0, 100.0, "mV", symbol="V", normalize=False)
+# Internally: 5.0 ± 0.1 V (for calculations)
+# Display: 5000 ± 100 mV (original)
+
+# Frequency in gigahertz
+f = mh.quantity(2.4, 0.05, "GHz", symbol="f")
+# Internally: 2.4e9 ± 5e7 Hz (SI symbol)
+# Display: 2.4e9 ± 5e7 Hz (if normalize=True)
+# Or: 2.4 ± 0.05 GHz (if normalize=False)
+
+# Volume in cubic millimeters
+vol = mh.quantity(1000.0, 10.0, "mm^3", symbol="V")
+# Internally: 1e-6 ± 1e-8 m³ (SI symbol)
+# Display: 1e-6 ± 1e-8 m³ (if normalize=True)
+# Or: 1000 ± 10 mm³ (if normalize=False)
+
+# Mixed units in calculations work automatically!
+R = mh.quantity("V/I", "ohm", symbol="R")  # Will handle mV, mA, etc.
+```
+
+### What Happens Behind the Scenes
+
+When you write `quantity(5000, 100, "mV", symbol="V")` with default `normalize=True`:
+
+**Step 1: Parse**
+```
+"mV" → recognized as millivolt
+```
+
+**Step 2: Normalize to SI** (both value and uncertainty with same factor)
+```
+5000 mV × (1 V / 1000 mV) = 5.0 V
+100 mV × (1 V / 1000 mV) = 0.1 V
+```
+✓ Same conversion factor applied to both!
+
+**Step 3: Convert to SI SYMBOL** (volt → V, hertz → Hz, etc.)
+```python
+{
+    'unit': 'V',              # What to display (SI SYMBOL)
+    'measure': (5.0, 0.1),    # What to display (SI values)
+    'measure_si': (5.0, 0.1), # For calculations (SI values)
+}
+```
+
+**Step 4: Use in Calculations**
+- All uncertainty propagation uses `measure_si` (5.0 ± 0.1 volt)
+- Prevents unit mismatch errors
+- Dimensional analysis works correctly
+
+**Step 5: Display with SI Symbol**
+```python
+# What appears in LaTeX:
+tex = mh.latex_quantity(V)
+# Output: $V = 5.0 \pm 0.1 \, \mathrm{V}$  ← SI SYMBOL
+
+# What appears in tables/plots:
+# Table column: "V (V)"  ← SI SYMBOL!
+# Plot axis: "Voltage [V]"  ← SI SYMBOL!
+```
+
+**With `normalize=False`:**
+```python
+V = mh.quantity(5000, 100, "mV", normalize=False)
+
+{
+    'unit': 'mV',             # What to display (original)
+    'measure': (5000, 100),   # What to display (original values)
+    'measure_si': (5.0, 0.1), # For calculations (always SI)
+}
+
+# Display output:
+# LaTeX:  $V = 5000 \pm 100 \, \mathrm{mV}$  ← Original unit
+# Table:  "V (mV)"
+# Plots:  axis label "[mV]"
+```
+
+**The guarantee:** Calculations are always dimensionally correct (using SI base), but you control what your users see as output.
+
+### Graceful Degradation
+
+If `pint` is not installed:
+- Unit conversion is disabled
+- Units are treated as plain strings (no validation)
+- Everything else works normally
+- Warning is shown once at import
+
+Install pint with: `pip install pint`
+
+### Controlling Unit Normalization
+
+By default, units are normalized to SI base. You can disable this with `normalize=False`:
+
+```python
+import marhare as mh
+
+# Default behavior: normalizes to meters
+x1 = mh.quantity(10.0, 0.5, "cm", symbol="x1")
+# Internal: 0.1 m, Display: 10 cm
+
+# Keep original units: stays in centimeters
+x2 = mh.quantity(10.0, 0.5, "cm", symbol="x2", normalize=False)
+# Internal: 10 cm, Display: 10 cm
+
+# All calculations in "cm" now
+length_total = mh.quantity("x2 + x2", "cm", symbol="L")
+magnitudes = mh.register(x2, length_total)
+L_result = mh.propagate_quantity("L", magnitudes)
+# Result: 20 ± ... cm (not normalized to meters)
+```
+
+**When to use `normalize=False`:**
+- Working in a specific unit system (CGS, laboratory units)
+- Avoiding floating-point precision issues with very large/small conversions
+- Educational purposes (showing calculations in non-SI units)
+- Maintaining consistency with external data sources
+
+**When to keep default (`normalize=True`):**
+- Mixing different prefixes (mV + V + kV)
+- General scientific calculations
+- When dimensional validation is important
+
+---
+
+### What Units Appear in Output (After Normalization)?
+
+**Short Answer:** The unit you originally specified (`"mV"`, `"GHz"`, etc.) — NOT the SI base unit.
+
+Here's a concrete example to clarify:
+
+```python
+import marhare as mh
+import pandas as pd
+
+# Create a voltage measurement with mV
+V = mh.quantity(5000.0, 100.0, "mV", symbol="V")
+
+print("\n=== What's stored internally? ===")
+print(V)
+# {'symbol': 'V', 'unit': 'volt', 'unit_display': 'mV', 'measure': (5.0, 0.1), ...}
+#                                    ↑
+#                                  YOUR unit!
+
+print("\n=== LaTeX Output ===")
+tex = mh.latex_quantity(V)
+print(tex)
+# $V = 5000 \pm 100 \, \mathrm{mV}$
+# ↑ Shows 5000 ± 100 mV (not 5.0 ± 0.1 V)
+
+print("\n=== Table Output ===")
+table = mh.quantities_table([V], significance_digits=2)
+print(table)
+# Output includes column: "V (mV)"  ← Your original unit!
+#                         5000 ± 100 mV
+
+print("\n=== Plot Axis Label ===")
+# When you plot with: mh.plot_result(V, "V", "V")
+# Axis label will be: "V [mV]"  ← Your unit!
+# NOT "V [volt]" or "V [V]"
+```
+
+**The rule:**
+- `unit_display` is set from your input (`"mV"`)
+- `unit` is the SI base (`"volt"`)
+- **All display functions (LaTeX, tables, plots) use `unit_display`**
+- **All calculations use `unit` internally**
+
+**When `normalize=False`:**
+```python
+x = mh.quantity(150, 2, "cm", normalize=False, symbol="x")
+print(x)
+# {'unit': 'cm', 'unit_display': 'cm', 'measure': (150, 2), ...}
+#               ↑
+#           The SAME because no normalization happened
+
+tex = mh.latex_quantity(x)
+# $x = 150 \pm 2 \, \mathrm{cm}$  ← Still shows cm
+```
+
+**Summary:**
+| Operation | Uses | Example |
+|-----------|------|---------|
+| LaTeX output | `unit_display` | `5000 ± 100 mV` |
+| Table column header | `unit_display` | `V (mV)` |
+| Plot axis label | `unit_display` | `[mV]` |
+| Internal calculations | `unit` | `5.0 V` |
+| Dictionary key "unit" | SI base | `"volt"` |
+| Dictionary key "unit_display" | Original | `"mV"` |
+
+---
+
 ### Common Patterns
+
 
 #### 1. **Measured Scalar**
 
@@ -335,7 +599,98 @@ with open("results.tex", "w") as f:
 
 ---
 
+## Automatic Compact Units with `to_compact()`
+
+### The Problem
+
+Large or tiny numbers are hard to read:
+- `1e-9 m` is harder to understand than `1 nm`
+- `2400000000 Hz` is harder than `2.4 GHz`
+- `5000 mV` is harder than `5 V`
+
+### The Solution: Compact Units
+
+The `to_compact()` method automatically selects the best SI prefix to keep numbers between 1-999:
+
+```python
+import marhare as mh
+from marhare.unit_converter import get_compact_units
+
+# Example 1: Nanoseconds
+val, sig, unit = get_compact_units(1e-9, 1e-12, "s")
+# Output: (1.0, 0.001, "nanosecond")
+# Display: 1.0 ± 0.001 ns (much more readable!)
+
+# Example 2: Millivolts to Volts
+val, sig, unit = get_compact_units(5000, 100, "mV")
+# Output: (5.0, 0.1, "volt")
+# Display: 5.0 ± 0.1 V
+
+# Example 3: Gigahertz
+val, sig, unit = get_compact_units(2.4e9, 1e8, "Hz")
+# Output: (2.4, 0.1, "gigahertz")
+# Display: 2.4 ± 0.1 GHz
+```
+
+### Using with `propagate_quantity()`
+
+After computing a derived quantity, automatically compact the result units:
+
+```python
+# Define base quantities
+V = mh.quantity(5000.0, 100.0, "mV", symbol="V")
+R = mh.quantity(1000.0, 10.0, "ohm", symbol="R")
+
+# Define derived quantity
+I = {"symbol": "I", "expr": "V/R", "unit": "A"}
+
+# Propagate WITHOUT compacting
+result_normal = mh.propagate_quantity(I, [V, R])
+print(result_normal["measure"])  # (5.0, 0.1) in amperes
+
+# Propagate WITH automatic compacting
+result_compact = mh.propagate_quantity(I, [V, R], compact=True)
+# If result is 0.005 A, compacts to:
+# measure: (5.0, 0.1) in milliamperes
+# unit: "milliampere" (not "A")
+print(result_compact["measure"])  # (5.0, 0.1)
+print(result_compact["unit"])     # "milliampere"
+```
+
+### How It Works
+
+1. **Convert to SI base units** internally
+2. **Apply pint's `to_compact()`** to find best prefix
+3. **Scale sigma with same factor as value** (ensures consistency!)
+4. **Return human-readable values** with best-fit prefix
+
+### Examples of Automatic Prefix Selection
+
+| Input | Output | Why |
+|-------|--------|-----|
+| `1e-9 m` | `1.0 nm` | Nano keeps it at 1 (readable) |
+| `5000 mV` | `5.0 V` | Volt is cleaner than k-mV |
+| `2.4e9 Hz` | `2.4 GHz` | Giga avoids scientific notation |
+| `0.0001 A` | `0.1 mA` | Milli keeps it as 0.1 (readable) |
+| `0.5 V` | `500 mV` | Milli helps show precision |
+
+### Key Guarantee: Consistency
+
+**The sigma is ALWAYS scaled by the exact same factor as the value.**
+
+```python
+# Input: 5000 mV ± 100 mV
+val, sig, unit = get_compact_units(5000, 100, "mV")
+# Output: 5.0 V ± 0.1 V
+# Check: (5.0 / 5000) = 0.001 = (0.1 / 100) ✓ Same factor!
+```
+
+This ensures `value ± sigma` measurements are always dimensionally consistent.
+
+---
+
 ## Advanced: Multiple Variables and Complex Expressions
+
 
 ### Example: Gravitational Potential Energy
 
@@ -380,7 +735,8 @@ print(f"PE = {v:.1f} ± {s:.1f} J")
 | `quantity(expr_str, unit, symbol=None)` | Create computed quantity with formula |
 | `register(*quantities)` | Auto-detect symbols from variable names |
 | `value_quantity(q)` | Extract `(value, sigma)` from quantity |
-| `propagate_quantity(target, magnitudes, simplify)` | Compute derived quantity with error |
+| `propagate_quantity(target, magnitudes, simplify, compact=False)` | Compute derived quantity; `compact=True` auto-selects SI prefix |
+| `get_compact_units(value, sigma, unit)` | Convert any measurement to readable SI prefix |
 | `propagate(expr, values, sigmas, simplify)` | Low-level error propagation |
 | `uncertainty_propagation(f, vars_, values, sigmas, cov)` | Advanced: includes covariance |
 
