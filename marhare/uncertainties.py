@@ -210,24 +210,39 @@ class _Uncertainties:
             measure_si = measure
             unit_si = unit
         
+        # Get symbol for the unit (always try, regardless of normalize flag)
+        # First use explicit symbol parameter if provided, otherwise extract from unit
+        symbol_value = symbol  # Use the parameter passed in
+        if symbol_value is None and UNIT_CONVERSION_AVAILABLE and unit is not None:
+            try:
+                symbol_value = unit_converter._converter.get_unit_symbol(unit)
+            except Exception:
+                symbol_value = None
+        
         # Now decide what to display based on normalize flag
         if normalize and measure_si is not None:
             # normalize=True: display SI units with SI SYMBOLS (V not volt, A not ampere, etc.)
             unit_display = unit_si
             measure = measure_si
-            # Convert SI unit name to symbol (volt → V, ampere → A, etc.)
-            if UNIT_CONVERSION_AVAILABLE:
+            # Try to get a nice symbol for the SI unit (only if not explicitly provided)
+            if UNIT_CONVERSION_AVAILABLE and symbol_value is None:
                 try:
-                    unit_display = unit_converter._converter.get_unit_symbol(unit_si) or unit_si
+                    # Try to get symbol from SI base unit
+                    symbol_value = unit_converter._converter.get_unit_symbol(unit_si)
                 except Exception:
-                    # If symbol conversion fails, use full name
-                    unit_display = unit_si
+                    symbol_value = None
+            # Use symbol if we got one, otherwise unit display
+            if symbol_value:
+                unit_display = symbol_value
+            else:
+                unit_display = unit_si
             unit = unit_display
         else:
             # normalize=False: display original units (keep as is)
             unit_display = unit
             # measure stays as original
             # unit stays as original
+            # symbol already set above
 
         return {
             "measure": measure,               # What to display (SI if normalize=True, else original)
@@ -236,7 +251,7 @@ class _Uncertainties:
             "expr": expr,
             "unit": unit,                      # Display unit
             "dimension": dimension,
-            "symbol": symbol,
+            "symbol": symbol_value if symbol_value else unit,  # Use symbol if available, else unit
         }
 
         

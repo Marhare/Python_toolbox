@@ -5,6 +5,7 @@ from .functions import (
     Function,
     D,
     I,
+    dp,
 )
 
 # --- Uncertainties ---
@@ -50,6 +51,7 @@ __all__ = [
     "Function",
     "D",
     "I",
+    "dp",
     "quantity",
     "propagate",
     "propagate_quantity",

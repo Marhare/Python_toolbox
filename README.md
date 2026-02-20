@@ -76,28 +76,30 @@ print(res["parametros"], res["chi2_red"], res["p"])
 
 ---
 
-### animaciones.py
-**Purpose:** declarative time engine to animate objects from `graficos.py`.
+### animations.py
+**Purpose:** declarative time engine to animate objects from `graphics.py`.
 
 **Main API:**
 - `animate(scene, evolve, duration, fps=30, speed=1.0, loop=False, show=True)`
 
 **`evolve` rules:**
-- `Serie` → `y(t)`
-- `Serie3D` → `(x, y, z)`
-- `Banda` → `(y_low, y_high)`
-- `Ajuste` → `yfit(t)`
+- `Series` → `y(t)`
+- `Series3D` → `(x, y, z)`
+- `Band` → `(y_low, y_high)`
+- `Fit` → `yfit(t)`
 
 **Notes:** in notebooks with inline backend you may see a static frame; saving to GIF/MP4 is recommended.
 
 **Quick example:**
 ```python
-from graficos import graficos
-from animaciones import animaciones
+import numpy as np
+import marhare as mh
+from marhare.graphics import Series, Scene
+from marhare.animations import animate
 
-serie = graficos.Serie(x, y)
-scene = graficos.Scene(serie, title="Demo")
-anim = animaciones.animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0)
+serie = Series(x, y)
+scene = Scene([serie], title="Demo")
+anim = animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0)
 ```
 
 ---
@@ -166,18 +168,18 @@ spec = fft_tools.espectro_potencia(signal, dt)
 
 ---
 
-### graficos.py
+### graphics.py
 **Purpose:** scientific visualization with semantic objects and consistent styling.
 
-**Objects:** `Serie`, `SerieConError`, `Histograma`, `Ajuste`, `Banda`, `Serie3D`, `Panel`, `Scene`.
+**Objects:** `Series`, `SeriesWithError`, `Histogram`, `Fit`, `Band`, `Series3D`, `Panel`, `Scene`.
 
-**Engine:** `plot(*objetos, layout=None, dims="2D", show=True, ...)`
+**Engine:** `plot(*objects, layout=None, dims="2D", show=True, ...)`
 
 **Quick example:**
 ```python
-from graficos import graficos
-serie = graficos.Serie(x, y, label="Datos")
-graficos.plot(serie)
+import marhare as mh
+serie = mh.graphics.Series(x, y, label="Data")
+mh.plot(serie)
 ```
 
 ---

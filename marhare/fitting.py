@@ -627,6 +627,10 @@ class ConfidenceIntervalResult:
         """Allow dict-like access for backward compatibility."""
         return self._data[key]
     
+    def __contains__(self, key):
+        """Allow membership testing (in operator)."""
+        return key in self._data
+    
     def __str__(self):
         """Formatted string representation for easy printing."""
         params = self._data["parameters"]

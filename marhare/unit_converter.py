@@ -403,19 +403,21 @@ class UnitConverter:
     
     def get_unit_symbol(self, unit_str: str) -> Optional[str]:
         """
-        Get the standard SI symbol for a unit string.
+        Get the standard symbol for a unit using pint's internal definitions.
         
-        Converts full names to symbols: "volt" → "V", "ampere" → "A", etc.
+        Pint maintains symbol metadata for all registered units. This method
+        extracts the proper symbol without needing manual mapping.
         
         Parameters
         ----------
         unit_str : str
-            Unit string (can be singular or prefixed)
+            Unit string (e.g., "volt", "mV", "hertz", "GHz")
             
         Returns
         -------
         str or None
-            SI symbol string, or None if unavailable
+            The standard symbol for the unit (e.g., "V", "mV", "Hz", "GHz")
+            or the original unit_str if conversion fails
             
         Examples
         --------
@@ -423,13 +425,9 @@ class UnitConverter:
         >>> converter.get_unit_symbol("volt")
         "V"
         >>> converter.get_unit_symbol("mV")
-        "mV"
-        >>> converter.get_unit_symbol("ampere")
-        "A"
+        "mV"  # Preserves prefixes
         >>> converter.get_unit_symbol("hertz")
         "Hz"
-        >>> converter.get_unit_symbol("meter ** 2")
-        "m²"
         """
         if not self.is_enabled():
             return unit_str  # Can't convert, return original
@@ -439,18 +437,38 @@ class UnitConverter:
             return unit_str  # Can't parse, return original
         
         try:
-            # Get the string representation with SI symbols
-            # pint uses .symbol attribute which gives standard SI symbols
+            # Create a quantity with the parsed unit
             q = 1.0 * unit
-            q_base = q.to_base_units()
             
-            # Get symbol from the base units
-            # This will be like "V", "A", "Hz", "m", "m / s", etc.
-            symbol_str = str(q_base.units)
+            # For simple units, get symbol directly from the unit definition
+            # Use pint's internal _units dictionary which has symbol metadata
+            unit_str_parsed = str(q.units)
             
-            # For simple base units, symbol_str should already be the symbol
-            # For compound units, convert to prettier format
-            return symbol_str
+            # Try to get symbol from pint's unit definitions
+            try:
+                unit_def = self.ureg._units[unit_str_parsed]
+                if hasattr(unit_def, 'symbol'):
+                    return unit_def.symbol
+            except (KeyError, AttributeError):
+                # If not found in _units, it's a compound unit
+                pass
+            
+            # For compound units (e.g., "m / s", "kg * m ** 2 / s ** 3"),
+            # try to build the symbol from components
+            if any(op in unit_str_parsed for op in [' / ', ' * ', '**']):
+                # Get reduced form and try that
+                q_reduced = q.to_reduced_units()
+                unit_reduced_str = str(q_reduced.units)
+                
+                try:
+                    unit_def = self.ureg._units[unit_reduced_str]
+                    if hasattr(unit_def, 'symbol'):
+                        return unit_def.symbol
+                except (KeyError, AttributeError):
+                    pass
+            
+            # Return the string representation as fallback
+            return unit_str_parsed
             
         except Exception as e:
             warnings.warn(

@@ -1,4 +1,4 @@
-# graficos.py – Scientific Visualization
+# graphics.py – Scientific Visualization
 
 ## Purpose
 

@@ -25,12 +25,12 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 try:
-    from graficos import graficos, Scene, Serie, Serie3D, Banda, Ajuste
+    from .graphics import graphics, Scene, Series, Series3D, Band, Fit
 except ImportError:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent))
-    from graficos import graficos, Scene, Serie, Serie3D, Banda, Ajuste
+    from graphics import graphics, Scene, Series, Series3D, Band, Fit
 
 
 # ============================================================
@@ -177,10 +177,10 @@ def animate(
             except Exception as exc:
                 raise TypeError(f"Error evaluating evolve for {type(obj).__name__}: {exc}") from exc
 
-            if isinstance(obj, Serie) or _es_serie_like(obj):
+            if isinstance(obj, Series) or _es_serie_like(obj):
                 y = np.asarray(new_data, dtype=float)
                 if y.shape != obj.y.shape:
-                    raise TypeError("Serie: evolve must return y with the same length as x")
+                    raise TypeError("Series: evolve must return y with the same length as x")
                 obj.y = y
                 if hasattr(artist, "set_offsets"):
                     artist.set_offsets(np.column_stack([obj.x, obj.y]))
@@ -190,16 +190,16 @@ def animate(
                     artist.set_xdata(obj.x)
                     artist.set_ydata(obj.y)
                 else:
-                    raise TypeError("Serie artist does not support data updates")
+                    raise TypeError("Series artist does not support data updates")
                 modified.append(artist)
-            elif isinstance(obj, Serie3D) or _es_serie3d_like(obj):
+            elif isinstance(obj, Seriess3D) or _es_serie3d_like(obj):
                 if not isinstance(new_data, Tuple) and not isinstance(new_data, list):
-                    raise TypeError("Serie3D: evolve must return (x, y, z)")
+                    raise TypeError("Series3D: evolve must return (x, y, z)")
                 if len(new_data) != 3:
-                    raise TypeError("Serie3D: evolve must return (x, y, z)")
+                    raise TypeError("Series3D: evolve must return (x, y, z)")
                 x, y, z = [np.asarray(v, dtype=float) for v in new_data]
                 if x.shape != y.shape or x.shape != z.shape:
-                    raise TypeError("Serie3D: x, y, z must have the same length")
+                    raise TypeError("Series3D: x, y, z must have the same length")
                 obj.x, obj.y, obj.z = x, y, z
                 if hasattr(artist, "set_data_3d"):
                     artist.set_data_3d(x, y, z)
@@ -207,28 +207,28 @@ def animate(
                     artist.set_data(x, y)
                     artist.set_3d_properties(z)
                 modified.append(artist)
-            elif isinstance(obj, Banda) or _es_banda_like(obj):
+            elif isinstance(obj, Band) or _es_banda_like(obj):
                 if not isinstance(new_data, Tuple) and not isinstance(new_data, list):
-                    raise TypeError("Banda: evolve must return (y_low, y_high)")
+                    raise TypeError("Band: evolve must return (y_low, y_high)")
                 if len(new_data) != 2:
-                    raise TypeError("Banda: evolve must return (y_low, y_high)")
+                    raise TypeError("Band: evolve must return (y_low, y_high)")
                 y_low, y_high = [np.asarray(v, dtype=float) for v in new_data]
                 if y_low.shape != obj.y_low.shape or y_high.shape != obj.y_high.shape:
-                    raise TypeError("Banda: y_low/y_high must have the same length as x")
+                    raise TypeError("Band: y_low/y_high must have the same length as x")
                 obj.y_low, obj.y_high = y_low, y_high
                 artist.set_verts([_build_band_verts(obj.x, obj.y_low, obj.y_high)])
                 modified.append(artist)
-            elif isinstance(obj, Ajuste) or _es_ajuste_like(obj):
+            elif isinstance(obj, Fit) or _es_ajuste_like(obj):
                 yfit = np.asarray(new_data, dtype=float)
                 if yfit.shape != obj.yfit.shape:
-                    raise TypeError("Ajuste: evolve must return yfit with the same length as x")
+                    raise TypeError("Fit: evolve must return yfit with the same length as x")
                 obj.yfit = yfit
                 if hasattr(artist, "set_ydata"):
                     artist.set_ydata(obj.yfit)
                 elif hasattr(artist, "set_data"):
                     artist.set_data(obj.x, obj.yfit)
                 else:
-                    raise TypeError("Ajuste artist does not support data updates")
+                    raise TypeError("Fit artist does not support data updates")
                 modified.append(artist)
             else:
                 raise TypeError(f"Unsupported type in evolve: {type(obj).__name__}")

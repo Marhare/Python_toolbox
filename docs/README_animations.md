@@ -1,4 +1,4 @@
-# animaciones.py
+# animations.py
 
 ## Purpose
 Declarative time engine to animate objects defined in `graphics.py`. It does not compute data; it only updates artists from time‑evolution functions.
@@ -35,7 +35,9 @@ Returns a `matplotlib.animation.FuncAnimation`. If `show=True`, shows the intera
 
 ## Example
 ```python
-impormarhare.graphics import graphics, Series, Scene
+import numpy as np
+import marhare as mh
+from marhare.graphics import Series, Scene
 from marhare.animations import animate
 
 x = np.linspace(0, 2*np.pi, 200)
@@ -44,6 +46,5 @@ serie = Series(x, y, label="sin")
 scene = Scene([serie], title="Animation")
 
 # Animate: y evolves as y * cos(t)
-anim = animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0, show=True
-anim = animaciones.animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0)
+anim = animate(scene, {serie: lambda t: y*np.cos(t)}, duration=2.0, show=True)
 ```
