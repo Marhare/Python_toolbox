@@ -64,9 +64,9 @@ confidence_interval
         distribucion: str -> "normal" | "poisson" | "binomial"
         sigma: float | None -> known σ (normal only)
     OUTPUT:
-        dict -> limite_inferior, limite_superior, nivel, metodo, parametro_estimado, n
+        dict -> lower_bound, upper_bound, level, method, estimated_parameter, n
     NOTES:
-        includes grados_libertad if applicable
+        includes degrees_of_freedom if applicable
     ERRORS:
         ValueError -> invalid assumptions, incompatible data
 
@@ -484,9 +484,9 @@ class _Statistics:
             distribucion: str -> "normal" | "poisson" | "binomial"
             sigma: float | None -> known σ (normal only)
         OUTPUT:
-            dict -> limite_inferior, limite_superior, nivel, metodo, parametro_estimado, n
+            dict -> lower_bound, upper_bound, level, method, estimated_parameter, n
         NOTES:
-            includes grados_libertad if applicable
+            includes degrees_of_freedom if applicable
         ERRORS:
             ValueError -> invalid assumptions, incompatible data
 
@@ -527,20 +527,20 @@ class _Statistics:
         -------
         Dict[str, Union[float, int, str]]
             Dictionary with keys:
-            - "limite_inferior": lower interval bound (float)
-            - "limite_superior": upper interval bound (float)
-            - "nivel": confidence level (float)
-            - "metodo": method used ("z", "t", "poisson_exacto", "binomial_exacto")
-            - "parametro_estimado": point estimate (float)
+            - "lower_bound": lower interval bound (float)
+            - "upper_bound": upper interval bound (float)
+            - "level": confidence level (float)
+            - "method": method used ("z", "t", "poisson_exact", "binomial_exact")
+            - "estimated_parameter": point estimate (float)
             - "n": sample size (int)
-            - "grados_libertad": df if applicable (int)
+            - "degrees_of_freedom": df if applicable (int)
 
         Usage examples
         -------------
         >>> x = [2.1, 2.4, 2.0, 2.3]
         >>> # Normal con σ desconocida (t-Student exacto)
         >>> resultado = statistics.confidence_interval(x, distribucion="normal")
-        >>> print(f"IC[μ]: ({resultado['limite_inferior']:.3f}, {resultado['limite_superior']:.3f})")
+        >>> print(f"IC[μ]: ({resultado['lower_bound']:.3f}, {resultado['upper_bound']:.3f})")
 
         >>> # Normal con σ conocida (z exacto)
         >>> resultado = statistics.confidence_interval(x, sigma=0.2, distribucion="normal")
@@ -581,13 +581,13 @@ class _Statistics:
                 z = stats.norm.ppf(1 - (1 - nivel) / 2)
                 delta = z * sigma / np.sqrt(n)
                 return {
-                    "limite_inferior": float(mu - delta),
-                    "limite_superior": float(mu + delta),
-                    "nivel": float(nivel),
-                    "metodo": "z",
-                    "parametro_estimado": float(mu),
+                    "lower_bound": float(mu - delta),
+                    "upper_bound": float(mu + delta),
+                    "level": float(nivel),
+                    "method": "z",
+                    "estimated_parameter": float(mu),
                     "n": n,
-                    "sigma_conocida": float(sigma)
+                    "known_sigma": float(sigma)
                 }
 
             # Case: unknown σ (exact Student‑t)
@@ -597,14 +597,14 @@ class _Statistics:
             tcrit = stats.t.ppf(1 - (1 - nivel) / 2, n - 1)
             delta = tcrit * s / np.sqrt(n)
             return {
-                "limite_inferior": float(mu - delta),
-                "limite_superior": float(mu + delta),
-                "nivel": float(nivel),
-                "metodo": "t",
-                "parametro_estimado": float(mu),
-                "desv_tipica_muestral": float(s),
+                "lower_bound": float(mu - delta),
+                "upper_bound": float(mu + delta),
+                "level": float(nivel),
+                "method": "t",
+                "estimated_parameter": float(mu),
+                "sample_std": float(s),
                 "n": n,
-                "grados_libertad": n - 1
+                "degrees_of_freedom": n - 1
             }
 
         elif distribucion == "poisson":
@@ -627,11 +627,11 @@ class _Statistics:
             ls = 0.5 * stats.chi2.ppf(1 - alpha / 2, 2 * k + 2) / n
             
             return {
-                "limite_inferior": float(li),
-                "limite_superior": float(ls),
-                "nivel": float(nivel),
-                "metodo": "poisson_exacto",
-                "parametro_estimado": float(lambda_est),
+                "lower_bound": float(li),
+                "upper_bound": float(ls),
+                "level": float(nivel),
+                "method": "poisson_exact",
+                "estimated_parameter": float(lambda_est),
                 "n": n
             }
 
@@ -661,13 +661,13 @@ class _Statistics:
                 ls = (k + 1) * F_upper / (n - k + (k + 1) * F_upper)
             
             return {
-                "limite_inferior": float(li),
-                "limite_superior": float(ls),
-                "nivel": float(nivel),
-                "metodo": "binomial_exacto",
-                "parametro_estimado": float(p_est),
+                "lower_bound": float(li),
+                "upper_bound": float(ls),
+                "level": float(nivel),
+                "method": "binomial_exact",
+                "estimated_parameter": float(p_est),
                 "n": n,
-                "exitos": int(k)
+                "successes": int(k)
             }
 
         else:

@@ -142,43 +142,6 @@ print(tex)
 
 ---
 
-### 3. **`redondeo_incertidumbre(valor, sigma, cifras=2)`** — Metrological Rounding
-
-**Purpose:** Round value and uncertainty according to ISO standards (1–2 significant figures for uncertainty).
-
-**Syntax:**
-```python
-rounded_value, rounded_sigma = redondeo_incertidumbre(value, sigma, cifras=2)
-```
-
-**Parameters:**
-- `valor`: Numeric value
-- `sigma`: Uncertainty (σ)
-- `cifras` (int): Significant figures of uncertainty (1 or 2)
-
-**Examples:**
-
-```python
-from marhare import latex_tools
-
-# Example 1: Standard rounding (2 sig figs of σ)
-v, s = latex_tools.redondeo_incertidumbre(12.3456, 0.0789, cifras=2)
-print(f"{v} ± {s}")
-# Output: 12.35 ± 0.08
-
-# Example 2: Single sig fig of uncertainty (more conservative)
-v, s = latex_tools.redondeo_incertidumbre(100.5, 15.3, cifras=1)
-print(f"{v} ± {s}")
-# Output: 101 ± 20
-
-# Example 3: Large uncertainty
-v, s = latex_tools.redondeo_incertidumbre(5.234, 0.89, cifras=2)
-print(f"{v} ± {s}")
-# Output: 5.2 ± 0.9
-```
-
----
-
 ## Practical Workflows
 
 ### Workflow 1: Single Scalar Measurement
@@ -206,14 +169,14 @@ tex = mh.latex_quantity(g_exp, cifras=2)
 import marhare as mh
 
 # 1. Define measurements
-V = mh.quantity(12.5, 0.3, "V", symbol="U")
+U = mh.quantity(12.5, 0.3, "V", symbol="U")
 I = mh.quantity(2.5, 0.1, "A", symbol="I")
 
 # 2. Define formula
-R = mh.quantity(expr="U/I", unit="Ω", symbol="R")
+R = mh.quantity("U/I", "Ω", symbol="R")
 
 # 3. Propagate error
-magnitudes = mh.register(V, I, R)
+magnitudes = mh.register(U, I, R)
 R_computed = mh.propagate_quantity("R", magnitudes)
 
 # 4. Format for publication
@@ -313,22 +276,6 @@ The uncertainty determines how many decimal places to keep. The `cifras` paramet
 | ±0.8 | 1 | 0.8 | Medium precision |
 | ±8 | 10 | 8 | Lower precision |
 
-**Example:**
-
-```python
-from marhare import latex_tools
-
-# Value with moderate uncertainty
-v, s = latex_tools.redondeo_incertidumbre(123.456, 1.234, cifras=2)
-print(f"{v} ± {s}")
-# Output: 123.5 ± 1.2
-
-# Same value, more conservative rounding
-v, s = latex_tools.redondeo_incertidumbre(123.456, 1.234, cifras=1)
-print(f"{v} ± {s}")
-# Output: 123 ± 1
-```
-
 ---
 
 ## Integration with Graphics
@@ -383,7 +330,6 @@ print(tex)
 | Format scalar | `latex_quantity(q)` |
 | Scalar with 1 sig fig of σ | `latex_quantity(q, cifras=1)` |
 | Format array as table | `valor_pm(arr, arr_unc)` |
-| Round before formatting | `redondeo_incertidumbre(v, s)` then format |
 | With siunitx | `latex_quantity(q, siunitx=True)` |
 | Vector magnitudes table | `latex_quantity([q1, q2, ...])` |
 
@@ -406,7 +352,6 @@ print(tex)
 |----------|---------|
 | `latex_quantity(q, cifras, siunitx)` | Format quantity dict |
 | `valor_pm(v, σ, unit, cifras, siunitx)` | Format scalar/array |
-| `redondeo_incertidumbre(v, σ, cifras)` | Metrological rounding |
 
 ---
 

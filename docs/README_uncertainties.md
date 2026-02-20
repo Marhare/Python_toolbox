@@ -145,7 +145,7 @@ import marhare as mh
 # Create quantities without explicit symbols
 voltage = mh.quantity(5.0, 0.1, "V")
 current = mh.quantity(0.2, 0.01, "A")
-resistance = mh.quantity(expr="voltage/current", unit="ohm")
+resistance = mh.quantity("voltage/current", "ohm")
 
 # Call register to infer symbols from variable names
 magnitudes = mh.register(voltage, current, resistance)
@@ -268,17 +268,17 @@ import numpy as np
 
 # ============ STEP 1: CREATE MEASUREMENTS ============
 # Measured mass (scale precision ±10 g)
-mass = mh.quantity(1.250, 0.010, "kg", symbol="m")  
+m = mh.quantity(1.250, 0.010, "kg", symbol="m")
 
 # Measured velocity (video analysis precision ±0.05 m/s)
-velocity = mh.quantity(2.5, 0.05, "m/s", symbol="v")
+v = mh.quantity(2.5, 0.05, "m/s", symbol="v")
 
 # ============ STEP 2: DEFINE FORMULAS ============
 # Kinetic energy: KE = 0.5 * m * v²
-kinetic_energy = mh.quantity("0.5*m*v**2", "J", symbol="KE")
+KE = mh.quantity("0.5*m*v**2", "J", symbol="KE")
 
 # ============ STEP 3: REGISTER (Auto-detect symbols) ============
-magnitudes = mh.register(mass, velocity, kinetic_energy)
+magnitudes = mh.register(m, v, KE)
 
 # ============ STEP 4: PROPAGATE ============
 KE_computed = mh.propagate_quantity("KE", magnitudes)
@@ -343,15 +343,15 @@ with open("results.tex", "w") as f:
 import marhare as mh
 
 # Measured values
-mass = mh.quantity(2.5, 0.05, "kg", symbol="m")
-height = mh.quantity(10.0, 0.2, "m", symbol="h")
+m = mh.quantity(2.5, 0.05, "kg", symbol="m")
+h = mh.quantity(10.0, 0.2, "m", symbol="h")
 g = mh.quantity(9.81, 0.01, "m/s²", symbol="g")  # Constant, but with precision
 
 # Define energy formula
 PE = mh.quantity("m * g * h", "J", symbol="PE")
 
 # Propagate
-magnitudes = mh.register(mass, height, g, PE)
+magnitudes = mh.register(m, h, g, PE)
 PE_result = mh.propagate_quantity("PE", magnitudes)
 
 v, s = mh.value_quantity(PE_result)

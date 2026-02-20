@@ -122,12 +122,12 @@ def _valor_pm_escalar(
         s_str = fmt.format(s)
 
     if siunitx and unidad:
-        return f"\\SI{{{v_str} \\pm {s_str}}}{{{unidad}}}"
+        return f"$\\SI{{{v_str} \\pm {s_str}}}{{{unidad}}}$"
 
     if unidad:
-        return f"({v_str} \\pm {s_str})\\,\\mathrm{{{unidad}}}"
+        return f"$({v_str} \\pm {s_str})\\,\\mathrm{{{unidad}}}$"
 
-    return f"({v_str} \\pm {s_str})"
+    return f"$({v_str} \\pm {s_str})$"
 
 
 def tabla_latex(
@@ -179,12 +179,13 @@ def tabla_latex(
         col_fmt += "l"
     col_fmt += "c" * cols
 
-    tabular = [rf"\\begin{{tabular}}{{{col_fmt}}}"]
+    tabular = [rf"\begin{{tabular}}{{{col_fmt}}}"]
+
 
     if lineas == "booktabs":
-        tabular.append(r"\\toprule")
+        tabular.append(r"\toprule")
     elif lineas == "hline":
-        tabular.append(r"\\hline")
+        tabular.append(r"\hline")
 
     if headers:
         header_line = []
@@ -193,7 +194,7 @@ def tabla_latex(
         header_line.extend(headers)
         tabular.append(" & ".join(header_line) + r" \\")
         if lineas in ("booktabs", "hline"):
-            tabular.append(r"\\midrule" if lineas == "booktabs" else r"\\hline")
+            tabular.append(r"\midrule" if lineas == "booktabs" else r"\hline")
 
     for i, fila in enumerate(filas_norm):
         fila_out = []
@@ -203,11 +204,11 @@ def tabla_latex(
         tabular.append(" & ".join(fila_out) + r" \\")
 
     if lineas == "booktabs":
-        tabular.append(r"\\bottomrule")
+        tabular.append(r"\bottomrule")
     elif lineas == "hline":
-        tabular.append(r"\\hline")
+        tabular.append(r"\hline")
 
-    tabular.append(r"\\end{tabular}")
+    tabular.append(r"\end{tabular}")
     latex_tabular = "\n".join(tabular)
 
     inserciones = ""
@@ -217,16 +218,16 @@ def tabla_latex(
         inserciones += f"\\{tamano}\n"
 
     if envolver:
-        out = f"\\begin{{table}}[{posicion}]\n"
+        out = rf"\begin{{table}}[{posicion}]" + "\n"
         out += inserciones
         if caption:
-            out += f"\\caption{{{caption}}}\n"
+            out += rf"\caption{{{caption}}}" + "\n"
         if label:
-            out += f"\\label{{{label}}}\n"
+            out += rf"\label{{{label}}}" + "\n"
         out += latex_tabular + "\n"
         if post:
             out += str(post) + "\n"
-        out += "\\end{table}\n"
+        out += r"\end{table}" + "\n"
         return out
 
     out = inserciones + latex_tabular
@@ -511,7 +512,7 @@ def valor_pm(
                 posicion=posicion,
                 orientacion=orientacion,
             )
-            filas.append([symbol, formatted])
+            filas.append([f"${symbol}$", formatted])
 
         # Headers are fixed for magnitudes tables.
         headers = ["Magnitud", "Valor"]

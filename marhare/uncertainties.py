@@ -398,13 +398,8 @@ class _Uncertainties:
         # 2) Resolve target
         res = resolve_quantity(name)
 
-        # 3) Return ONLY what you care about
-        return {
-            "value": res["value"],
-            "uncertainty": res["sigma"],
-            "expr": res["expr_latex"],
-            "sigma_expr": res["sigma_latex"],
-        }
+        # 3) Return the updated quantity dictionary with the result cached
+        return registry[name]
 
 
     # --------- Accessors ---------
