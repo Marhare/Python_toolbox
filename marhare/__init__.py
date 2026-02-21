@@ -40,6 +40,7 @@ variance = _statistics.variance
 standard_deviation = _statistics.standard_deviation
 standard_error = _statistics.standard_error
 weighted_mean = _statistics.weighted_mean
+weighted_standard_error = _statistics.weighted_standard_error
 weighted_variance = _statistics.weighted_variance
 confidence_interval = _statistics.confidence_interval
 variance_interval = _statistics.variance_interval
@@ -66,6 +67,7 @@ __all__ = [
     "standard_deviation",
     "standard_error",
     "weighted_mean",
+    "weighted_standard_error",
     "weighted_variance",
     "confidence_interval",
     "variance_interval",

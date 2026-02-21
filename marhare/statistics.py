@@ -45,6 +45,16 @@ weighted_mean
     ERRORS:
         ValueError -> empty array, mismatched lengths, non‑finite values
 
+weighted_standard_error
+    INPUT:
+        x: array_like (n,) -> numeric data (not used, only for validation)
+        w: array_like (n,) | None -> positive weights
+        sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
+    OUTPUT:
+        float -> standard error of weighted mean: sqrt(1/Σw)
+    ERRORS:
+        ValueError -> empty array, mismatched lengths, non‑finite values
+
 weighted_variance
     INPUT:
         x: array_like (n,) -> numeric data
@@ -353,6 +363,74 @@ class _Statistics:
         w = _Statistics._compute_weights(x, w, sigma)
         
         return float(np.sum(w * x) / np.sum(w))
+
+    @staticmethod
+    def weighted_standard_error(
+        x: Union[list, np.ndarray],
+        w: Union[list, np.ndarray, None] = None,
+        sigma: Union[list, np.ndarray, None] = None
+    ) -> float:
+        """
+        Compute the standard error of the weighted mean: σ_w = sqrt(1/Σw_i).
+        INPUT:
+            x: array_like (n,) -> numeric data (used only for validation)
+            w: array_like (n,) | None -> positive weights
+            sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
+        OUTPUT:
+            float -> standard error of weighted mean
+        ERRORS:
+            ValueError -> empty array, mismatched lengths, non‑finite values
+        
+        When weights are inverse variances (w_i = 1/σ_i²), the uncertainty of
+        the weighted mean is σ_w = sqrt(1/Σw_i).
+        
+        If no weights are specified, returns the simple standard error.
+        If sigma is provided, weights are computed as w_i = 1/σ_i².
+        
+        Parameters
+        ----------
+        x : array_like
+            Data sample (used for validation of length).
+        w : array_like, optional
+            Weights for each data point. Must be positive and finite.
+        sigma : array_like, optional
+            Uncertainties for each data point. Converted to weights w = 1/σ².
+            w and sigma cannot be specified simultaneously.
+        
+        Returns
+        -------
+        float
+            Standard error of the weighted mean.
+        
+        Errors
+        ------
+        ValueError
+            If the array is empty, lengths mismatch, w and sigma are both provided,
+            or weights/sigmas are invalid.
+        
+        Examples
+        --------
+        >>> x = [9.78, 9.81, 9.79, 9.82, 9.80]
+        >>> s = [0.04, 0.04, 0.05, 0.04, 0.04]
+        >>> statistics.weighted_standard_error(x, sigma=s)
+        0.018...
+        """
+        x = np.asarray(x, dtype=float)
+        n = len(x)
+        
+        if n == 0:
+            raise ValueError("Empty array")
+        if not np.all(np.isfinite(x)):
+            raise ValueError("x contains non‑finite values (inf/nan)")
+        
+        # If no weights specified, return simple standard error
+        if w is None and sigma is None:
+            return _Statistics.standard_error(x)
+        
+        w = _Statistics._compute_weights(x, w, sigma)
+        
+        # Standard error of weighted mean: sqrt(1/Σw)
+        return float(np.sqrt(1.0 / np.sum(w)))
 
     @staticmethod
     def weighted_variance(

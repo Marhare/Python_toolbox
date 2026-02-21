@@ -66,6 +66,7 @@ se = mh.standard_error(values)
 Use measurement uncertainties as inverse-variance weights with `sigma=`.
 
 - `weighted_mean(x, w=None, sigma=None)`
+- `weighted_standard_error(x, w=None, sigma=None)`
 - `weighted_variance(x, w=None, sigma=None, ddof=1, tipo="frecuentista")`
 
 **Example (weights from quantity sigmas):**
@@ -73,8 +74,11 @@ Use measurement uncertainties as inverse-variance weights with `sigma=`.
 ```python
 values, sigmas = mh.value_quantity(times)
 mu_w = mh.weighted_mean(values, sigma=sigmas)
+se_w = mh.weighted_standard_error(values, sigma=sigmas)
 var_w = mh.weighted_variance(values, sigma=sigmas)
 ```
+
+**Note:** When using `weighted_mean` with `sigma` parameter, the correct uncertainty is given by `weighted_standard_error`, not `standard_error`. The weighted standard error uses the formula $\sigma_w = \sqrt{1/\sum w_i}$ where $w_i = 1/\sigma_i^2$.
 
 ---
 
@@ -128,7 +132,7 @@ measurements = mh.quantity(
 values, sigmas = mh.value_quantity(measurements)
 
 g_mean = mh.weighted_mean(values, sigma=sigmas)
-g_se = mh.standard_error(values)
+g_se = mh.weighted_standard_error(values, sigma=sigmas)  # Correct error for weighted mean
 
 g_summary = mh.quantity(g_mean, g_se, "m/s^2", symbol="\\bar{g}")
 tex = mh.latex_quantity(g_summary, cifras=2)
@@ -167,8 +171,7 @@ Statistical tests and confidence intervals return dictionaries with:
 | `variance(x, ddof)` | Sample variance |
 | `standard_deviation(x, ddof)` | Sample standard deviation |
 | `standard_error(x)` | Standard error of the mean |
-| `weighted_mean(x, w, sigma)` | Weighted mean (use `sigma` for inverse-variance weights) |
-| `weighted_variance(x, w, sigma, ddof, tipo)` | Weighted variance |
+| `weighted_mean(x, w, sigma)` | Weighted mean (use `sigma` for inverse-variance weights) || `weighted_standard_error(x, w, sigma)` | Standard error of weighted mean: $\sqrt{1/\sum w_i}$ || `weighted_variance(x, w, sigma, ddof, tipo)` | Weighted variance |
 | `confidence_interval(x, nivel, distribucion, sigma)` | Confidence interval |
 | `mean_test(x, mu0, alternativa, distribucion, sigma)` | Mean hypothesis test |
 | `ks_test(x, distribucion)` | Kolmogorov-Smirnov test |
