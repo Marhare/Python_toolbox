@@ -1,3 +1,17 @@
+"""
+Herramientas de incertidumbres con soporte opcional de grupos experimentales.
+
+Concepto clave:
+- Una magnitud física mantiene un único símbolo en `register`.
+- Los grupos (por ejemplo "red", "blue") son subconjuntos experimentales
+    de esa misma magnitud, no magnitudes nuevas.
+
+API práctica:
+- `q.value` y `q.sigma` devuelven la vista global concatenada.
+- `q["red"].value` devuelve solo el subconjunto del grupo.
+- `propagate_quantity(..., group="red")` propaga solo ese grupo.
+"""
+
 from __future__ import annotations
 import functools
 import inspect
@@ -76,7 +90,7 @@ class _Uncertainties:
         return {"shape": value.shape, "kind": "vector", "sigma_vec": sigma_vec}
     
     @staticmethod
-    def quantity(*args, symbol=None, normalize=True, nan_policy="keep"):
+    def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None):
         """
         Unified quantity constructor (positional-only).
 
@@ -90,6 +104,10 @@ class _Uncertainties:
         - symbol: str | None
         - normalize: bool (default True)
         - nan_policy: "keep" | "drop" | "raise"
+        - groups: dict | None - Experimental groups structure:
+                  {"red": {"value": array, "sigma": array}, "blue": {...}, ...}
+                  When provided, the quantity represents multiple experimental
+                  realizations of the same physical magnitude.
 
         If nan_policy:
             - "keep": keeps NaN (default)
@@ -97,6 +115,11 @@ class _Uncertainties:
                      When value is array and sigma is scalar, only invalid value
                      entries are removed and sigma remains constant for remaining values.
             - "raise": raises error if NaN/inf present
+            
+        Groups:
+            When groups are provided, value/sigma args are ignored and data comes
+            from the groups dict. Each group must have "value" and "sigma" keys.
+            The quantity will store all groups and provide global concatenated views.
         """
 
         if nan_policy not in ("keep", "drop", "raise"):
@@ -139,6 +162,86 @@ class _Uncertainties:
                 "quantity(...) expects (value, unit), (value, sigma, unit), "
                 "(expr, unit), or (value, sigma, unit, expr)"
             )
+
+        # ================= GROUPS HANDLING =================
+        
+        if groups is not None:
+            # When groups are provided, ignore normal value/sigma
+            if not isinstance(groups, dict):
+                raise TypeError("groups must be a dict")
+            
+            if len(groups) == 0:
+                raise ValueError("groups dict cannot be empty")
+            
+            # Validate and process each group
+            processed_groups = {}
+            for group_name, group_data in groups.items():
+                if not isinstance(group_name, str):
+                    raise TypeError(f"Group name must be string, got {type(group_name)}")
+                
+                if not isinstance(group_data, dict):
+                    raise TypeError(f"Group '{group_name}' data must be a dict")
+                
+                if "value" not in group_data or "sigma" not in group_data:
+                    raise ValueError(f"Group '{group_name}' must have 'value' and 'sigma' keys")
+                
+                g_value = np.asarray(group_data["value"], dtype=float)
+                g_sigma = np.asarray(group_data["sigma"], dtype=float)
+                
+                # Apply nan_policy to group
+                if g_value.shape != ():
+                    finite_mask = np.isfinite(g_value)
+                    
+                    if nan_policy == "raise" and not np.all(finite_mask):
+                        raise ValueError(f"Group '{group_name}' contains NaN or infinite values")
+                    
+                    if nan_policy == "drop":
+                        g_value = g_value[finite_mask]
+                        if g_sigma.ndim > 0:
+                            g_sigma = g_sigma[finite_mask]
+                else:
+                    if nan_policy == "raise" and not np.isfinite(g_value):
+                        raise ValueError(f"Group '{group_name}' contains NaN or infinite values")
+                
+                # Validate sigma
+                if np.any(g_sigma < 0):
+                    raise ValueError(f"Group '{group_name}' has negative sigma")
+                
+                # Ensure compatible shapes
+                info = _Uncertainties.checker(g_value, g_sigma)
+                sigma_out = info["sigma_vec"] if info["kind"] == "vector" else g_sigma
+                
+                processed_groups[group_name] = {
+                    "value": g_value,
+                    "sigma": sigma_out
+                }
+            
+            # For grouped quantities, we don't have a single measure
+            # The Quantity class will build global views from _groups
+            measure = None
+            measure_si = None
+            dimension = None
+            
+            # Build result dict with groups
+            symbol_value = symbol
+            if symbol_value is None and UNIT_CONVERSION_AVAILABLE and unit is not None:
+                try:
+                    symbol_value = unit_converter._converter.get_unit_symbol(unit)
+                except Exception:
+                    symbol_value = None
+            
+            result_dict = {
+                "measure": measure,
+                "measure_si": measure_si,
+                "result": None,
+                "expr": expr,
+                "unit": unit,
+                "dimension": dimension,
+                "symbol": symbol_value if symbol_value else unit,
+                "_groups": processed_groups,
+            }
+            
+            return Quantity(result_dict)
 
         # ================= MEASUREMENT VALIDATION =================
 
@@ -253,7 +356,7 @@ class _Uncertainties:
         else:
             unit_display = unit
 
-        return {
+        return Quantity({
             "measure": measure,
             "measure_si": measure_si,
             "result": None,
@@ -261,7 +364,7 @@ class _Uncertainties:
             "unit": unit,
             "dimension": dimension,
             "symbol": symbol_value if symbol_value else unit,
-        }
+        })
 
             
     
@@ -322,7 +425,7 @@ class _Uncertainties:
         }
 
     @staticmethod
-    def propagate(expr, values: dict, sigmas: dict, simplify=True): #And unit??-> "symbols" is the list of variables in the expression.
+    def _propagate(expr, values: dict, sigmas: dict, simplify=True): #And unit??-> "symbols" is the list of variables in the expression.
         """
         ROBUST uncertainty propagation (no ordering errors).
 
@@ -386,7 +489,7 @@ class _Uncertainties:
             "sigma_latex": res["sigma_latex"],
         }
     @staticmethod
-    def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, **bindings):
+    def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, group=None, **bindings):
         """
         High-level uncertainty propagation for a derived quantity.
 
@@ -401,6 +504,12 @@ class _Uncertainties:
         compact : bool, default False
             If True, converts result units to compact SI prefixes (e.g., 5000 mV → 5 V).
             If False, keeps units from quantity definition.
+        group : str or None, default None
+            Group mode for experimental subsets:
+            - None (default): Global mode - use concatenated values from all groups
+            - "group_name": Specific group mode - use only data from specified group
+            - Auto-inheritance: If all quantities have identical groups and group=None,
+              result inherits the group structure (evaluated per group)
         **bindings : dict
             Optional direct symbol bindings. Each keyword must be a symbol name present
             in expressions and each value must be a quantity dict.
@@ -418,6 +527,11 @@ class _Uncertainties:
         -----
         When compact=True, automatically applies to_compact() to result units, showing
         the most readable SI prefix (1e-9 m → 1 nm, 2.4e9 Hz → 2.4 GHz, etc.).
+        
+        Group modes:
+        1. Global (group=None, default): Use concatenated global views
+        2. Specific group (group="red"): Use only that group's data
+        3. Auto-inheritance: If all quantities have same groups, result inherits structure
         
         Access symbolic expressions:
             result = propagate_quantity(R, magnitudes)
@@ -482,23 +596,114 @@ class _Uncertainties:
         if name not in registry:
             raise ValueError(f"Missing quantity for {name}")
 
+        # ========== GROUP MODE DETECTION ==========
+        
+        # Collect group information from all quantities (excluding target)
+        quantities_with_groups = []
+        quantities_without_groups = []
+        all_group_names = []
+        
+        for sym, q in registry.items():
+            if sym == name:
+                # Skip the target itself
+                continue
+            if isinstance(q, Quantity) and q.has_groups():
+                quantities_with_groups.append(sym)
+                all_group_names.append(set(q.groups))
+            elif isinstance(q, dict) and "_groups" in q and q["_groups"]:
+                quantities_with_groups.append(sym)
+                all_group_names.append(set(q["_groups"].keys()))
+            else:
+                quantities_without_groups.append(sym)
+        
+        # Determine group mode
+        inherit_groups = False
+        target_groups = None
+        
+        if group is not None:
+            # Mode 2: Specific group requested
+            # Validate that all quantities with groups have this group
+            for i, sym in enumerate(quantities_with_groups):
+                if group not in all_group_names[i]:
+                    raise ValueError(
+                        f"Group '{group}' not found in quantity '{sym}'. "
+                        f"Available groups: {sorted(all_group_names[i])}"
+                    )
+            # We'll extract this specific group data
+            
+        elif quantities_with_groups and not quantities_without_groups:
+            # Mode 3: Auto-inheritance only if ALL quantities have groups
+            # and they all have identical groups
+            if len(all_group_names) > 0:
+                first_groups = all_group_names[0]
+                if all(g == first_groups for g in all_group_names):
+                    # All have the same groups - auto-inherit
+                    inherit_groups = True
+                    target_groups = sorted(first_groups)
+        
+        # If group is specified or we're inheriting groups, we need to process per-group
+        process_groups = group is not None or inherit_groups
+
         # 2) Symbol registry
         symbols = {k: sp.Symbol(k) for k in registry}
 
         cache = {}
         resolving = set()
+        
+        def get_measure_for_group(q, group_name):
+            """
+            Extract measure (value, sigma) for a specific group from quantity q.
+            If q has no groups, returns its global measure.
+            """
+            # Check if q has groups
+            if isinstance(q, Quantity) and q.has_groups():
+                if group_name not in q.groups:
+                    # This quantity has groups but not this one - use global
+                    measure_to_use = q.get("measure_si", None) or q.get("measure", None)
+                    if measure_to_use is None:
+                        # Build from global views
+                        if q.value is not None and q.sigma is not None:
+                            return (q.value, q.sigma)
+                    return measure_to_use
+                else:
+                    # Extract specific group
+                    group_data = q["_groups"][group_name]
+                    return (group_data["value"], group_data["sigma"])
+            elif isinstance(q, dict) and "_groups" in q and q["_groups"]:
+                if group_name not in q["_groups"]:
+                    # Use global if available
+                    return (q.get("_value_global"), q.get("_sigma_global"))
+                else:
+                    group_data = q["_groups"][group_name]
+                    return (group_data["value"], group_data["sigma"])
+            else:
+                # No groups - use normal measure
+                return q.get("measure_si", None) or q.get("measure", None)
 
-        def resolve_quantity(key: str) -> dict:
-            if key in cache:
-                return cache[key]
+        def resolve_quantity(key: str, for_group=None) -> dict:
+            # Cache key includes group to avoid conflicts
+            cache_key = (key, for_group) if for_group else key
+            
+            if cache_key in cache:
+                return cache[cache_key]
 
             if key not in registry:
                 raise ValueError(f"Missing quantity for {key}")
 
             q = registry[key]
             expr = q.get("expr", None)
-            # Use measure_si (SI-normalized) for calculations, fallback to measure
-            measure_to_use = q.get("measure_si", None) or q.get("measure", None)
+            
+            # Get measure based on group mode
+            if for_group is not None:
+                measure_to_use = get_measure_for_group(q, for_group)
+            else:
+                # Global mode - use global views if available, else normal measure
+                if isinstance(q, Quantity) and q.has_groups():
+                    measure_to_use = (q.value, q.sigma)
+                elif isinstance(q, dict) and "_groups" in q and q["_groups"]:
+                    measure_to_use = (q.get("_value_global"), q.get("_sigma_global"))
+                else:
+                    measure_to_use = q.get("measure_si", None) or q.get("measure", None)
 
             # Base quantities are identified by having no expression.
             if expr is None:
@@ -513,13 +718,13 @@ class _Uncertainties:
                     "expr_latex": None,
                     "sigma_latex": None,
                 }
-                cache[key] = res
+                cache[cache_key] = res
                 return res
 
-            if key in resolving:
+            if cache_key in resolving:
                 raise ValueError(f"Circular dependency detected at {key}")
 
-            resolving.add(key)
+            resolving.add(cache_key)
             expr = sp.sympify(expr, locals=symbols)
             expr_symbols = list(expr.free_symbols)
 
@@ -527,12 +732,12 @@ class _Uncertainties:
             sigmas = {}
             for sym in expr_symbols:
                 dep = sym.name
-                dep_res = resolve_quantity(dep)
+                dep_res = resolve_quantity(dep, for_group=for_group)
                 values[sym] = dep_res["value"]
                 sigmas[sym] = dep_res["sigma"]
 
-            res = _Uncertainties.propagate(expr, values, sigmas, simplify=simplify)
-            resolving.remove(key)
+            res = _Uncertainties._propagate(expr, values, sigmas, simplify=simplify)
+            resolving.remove(cache_key)
 
             out = {
                 "value": res["valor"],
@@ -540,40 +745,98 @@ class _Uncertainties:
                 "expr_latex": res["expr_latex"],
                 "sigma_latex": res["sigma_latex"],
             }
-            cache[key] = out
+            cache[cache_key] = out
 
             # Cache computed numeric result without altering the definition.
-            registry[key]["result"] = (out["value"], out["sigma"])
+            # Only cache to registry if not a group-specific calculation
+            if for_group is None:
+                registry[key]["result"] = (out["value"], out["sigma"])
 
             return out
 
-        # 2) Resolve target
-        res = resolve_quantity(name)
+        # 3) Resolve target based on group mode
+        
+        if group is not None:
+            # Mode 2: Specific group
+            res = resolve_quantity(name, for_group=group)
+            
+        elif inherit_groups:
+            # Mode 3: Auto-inherit groups - resolve each group separately
+            results_by_group = {}
+            for group_name in target_groups:
+                group_res = resolve_quantity(name, for_group=group_name)
+                results_by_group[group_name] = {
+                    "value": group_res["value"],
+                    "sigma": group_res["sigma"]
+                }
+            
+            # Get LaTeX from any group (they're all the same expression)
+            first_res = resolve_quantity(name, for_group=target_groups[0])
+            res = {
+                "value": None,  # Will be set by Quantity class from groups
+                "sigma": None,
+                "expr_latex": first_res["expr_latex"],
+                "sigma_latex": first_res["sigma_latex"],
+                "_groups": results_by_group
+            }
+            
+        else:
+            # Mode 1: Global
+            res = resolve_quantity(name, for_group=None)
 
-        # 3) Return the updated quantity dictionary with the result cached
+        # 4) Return the updated quantity dictionary with the result cached
         target_qty = registry[name]
         
-        # 3.5) Add LaTeX expressions to the quantity dict
+        # 4.5) Add LaTeX expressions to the quantity dict
         target_qty["expr_latex"] = res.get("expr_latex", None)
         target_qty["sigma_latex"] = res.get("sigma_latex", None)
         
-        # 4) Apply compact units if requested
-        if compact and UNIT_CONVERSION_AVAILABLE:
+        # 5) Build result based on group mode
+        if inherit_groups and "_groups" in res:
+            # Mode 3: Build result with inherited groups
+            result_dict = {
+                "symbol": target_qty.get("symbol", None),
+                "expr": target_qty.get("expr", None),
+                "unit": target_qty.get("unit", None),
+                "dimension": target_qty.get("dimension", None),
+                "expr_latex": res["expr_latex"],
+                "sigma_latex": res["sigma_latex"],
+                "_groups": res["_groups"],
+                "result": None,  # Quantity will build from groups
+            }
+            target_qty = Quantity(result_dict)
+            registry[name] = target_qty
+            
+        elif group is not None:
+            # Mode 2: Single group result
+            target_qty["result"] = (res["value"], res["sigma"])
+            
+        else:
+            # Mode 1: Global result
+            target_qty["result"] = (res["value"], res["sigma"])
+        
+        # 6) Apply compact units if requested (only for non-grouped results)
+        if compact and UNIT_CONVERSION_AVAILABLE and group is None and not inherit_groups:
             unit_str = target_qty.get("unit", None)
             if unit_str is not None:
                 value, sigma = res["value"], res["sigma"]
-                try:
-                    compact_value, compact_sigma, compact_unit = unit_converter.get_compact_units(
-                        value, sigma, unit_str
-                    )
-                    # Update the target quantity with compact units
-                    target_qty["measure"] = (compact_value, compact_sigma)
-                    target_qty["unit"] = compact_unit if compact_unit else unit_str
-                    target_qty["result"] = (compact_value, compact_sigma)
-                except Exception as e:
-                    # If compacting fails, keep original result
-                    import warnings
-                    warnings.warn(f"Could not apply compact units: {e}", UserWarning)
+                if value is not None and sigma is not None:
+                    try:
+                        compact_value, compact_sigma, compact_unit = unit_converter.get_compact_units(
+                            value, sigma, unit_str
+                        )
+                        # Update the target quantity with compact units
+                        target_qty["measure"] = (compact_value, compact_sigma)
+                        target_qty["unit"] = compact_unit if compact_unit else unit_str
+                        target_qty["result"] = (compact_value, compact_sigma)
+                    except Exception as e:
+                        # If compacting fails, keep original result
+                        import warnings
+                        warnings.warn(f"Could not apply compact units: {e}", UserWarning)
+        
+        # Ensure return value is always a Quantity object
+        if not isinstance(target_qty, Quantity):
+            target_qty = Quantity(target_qty)
         
         return target_qty
 
@@ -582,13 +845,141 @@ class _Uncertainties:
     
 
 
+class Quantity(dict):
+    """
+        Contenedor compatible con `dict` para magnitudes con o sin grupos.
+
+        Reglas:
+        - Si existe `_groups`, se construyen vistas globales concatenadas en
+            `_value_global` y `_sigma_global`.
+        - `value`/`sigma` exponen la vista global.
+        - `q["nombre_grupo"]` devuelve una vista restringida a ese grupo,
+            manteniendo símbolo y expresión de la magnitud original.
+    """
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # If groups exist, create global views
+        if "_groups" in self:
+            self._build_global_views()
+    
+    def _build_global_views(self):
+        """Build concatenated global views from groups."""
+        if "_groups" not in self or not dict.__getitem__(self, "_groups"):
+            return
+        
+        groups = dict.__getitem__(self, "_groups")
+        all_values = []
+        all_sigmas = []
+        
+        for group_name in sorted(groups.keys()):
+            group_data = groups[group_name]
+            all_values.append(np.asarray(group_data["value"]))
+            all_sigmas.append(np.asarray(group_data["sigma"]))
+        
+        # Concatenate arrays
+        if all_values:
+            dict.__setitem__(self, "_value_global", np.concatenate(all_values))
+            dict.__setitem__(self, "_sigma_global", np.concatenate(all_sigmas))
+    
+    @property
+    def value(self):
+        """
+        Return the value array for this quantity.
+        
+        If groups exist, returns concatenated global view.
+        Otherwise, returns value from measure or result.
+        """
+        if "_groups" in self:
+            return self.get("_value_global", None)
+        
+        if "result" in self and self["result"] is not None:
+            return self["result"][0]
+        elif "measure" in self and self["measure"] is not None:
+            return self["measure"][0]
+        return None
+    
+    @property
+    def sigma(self):
+        """
+        Return the uncertainty array for this quantity.
+        
+        If groups exist, returns concatenated global view.
+        Otherwise, returns sigma from measure or result.
+        """
+        if "_groups" in self:
+            return self.get("_sigma_global", None)
+        
+        if "result" in self and self["result"] is not None:
+            return self["result"][1]
+        elif "measure" in self and self["measure"] is not None:
+            return self["measure"][1]
+        return None
+    
+    def __getitem__(self, key):
+        """
+        Override __getitem__ to support group access.
+        
+        If key is a string and matches a group name, returns a view 
+        restricted to that group. Otherwise behaves like normal dict.
+        """
+        # Check if this is a group access
+        if isinstance(key, str) and "_groups" in self:
+            groups = dict.__getitem__(self, "_groups")
+            if key in groups:
+                # Return a group view
+                return self._create_group_view(key)
+        
+        # Standard dict access
+        return super().__getitem__(key)
+    
+    def _create_group_view(self, group_name):
+        """
+        Create a restricted view for a specific group.
+        
+        The view is a new Quantity that shares the same symbol and expression
+        but only contains data for the specified group.
+        """
+        if "_groups" not in self or group_name not in dict.__getitem__(self, "_groups"):
+            raise KeyError(f"Group '{group_name}' not found")
+        
+        group_data = dict.__getitem__(self, "_groups")[group_name]
+        
+        # Create a new Quantity with only this group's data
+        view = Quantity({
+            "symbol": self.get("symbol", None),
+            "expr": self.get("expr", None),
+            "unit": self.get("unit", None),
+            "dimension": self.get("dimension", None),
+            "measure": (group_data["value"], group_data["sigma"]),
+            "measure_si": (group_data["value"], group_data["sigma"]),
+            "_is_group_view": True,
+            "_group_name": group_name,
+            "_parent": self,
+        })
+        
+        return view
+    
+    @property
+    def groups(self):
+        """Return list of available group names."""
+        if "_groups" in self:
+            return list(dict.__getitem__(self, "_groups").keys())
+        return []
+    
+    def has_groups(self):
+        """Check if this quantity has experimental groups."""
+        return "_groups" in self and bool(dict.__getitem__(self, "_groups"))
+
+
 incertidumbres = _Uncertainties()
 
 
 @functools.wraps(_Uncertainties.quantity)
-def quantity(*args, symbol=None, normalize=True, nan_policy="keep"):
+def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None):
     """
-    Unified quantity constructor (positional-only).
+    Constructor unificado de magnitudes con incertidumbre.
 
     Accepted signatures:
     1) quantity(value, unit)                -> measurement with sigma=0
@@ -596,7 +987,7 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="keep"):
     3) quantity(expr, unit)                 -> expression only
     4) quantity(value, sigma, unit, expr)   -> measurement + expression
 
-    Optional keywords:
+    Keywords opcionales:
     - symbol: str | None
     - normalize: bool (default True) - If True, converts units to SI base.
                                       If False, keeps original units unchanged.
@@ -605,8 +996,16 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="keep"):
                   keep = preserve data, 
                   drop = filter invalid entries (works with scalar or vector sigma),
                   raise = raise ValueError.
+    - groups: dict | None
+              Estructura de grupos experimentales:
+              {"red": {"value": ..., "sigma": ...}, ...}
+              Si se usa, la magnitud sigue siendo única (mismo `symbol`) y
+              se habilita acceso global + por grupo.
 
-    Returns a dict with stable keys:
+    Nota importante:
+    - Para magnitud con grupos, usa `quantity(None, unit, symbol=..., groups=...)`.
+
+    Devuelve un `Quantity` (dict-like) con claves estables:
     - measure: (value, sigma) or None
     - result: (value, sigma) or None
     - expr:   None or sympy.Expr / str
@@ -619,18 +1018,19 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="keep"):
         symbol=symbol,
         normalize=normalize,
         nan_policy=nan_policy,
+        groups=groups,
     )
 
 
-@functools.wraps(_Uncertainties.propagate)
-def propagate(expr, values: dict, sigmas: dict, simplify=True):
-    return _Uncertainties.propagate(expr, values, sigmas, simplify=simplify)
+@functools.wraps(_Uncertainties._propagate)
+def _propagate(expr, values: dict, sigmas: dict, simplify=True):
+    return _Uncertainties._propagate(expr, values, sigmas, simplify=simplify)
 
 
 @functools.wraps(_Uncertainties.propagate_quantity)
-def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, **bindings):
+def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, group=None, **bindings):
     """
-    High-level uncertainty propagation for a derived quantity.
+    Propagación de incertidumbre de alto nivel para magnitudes derivadas.
     
     Parameters
     ----------
@@ -643,37 +1043,26 @@ def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, **
     compact : bool, default False
         If True, converts result units to compact SI prefixes (e.g., 5000 mV → 5 V).
         If False, keeps units from quantity definition.
+    group : str or None, default None
+        Selección de modo de grupos:
+        - None: modo global (concatenado) o herencia automática
+        - "group_name": usa solo ese subconjunto
     **bindings : dict
         Optional direct symbol bindings such as delta_m=rojo, alpha=alpha.
         Bindings have priority over entries in magnitudes.
     
-    Returns
-    -------
-    dict
-        Updated quantity dict with computed result. Added keys after propagation:
-        - result : tuple (value, sigma) - numeric results
-        - expr_latex : str or None - LaTeX formula
-        - sigma_latex : str or None - LaTeX uncertainty formula
-        
-    Examples
-    --------
-    >>> V = quantity(5.0, 0.1, "V", symbol="V")
-    >>> R = quantity(1000.0, 10.0, "ohm", symbol="R")
-    >>> I = {"symbol": "I", "expr": "V/R", "unit": "A"}
-    >>> result = propagate_quantity(I, [V, R])
-    >>> val, sig = value_quantity(result)
-    >>> print(result["expr_latex"])  # Access symbolic expressions
-    >>> result = propagate_quantity(I, [V, R])
-    >>> # With compact=True, would convert to mA if result is in milliamperes
-    >>> result_compact = propagate_quantity(I, [V, R], compact=True)
-    >>> # Direct symbol binding (without adding extra helper functions)
-    >>> n_red = propagate_quantity(n, delta_m=rojo, alpha=alpha)
+    Modos implementados:
+    1) Global (por defecto): usa `value/sigma` global concatenado.
+    2) Grupo específico: `group="red"`.
+    3) Herencia automática: si todas las dependencias comparten exactamente
+       los mismos grupos, el resultado hereda esa estructura.
     """
     return _Uncertainties.propagate_quantity(
         target,
         magnitudes,
         simplify=simplify,
         compact=compact,
+        group=group,
         **bindings,
     )
 
@@ -711,10 +1100,23 @@ def value_quantity(q: dict):
             f"value_quantity(): expected quantity dict, got {type(q).__name__}"
         )
 
-    if q.get("result", None) is not None:
+    # Handle Quantity objects with groups
+    if isinstance(q, Quantity) and q.has_groups():
+        # Use properties to get global views
+        value = q.value
+        sigma = q.sigma
+        if value is None or sigma is None:
+            raise ValueError("No numeric value available in grouped quantity")
+    elif q.get("result", None) is not None:
         value, sigma = q["result"]
     elif q.get("measure", None) is not None:
         value, sigma = q["measure"]
+    elif "_groups" in q and q["_groups"]:
+        # Plain dict with groups but not a Quantity object
+        value = q.get("_value_global")
+        sigma = q.get("_sigma_global")
+        if value is None or sigma is None:
+            raise ValueError("No numeric value available in grouped quantity dict")
     else:
         raise ValueError("No numeric value available")
 

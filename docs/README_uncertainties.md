@@ -81,6 +81,68 @@ quantity(expr_str, unit, symbol=None, normalize=True, nan_policy="keep")
 quantity(value, sigma, unit, expr_str, symbol=None, normalize=True, nan_policy="keep")
 ```
 
+### Grouped Experimental Data (same physical magnitude)
+
+`quantity()` also supports experimental groups for the **same symbol**:
+
+```python
+quantity(
+        None,
+        unit,
+        symbol="x",
+        groups={
+                "red": {"value": [...], "sigma": [...]},
+                "blue": {"value": [...], "sigma": [...]},
+        },
+)
+```
+
+Important rules:
+
+- Groups are **not** new magnitudes. They are subsets of one magnitude.
+- You must provide each group as a dict with explicit keys:
+    - `"value"`
+    - `"sigma"`
+- Group access:
+    - `q.value` / `q.sigma` → global concatenated view
+    - `q["red"].value` / `q["red"].sigma` → subset view
+
+If `"value"` or `"sigma"` is missing in any group, `quantity()` raises `ValueError`.
+
+### Derived quantities and dimensionless unit
+
+For derived quantities, unit `"1"` is valid and recommended for dimensionless results:
+
+```python
+n = mh.quantity("delta_m * alpha / wl", "1", symbol="n")
+```
+
+You can also use `"dimensionless"` if preferred for readability.
+
+### Group-aware propagation modes
+
+`propagate_quantity()` supports:
+
+1. **Global mode (default)**
+     - Uses concatenated values when groups exist.
+2. **Specific group**
+     - `propagate_quantity(..., group="red")`
+3. **Automatic inheritance**
+     - If all grouped dependencies share exactly the same group names,
+         the result inherits those groups.
+
+### `latex_quantity()` with groups
+
+`latex_quantity()` works with grouped quantities because it uses `value_quantity()`:
+
+- `latex_quantity(q)` formats the global concatenated data.
+- `latex_quantity(q["red"])` formats only that group.
+
+Common error cases (same as non-grouped vector tables):
+
+- Combining multiple vector magnitudes with different lengths in one table.
+- Using `siunitx=True` in magnitude tables (not supported in that path).
+
 ### Parameters
 
 - **`value`**: Numeric value (scalar, list, array)
@@ -762,7 +824,7 @@ print(f"PE = {v:.1f} ± {s:.1f} J")
 | `value_quantity(q)` | Extract `(value, sigma)` from quantity |
 | `propagate_quantity(target, magnitudes, simplify, compact=False)` | Compute derived quantity (`target` can be symbol string or quantity object); `compact=True` auto-selects SI prefix |
 | `get_compact_units(value, sigma, unit)` | Convert any measurement to readable SI prefix |
-| `propagate(expr, values, sigmas, simplify)` | Low-level error propagation |
+| `_propagate(expr, values, sigmas, simplify)` | Low-level error propagation (internal use) |
 | `uncertainty_propagation(f, vars_, values, sigmas, cov)` | Advanced: includes covariance |
 
 ---

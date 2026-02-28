@@ -11,7 +11,7 @@ from .functions import (
 # --- Uncertainties ---
 from .uncertainties import (
     quantity,
-    propagate,
+    _propagate,
     propagate_quantity,
     register,
     uncertainty_propagation,
@@ -54,7 +54,7 @@ __all__ = [
     "I",
     "dp",
     "quantity",
-    "propagate",
+    "_propagate",
     "propagate_quantity",
     "register",
     "uncertainty_propagation",
