@@ -215,8 +215,9 @@ val, sig, unit = get_compact_units(5000, 100, "mV")
 
 With `propagate_quantity()`:
 ```python
-# Propagate with automatic compacting
+# Propagate with automatic compacting (target can be quantity object or symbol)
 result = mh.propagate_quantity(target, magnitudes, compact=True)
+# Equivalent: mh.propagate_quantity("R", magnitudes, compact=True)
 # If result is 0.005 A, now displays as 5 mA
 ```
 

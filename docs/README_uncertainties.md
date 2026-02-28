@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define and propagate measurements with uncertainty and units. Create quantities from experimental data, auto-detect symbols, extract numeric values, and propagate errors through calculations symbolically.
+Define and propagate measurements with uncertainty and units. Create quantities from experimental data, register symbols, extract numeric values, and propagate errors through calculations symbolically.
 
 ---
 
@@ -337,25 +337,30 @@ magnitudes = register(*quantities)
 
 ### Purpose
 
-Inspect the Python stack to find variable names and assign them as symbols automatically.
+Build a symbol registry for propagation.
+
+- If a quantity already has `symbol`, `register()` keeps and uses it.
+- If `symbol` is missing, `register()` auto-detects the caller variable name as fallback.
 
 ### Example
 
 ```python
 import marhare as mh
 
-# Create quantities without explicit symbols
+# Explicit symbols are preserved
+V = mh.quantity(5.0, 0.1, "V", symbol="V")
+I = mh.quantity(0.2, 0.01, "A", symbol="I")
+R = mh.quantity("V/I", "ohm", symbol="R")
+magnitudes = mh.register(V, I, R)
+
+print(V['symbol'])   # 'V'
+print(I['symbol'])   # 'I'
+print(R['symbol'])   # 'R'
+
+# Fallback auto-detection when symbol is missing
 voltage = mh.quantity(5.0, 0.1, "V")
-current = mh.quantity(0.2, 0.01, "A")
-resistance = mh.quantity("voltage/current", "ohm")
-
-# Call register to infer symbols from variable names
-magnitudes = mh.register(voltage, current, resistance)
-
-# Now symbols are set:
-print(voltage['symbol'])        # 'voltage'
-print(current['symbol'])        # 'current'
-print(resistance['symbol'])     # 'resistance'
+reg2 = mh.register(voltage)
+print(voltage['symbol'])  # 'voltage'
 ```
 
 ### How It Works
@@ -418,7 +423,7 @@ result_quantity = propagate_quantity(target, magnitudes, simplify=True)
 
 ### Parameters
 
-- **`target`** (str): Symbol of quantity to compute (e.g., `"resistance"`)
+- **`target`** (str or dict): Quantity to compute (symbol string like `"R"` or quantity object like `R`)
 - **`magnitudes`** (dict): Registry from `register()` containing all quantities
 - **`simplify`** (bool): Attempt symbolic simplification (default `True`)
 
@@ -441,8 +446,9 @@ R = mh.quantity("V/I", "ohm", symbol="R")             # Resistance = V/I
 # Step 3: Register all
 magnitudes = mh.register(V, I, R)
 
-# Step 4: Propagate error
-R_result = mh.propagate_quantity("R", magnitudes)
+# Step 4: Propagate error (target can be object or symbol)
+R_result = mh.propagate_quantity(R, magnitudes)
+# Equivalent: mh.propagate_quantity("R", magnitudes)
 
 # Step 5: Extract computed value
 v, s = mh.value_quantity(R_result)
@@ -479,11 +485,11 @@ v = mh.quantity(2.5, 0.05, "m/s", symbol="v")
 # Kinetic energy: KE = 0.5 * m * v²
 KE = mh.quantity("0.5*m*v**2", "J", symbol="KE")
 
-# ============ STEP 3: REGISTER (Auto-detect symbols) ============
+# ============ STEP 3: REGISTER (use explicit symbols, fallback auto-detect) ============
 magnitudes = mh.register(m, v, KE)
 
 # ============ STEP 4: PROPAGATE ============
-KE_computed = mh.propagate_quantity("KE", magnitudes)
+KE_computed = mh.propagate_quantity(KE, magnitudes)
 
 # ============ STEP 5: EXTRACT & DISPLAY ============
 ke_val, ke_unc = mh.value_quantity(KE_computed)
@@ -648,7 +654,7 @@ PE = mh.quantity("m * g * h", "J", symbol="PE")
 
 # Propagate
 magnitudes = mh.register(m, h, g, PE)
-PE_result = mh.propagate_quantity("PE", magnitudes)
+PE_result = mh.propagate_quantity(PE, magnitudes)
 
 v, s = mh.value_quantity(PE_result)
 print(f"PE = {v:.1f} ± {s:.1f} J")
@@ -677,9 +683,9 @@ print(f"PE = {v:.1f} ± {s:.1f} J")
 | `quantity(expr_str, unit, ..., nan_policy="keep")` | Create computed quantity with formula |
 | `quantity(value, sigma, unit, expr_str, ..., nan_policy="keep")` | Create quantity with both measurement and expression |
 | `quantity(..., normalize=<bool>)` | Choose SI-normalized or original display units |
-| `register(*quantities)` | Auto-detect symbols from variable names |
+| `register(*quantities)` | Build symbol registry (use explicit `symbol`, fallback to variable name) |
 | `value_quantity(q)` | Extract `(value, sigma)` from quantity |
-| `propagate_quantity(target, magnitudes, simplify, compact=False)` | Compute derived quantity; `compact=True` auto-selects SI prefix |
+| `propagate_quantity(target, magnitudes, simplify, compact=False)` | Compute derived quantity (`target` can be symbol string or quantity object); `compact=True` auto-selects SI prefix |
 | `get_compact_units(value, sigma, unit)` | Convert any measurement to readable SI prefix |
 | `propagate(expr, values, sigmas, simplify)` | Low-level error propagation |
 | `uncertainty_propagation(f, vars_, values, sigmas, cov)` | Advanced: includes covariance |

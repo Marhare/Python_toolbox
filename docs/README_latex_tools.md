@@ -177,7 +177,7 @@ R = mh.quantity("U/I", "Ω", symbol="R")
 
 # 3. Propagate error
 magnitudes = mh.register(U, I, R)
-R_computed = mh.propagate_quantity("R", magnitudes)
+R_computed = mh.propagate_quantity(R, magnitudes)
 
 # 4. Format for publication
 tex = mh.latex_quantity(R_computed, cifras=2)

@@ -27,7 +27,8 @@ I = mh.quantity(2000, 50, "mA", symbol="I")   # milliamps
 # Calculations work automatically - no manual conversion!
 R = mh.quantity("V/I", "ohm", symbol="R")
 magnitudes = mh.register(V, I, R)
-R_result = mh.propagate_quantity("R", magnitudes)
+R_result = mh.propagate_quantity(R, magnitudes)
+# Equivalent: mh.propagate_quantity("R", magnitudes)
 
 # LaTeX output preserves your original units
 print(mh.latex_quantity(V))

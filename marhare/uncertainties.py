@@ -423,8 +423,24 @@ class _Uncertainties:
 
         if isinstance(target, dict):
             name = target.get("symbol", None)
-            if name is None:
-                raise ValueError("Target magnitude must define a non-empty 'symbol'")
+
+            # Preferred path: resolve by symbol if present in registry.
+            if name in registry:
+                pass
+            else:
+                # Fallback: resolve by object identity so users can call
+                # propagate_quantity(R, registry) without relying on string symbols.
+                matches = [k for k, q in registry.items() if q is target]
+                if len(matches) == 1:
+                    name = matches[0]
+                elif len(matches) > 1:
+                    raise ValueError(
+                        "Target magnitude appears multiple times in registry"
+                    )
+                elif name is None:
+                    raise ValueError(
+                        "Target magnitude must define a non-empty 'symbol' or be present in registry"
+                    )
         else:
             name = target
 
@@ -658,10 +674,13 @@ def value_quantity(q: dict):
 
 def register(*magnitudes):
     """
-    Build a magnitudes registry using caller-local variable names as symbols.
+    Build a magnitudes registry.
 
-    Each provided object must be referenced by exactly one name in the caller's
-    local namespace. Raises ValueError on missing bindings or aliasing.
+    Symbol resolution policy:
+    - If a quantity defines a non-empty ``symbol``, it is used.
+    - Otherwise, the caller-local variable name is used as fallback.
+
+    Raises ValueError on duplicate symbols or unresolved unnamed quantities.
     """
     frame = inspect.currentframe()
     if frame is None or frame.f_back is None:
@@ -676,16 +695,25 @@ def register(*magnitudes):
             if not isinstance(q, dict):
                 raise TypeError("register() expects magnitude dicts from quantity()")
 
-            names = [name for name, val in caller_locals.items() if val is q]
-            if len(names) == 0:
-                raise ValueError("register(): magnitude not found in caller namespace")
-            if len(names) > 1:
-                raise ValueError(
-                    "register(): magnitude has multiple names in caller namespace: "
-                    + ", ".join(sorted(names))
-                )
+            existing_symbol = q.get("symbol", None)
+            if isinstance(existing_symbol, str):
+                existing_symbol = existing_symbol.strip()
 
-            symbol = names[0]
+            if existing_symbol:
+                symbol = existing_symbol
+            else:
+                names = [name for name, val in caller_locals.items() if val is q]
+                if len(names) == 0:
+                    raise ValueError(
+                        "register(): unnamed magnitude not found in caller namespace"
+                    )
+                if len(names) > 1:
+                    raise ValueError(
+                        "register(): unnamed magnitude has multiple names in caller namespace: "
+                        + ", ".join(sorted(names))
+                    )
+                symbol = names[0]
+
             if symbol in registry:
                 raise ValueError(f"register(): duplicate symbol '{symbol}'")
 
@@ -694,11 +722,6 @@ def register(*magnitudes):
                 raise ValueError("register(): duplicate magnitude object provided")
             seen_ids.add(obj_id)
 
-            existing_symbol = q.get("symbol", None)
-            if existing_symbol is not None and existing_symbol != symbol:
-                raise ValueError(
-                    f"register(): magnitude symbol mismatch for '{symbol}'"
-                )
             q["symbol"] = symbol
             registry[symbol] = q
 
