@@ -60,7 +60,7 @@ Docs: [docs/README_statistics.md](docs/README_statistics.md)
 ---
 
 ### uncertainties.py
-Quantity objects with uncertainty, unit normalization, and symbolic propagation. Integrates with LaTeX and graphics output.
+Quantity objects with uncertainty, unit normalization, symbolic propagation, and NaN/inf handling via `nan_policy`. Integrates with LaTeX and graphics output.
 
 Docs: [docs/README_uncertainties.md](docs/README_uncertainties.md)
 

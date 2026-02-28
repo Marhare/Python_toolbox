@@ -73,10 +73,10 @@ tex = mh.latex_quantity(V_orig)
 
 ```python
 # Basic patterns (positional args)
-quantity(value, unit, symbol=None)                    # No uncertainty (sigma=0)
-quantity(value, sigma, unit, symbol=None)             # With uncertainty
-quantity(expr_str, unit, symbol=None)                 # Expression only (for computed quantities)
-quantity(value, sigma, unit, expr_str, symbol=None)   # Value + expression
+quantity(value, unit, symbol=None, normalize=True, nan_policy="keep")
+quantity(value, sigma, unit, symbol=None, normalize=True, nan_policy="keep")
+quantity(expr_str, unit, symbol=None, normalize=True, nan_policy="keep")
+quantity(value, sigma, unit, expr_str, symbol=None, normalize=True, nan_policy="keep")
 ```
 
 ### Parameters
@@ -86,6 +86,11 @@ quantity(value, sigma, unit, expr_str, symbol=None)   # Value + expression
 - **`unit`**: Physical unit string (e.g., `"V"`, `"kg"`, `"m/s²"`) - supports SI prefixes like `"mV"`, `"GHz"`, `"mm^3"`
 - **`expr_str`**: Optional formula (string or SymPy expression) for computed quantities
 - **`symbol`**: Optional variable name (keyword-only); if `None`, can be auto-detected via `register()`
+- **`normalize`**: If `True` (default), uses SI-normalized output units/values; if `False`, keeps the original display units
+- **`nan_policy`**: How to handle NaN/inf in `value`
+    - `"keep"` (default): keeps all entries, including NaN/inf
+    - `"drop"`: removes vector entries where `value` is NaN/inf
+    - `"raise"`: raises `ValueError` if NaN/inf is found
 
 ---
 
@@ -657,6 +662,7 @@ print(f"PE = {v:.1f} ± {s:.1f} J")
 |-------|-------|----------|
 | `Symbol not in registry` | Formula uses undefined variable | Add all variables to `register()` |
 | `Negative sigma` | Uncertainty < 0 | Check input data; uncertainty must be ≥ 0 |
+| `value contains NaN or infinite values` | `nan_policy="raise"` with NaN/inf in input | Clean input data or use `nan_policy="keep"` / `"drop"` |
 | `Circular dependency` | Formula refers to itself | Define separate quantities for measurements vs. formulas |
 | `Missing symbol` | `register()` called inside `quantity()` | Call `register()` after all quantities are created |
 
@@ -666,9 +672,11 @@ print(f"PE = {v:.1f} ± {s:.1f} J")
 
 | Function | Purpose |
 |----------|---------|
-| `quantity(value, unit, symbol=None)` | Create scalar/vector with sigma=0 |
-| `quantity(value, sigma, unit, symbol=None)` | Create with uncertainty |
-| `quantity(expr_str, unit, symbol=None)` | Create computed quantity with formula |
+| `quantity(value, unit, ..., nan_policy="keep")` | Create scalar/vector with sigma=0 |
+| `quantity(value, sigma, unit, ..., nan_policy="keep")` | Create with uncertainty |
+| `quantity(expr_str, unit, ..., nan_policy="keep")` | Create computed quantity with formula |
+| `quantity(value, sigma, unit, expr_str, ..., nan_policy="keep")` | Create quantity with both measurement and expression |
+| `quantity(..., normalize=<bool>)` | Choose SI-normalized or original display units |
 | `register(*quantities)` | Auto-detect symbols from variable names |
 | `value_quantity(q)` | Extract `(value, sigma)` from quantity |
 | `propagate_quantity(target, magnitudes, simplify, compact=False)` | Compute derived quantity; `compact=True` auto-selects SI prefix |

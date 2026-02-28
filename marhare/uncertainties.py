@@ -76,128 +76,142 @@ class _Uncertainties:
         return {"shape": value.shape, "kind": "vector", "sigma_vec": sigma_vec}
     
     @staticmethod
-    def quantity(*args, symbol=None, normalize=True):
+    def quantity(*args, symbol=None, normalize=True, nan_policy="keep"):
         """
         Unified quantity constructor (positional-only).
 
         Accepted signatures:
-        1) quantity(value, unit)              -> valor con sigma=zeros (sin incertidumbre)
-        2) quantity(value, sigma, unit)       -> valor con incertidumbre
-        3) quantity(expr, unit)               -> expresión solo (si expr es string)
-        4) quantity(value, sigma, unit, expr) -> valor + expresión
+        1) quantity(value, unit)
+        2) quantity(value, sigma, unit)
+        3) quantity(expr, unit)
+        4) quantity(value, sigma, unit, expr)
 
         Optional keywords:
         - symbol: str | None
-        - normalize: bool (default True) - If True, converts units to SI base.
-                                          If False, keeps original units (e.g., "cm" stays "cm").
+        - normalize: bool (default True)
+        - nan_policy: "keep" | "drop" | "raise"
 
-        Returns a dict with stable keys:
-        - measure: (value, sigma) where sigma is always an array (never None)
-        - result: (value, sigma) or None
-        - expr:   None or sympy.Expr / str
-        - unit:  str
-        - dimension: shape tuple or None
-        - symbol: str | None
-        
-        NOTE: If sigma is not provided, it's automatically set to zeros(value.shape)
+        If nan_policy:
+            - "keep": keeps NaN (default)
+            - "drop": removes entries where value is NaN/inf
+            - "raise": raises error if NaN/inf present
         """
 
+        if nan_policy not in ("keep", "drop", "raise"):
+            raise ValueError("nan_policy must be 'keep', 'drop', or 'raise'")
+
+        # ================= ARGUMENT PARSING =================
+
         if len(args) == 4:
-            # quantity(value, sigma, unit, expr)
             value, sigma, unit, expr = args
             if not isinstance(expr, (str, sp.Expr, type(None))):
                 raise TypeError("expr must be a string, sympy.Expr, or None")
             has_sigma = sigma is not None
 
         elif len(args) == 3:
-            # Detectar: ¿es (value, sigma, unit) o (expr, unit, algo)?
-            # Si args[0] es string, es expresión
             if isinstance(args[0], str):
-                # quantity(expr, unit, ???) - inválido en este contexto
                 raise TypeError(
-                    "quantity(...) with 3 args: use (value, sigma, unit) or (value, unit)"
+                    "quantity(...) with 3 args: use (value, sigma, unit)"
                 )
             else:
-                # quantity(value, sigma, unit)
                 value, sigma, unit = args
                 expr = None
                 has_sigma = sigma is not None
 
         elif len(args) == 2:
-            # quantity(value, unit) o quantity(expr, unit)
             arg0, arg1 = args
             expr = None
-            
+
             if isinstance(arg0, str):
-                # quantity(expr_str, unit)
                 expr = arg0
                 value = sigma = None
                 unit = arg1
                 has_sigma = False
             else:
-                # quantity(value, unit) - sin sigma
                 value = arg0
                 sigma = None
                 unit = arg1
                 has_sigma = False
-
         else:
             raise TypeError(
                 "quantity(...) expects (value, unit), (value, sigma, unit), "
                 "(expr, unit), or (value, sigma, unit, expr)"
             )
 
-        # Validar measurement
+        # ================= MEASUREMENT VALIDATION =================
+
         if value is not None:
-            # Se proporcionó value
-            if has_sigma and sigma is not None:
-                # Validar que sigma sea válido
-                if np.any(np.asarray(sigma) < 0):
-                    raise ValueError("sigma cannot be negative")
-                info = _Uncertainties.checker(value, sigma)
-                sigma_out = info["sigma_vec"] if info["kind"] == "vector" else sigma
-                measure = (value, sigma_out)
-                dimension = info["shape"]
+
+            value_arr = np.asarray(value, dtype=float)
+
+            if value_arr.shape != ():
+                finite_mask = np.isfinite(value_arr)
+
+                if nan_policy == "raise" and not np.all(finite_mask):
+                    raise ValueError("value contains NaN or infinite values")
+
+                if nan_policy == "drop":
+                    value_arr = value_arr[finite_mask]
+                    if has_sigma and sigma is not None:
+                        sigma = np.asarray(sigma, dtype=float)[finite_mask]
             else:
-                # Sin sigma: crear array de zeros automáticamente
-                info = _Uncertainties.checker(value, None)
-                value_arr = np.asarray(value)
-                sigma_out = np.zeros_like(value_arr, dtype=float)
-                measure = (value, sigma_out)
+                if nan_policy == "raise" and not np.isfinite(value_arr):
+                    raise ValueError("value contains NaN or infinite values")
+
+            if has_sigma and sigma is not None:
+                sigma_arr = np.asarray(sigma, dtype=float)
+
+                if np.any(sigma_arr < 0):
+                    raise ValueError("sigma cannot be negative")
+
+                if value_arr.shape != ():
+                    if nan_policy == "drop":
+                        sigma_arr = sigma_arr
+                    else:
+                        if sigma_arr.shape != value_arr.shape:
+                            raise ValueError("sigma must have same shape as value")
+
+                info = _Uncertainties.checker(value_arr, sigma_arr)
+                sigma_out = info["sigma_vec"] if info["kind"] == "vector" else sigma_arr
+                measure = (value_arr, sigma_out)
                 dimension = info["shape"]
+
+            else:
+                info = _Uncertainties.checker(value_arr, None)
+                sigma_out = np.zeros_like(value_arr, dtype=float)
+                measure = (value_arr, sigma_out)
+                dimension = info["shape"]
+
         else:
             measure = None
             dimension = None
 
-        # keep expr as string or Expr (propagation will resolve symbols)
+        # ================= EXPR CHECK =================
+
         if expr is not None and not isinstance(expr, (str, sp.Expr)):
             raise TypeError("expr must be a string or sympy.Expr")
 
-        # ========== UNIT CONVERSION ==========
-        # Strategy: always store measure_si (SI-normalized) for internal calculations
-        # Then decide what to display (SI or original) based on normalize flag
+        # ================= UNIT CONVERSION =================
+
         measure_si = None
-        unit_display = unit  # Default: what to display
-        
-        # Convert to SI base units and store in measure_si
+        unit_display = unit
+
         if UNIT_CONVERSION_AVAILABLE and measure is not None:
             try:
                 value_orig, sigma_orig = measure
-                # Get SI-normalized version
+
                 value_si, sigma_si, unit_base = unit_converter._converter.normalize_value_with_uncertainty(
                     value_orig, sigma_orig, unit
                 )
-                
-                # Always store SI version for internal calculations
+
                 if unit_base is not None:
                     measure_si = (value_si, sigma_si)
                     unit_si = unit_base
                 else:
                     measure_si = measure
                     unit_si = unit
-                    
+
             except Exception as e:
-                # If conversion fails, use original as both
                 import warnings
                 warnings.warn(
                     f"Unit conversion failed for '{unit}': {e}. Using original units.",
@@ -206,55 +220,43 @@ class _Uncertainties:
                 measure_si = measure
                 unit_si = unit
         else:
-            # No conversion available: SI version is the same as original
             measure_si = measure
             unit_si = unit
-        
-        # Get symbol for the unit (always try, regardless of normalize flag)
-        # First use explicit symbol parameter if provided, otherwise extract from unit
-        symbol_value = symbol  # Use the parameter passed in
+
+        symbol_value = symbol
         if symbol_value is None and UNIT_CONVERSION_AVAILABLE and unit is not None:
             try:
                 symbol_value = unit_converter._converter.get_unit_symbol(unit)
             except Exception:
                 symbol_value = None
-        
-        # Now decide what to display based on normalize flag
+
         if normalize and measure_si is not None:
-            # normalize=True: display SI units with SI SYMBOLS (V not volt, A not ampere, etc.)
             unit_display = unit_si
             measure = measure_si
-            # Try to get a nice symbol for the SI unit (only if not explicitly provided)
+
             if UNIT_CONVERSION_AVAILABLE and symbol_value is None:
                 try:
-                    # Try to get symbol from SI base unit
                     symbol_value = unit_converter._converter.get_unit_symbol(unit_si)
                 except Exception:
                     symbol_value = None
-            # Use symbol if we got one, otherwise unit display
-            if symbol_value:
-                unit_display = symbol_value
-            else:
-                unit_display = unit_si
+
+            unit_display = symbol_value if symbol_value else unit_si
             unit = unit_display
+
         else:
-            # normalize=False: display original units (keep as is)
             unit_display = unit
-            # measure stays as original
-            # unit stays as original
-            # symbol already set above
 
         return {
-            "measure": measure,               # What to display (SI if normalize=True, else original)
-            "measure_si": measure_si,         # Always SI for internal calculations
+            "measure": measure,
+            "measure_si": measure_si,
             "result": None,
             "expr": expr,
-            "unit": unit,                      # Display unit
+            "unit": unit,
             "dimension": dimension,
-            "symbol": symbol_value if symbol_value else unit,  # Use symbol if available, else unit
+            "symbol": symbol_value if symbol_value else unit,
         }
 
-        
+            
     
     
     
@@ -529,19 +531,24 @@ incertidumbres = _Uncertainties()
 
 
 @functools.wraps(_Uncertainties.quantity)
-def quantity(*args, symbol=None, normalize=True):
+def quantity(*args, symbol=None, normalize=True, nan_policy="keep"):
     """
     Unified quantity constructor (positional-only).
 
     Accepted signatures:
-    1) quantity(value, sigma, unit)         -> measurement only
-    2) quantity(expr, unit)                 -> expression only
-    3) quantity(value, sigma, unit, expr)   -> measurement + expression
+    1) quantity(value, unit)                -> measurement with sigma=0
+    2) quantity(value, sigma, unit)         -> measurement only
+    3) quantity(expr, unit)                 -> expression only
+    4) quantity(value, sigma, unit, expr)   -> measurement + expression
 
     Optional keywords:
     - symbol: str | None
     - normalize: bool (default True) - If True, converts units to SI base.
                                       If False, keeps original units unchanged.
+    - nan_policy: "keep" | "drop" | "raise" (default "keep")
+                  Behavior when value contains NaN/inf:
+                  keep = preserve data, drop = filter invalid entries,
+                  raise = raise ValueError.
 
     Returns a dict with stable keys:
     - measure: (value, sigma) or None
@@ -551,7 +558,12 @@ def quantity(*args, symbol=None, normalize=True):
     - dimension: shape tuple or None
     - symbol: str | None
     """
-    return _Uncertainties.quantity(*args, symbol=symbol, normalize=normalize)
+    return _Uncertainties.quantity(
+        *args,
+        symbol=symbol,
+        normalize=normalize,
+        nan_policy=nan_policy,
+    )
 
 
 @functools.wraps(_Uncertainties.propagate)
