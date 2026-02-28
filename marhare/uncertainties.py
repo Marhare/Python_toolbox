@@ -386,7 +386,7 @@ class _Uncertainties:
             "sigma_latex": res["sigma_latex"],
         }
     @staticmethod
-    def propagate_quantity(target, magnitudes, simplify=True, compact=False):
+    def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, **bindings):
         """
         High-level uncertainty propagation for a derived quantity.
 
@@ -394,13 +394,17 @@ class _Uncertainties:
         ----------
         target : dict or str
             Target quantity (with "symbol" key)
-        magnitudes : dict or iterable
+        magnitudes : dict or iterable, optional
             Dictionary or iterable of magnitude dicts
         simplify : bool, default True
             Whether to simplify symbolic expressions
         compact : bool, default False
             If True, converts result units to compact SI prefixes (e.g., 5000 mV → 5 V).
             If False, keeps units from quantity definition.
+        **bindings : dict
+            Optional direct symbol bindings. Each keyword must be a symbol name present
+            in expressions and each value must be a quantity dict.
+            These bindings take priority over entries from magnitudes.
 
         Returns
         -------
@@ -420,8 +424,10 @@ class _Uncertainties:
             print(result["expr_latex"])      # LaTeX formula
             print(result["sigma_latex"])     # LaTeX uncertainty formula
         """
-        # 1) Normalize magnitudes and target
-        if isinstance(magnitudes, dict):
+        # 1) Normalize magnitudes and apply direct bindings (kwargs have priority)
+        if magnitudes is None:
+            registry = {}
+        elif isinstance(magnitudes, dict):
             registry = dict(magnitudes)
         else:
             registry = {}
@@ -435,8 +441,23 @@ class _Uncertainties:
                     raise ValueError(f"Duplicate magnitude symbol: {symbol}")
                 registry[symbol] = q
 
+        for symbol, quantity_dict in bindings.items():
+            if not isinstance(symbol, str) or not symbol.strip():
+                raise ValueError("Binding names must be non-empty strings")
+            if not isinstance(quantity_dict, dict):
+                raise TypeError(
+                    f"Binding '{symbol}' must be a quantity dict, got {type(quantity_dict).__name__}"
+                )
+            registry[symbol.strip()] = quantity_dict
+
         if isinstance(target, dict):
             name = target.get("symbol", None)
+            if isinstance(name, str):
+                name = name.strip() or None
+
+            # If target has an explicit symbol, prioritize the passed target object.
+            if name:
+                registry[name] = target
 
             # Preferred path: resolve by symbol if present in registry.
             if name in registry:
@@ -607,7 +628,7 @@ def propagate(expr, values: dict, sigmas: dict, simplify=True):
 
 
 @functools.wraps(_Uncertainties.propagate_quantity)
-def propagate_quantity(target, magnitudes, simplify=True, compact=False):
+def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, **bindings):
     """
     High-level uncertainty propagation for a derived quantity.
     
@@ -615,13 +636,16 @@ def propagate_quantity(target, magnitudes, simplify=True, compact=False):
     ----------
     target : dict or str
         Target quantity (with "symbol" key)
-    magnitudes : dict or iterable
+    magnitudes : dict or iterable, optional
         Dictionary or iterable of magnitude dicts
     simplify : bool, default True
         Whether to simplify symbolic expressions
     compact : bool, default False
         If True, converts result units to compact SI prefixes (e.g., 5000 mV → 5 V).
         If False, keeps units from quantity definition.
+    **bindings : dict
+        Optional direct symbol bindings such as delta_m=rojo, alpha=alpha.
+        Bindings have priority over entries in magnitudes.
     
     Returns
     -------
@@ -642,8 +666,16 @@ def propagate_quantity(target, magnitudes, simplify=True, compact=False):
     >>> result = propagate_quantity(I, [V, R])
     >>> # With compact=True, would convert to mA if result is in milliamperes
     >>> result_compact = propagate_quantity(I, [V, R], compact=True)
+    >>> # Direct symbol binding (without adding extra helper functions)
+    >>> n_red = propagate_quantity(n, delta_m=rojo, alpha=alpha)
     """
-    return _Uncertainties.propagate_quantity(target, magnitudes, simplify=simplify, compact=compact)
+    return _Uncertainties.propagate_quantity(
+        target,
+        magnitudes,
+        simplify=simplify,
+        compact=compact,
+        **bindings,
+    )
 
 
 def value_quantity(q: dict):
