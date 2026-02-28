@@ -105,8 +105,9 @@ class _Uncertainties:
         - symbol: str | None
         - normalize: bool (default True)
         - nan_policy: "keep" | "drop" | "raise"
-        - groups: dict | None - Experimental groups structure:
-                  {"red": {"value": array, "sigma": array}, "blue": {...}, ...}
+        - groups: dict | None - Experimental groups structure. Each group can be:
+                  Format 1 (tuple): {"red": (value, sigma), "blue": (value, sigma), ...}
+                  Format 2 (dict):  {"red": {"value": array, "sigma": array}, ...}
                   When provided, the quantity represents multiple experimental
                   realizations of the same physical magnitude.
         - unit: str | None - Can be provided as keyword when using groups
@@ -121,6 +122,10 @@ class _Uncertainties:
         Groups:
             When groups are provided, no positional args are needed. Simply use:
             quantity(groups={...}, unit="...", symbol="...")
+            
+            Groups support two formats:
+            - Tuple/list: quantity(groups={"red": ([600, 605], [2, 2])})
+            - Dict: quantity(groups={"red": {"value": [600, 605], "sigma": [2, 2]}})
         """
 
         if nan_policy not in ("keep", "drop", "raise"):
@@ -146,8 +151,13 @@ class _Uncertainties:
                 if not isinstance(group_name, str):
                     raise TypeError(f"Group name must be string, got {type(group_name)}")
                 
-                if not isinstance(group_data, dict):
-                    raise TypeError(f"Group '{group_name}' data must be a dict")
+                # Support both tuple/list format (value, sigma) and dict format
+                if isinstance(group_data, (tuple, list)):
+                    if len(group_data) != 2:
+                        raise ValueError(f"Group '{group_name}' tuple/list must have exactly 2 elements: (value, sigma)")
+                    group_data = {"value": group_data[0], "sigma": group_data[1]}
+                elif not isinstance(group_data, dict):
+                    raise TypeError(f"Group '{group_name}' data must be a dict, tuple, or list (value, sigma)")
                 
                 if "value" not in group_data or "sigma" not in group_data:
                     raise ValueError(f"Group '{group_name}' must have 'value' and 'sigma' keys")
@@ -984,7 +994,7 @@ incertidumbres = _Uncertainties()
 
 
 @functools.wraps(_Uncertainties.quantity)
-def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None):
+def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None, unit=None):
     """
     Constructor unificado de magnitudes con incertidumbre.
 
@@ -993,6 +1003,7 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None)
     2) quantity(value, sigma, unit)         -> measurement only
     3) quantity(expr, unit)                 -> expression only
     4) quantity(value, sigma, unit, expr)   -> measurement + expression
+    5) quantity(groups={...}, unit=..., symbol=...)  -> groups mode
 
     Keywords opcionales:
     - symbol: str | None
@@ -1005,12 +1016,13 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None)
                   raise = raise ValueError.
     - groups: dict | None
               Estructura de grupos experimentales:
-              {"red": {"value": ..., "sigma": ...}, ...}
+              {"red": (value, sigma), ...} or {"red": {"value": ..., "sigma": ...}, ...}
               Si se usa, la magnitud sigue siendo única (mismo `symbol`) y
               se habilita acceso global + por grupo.
+    - unit: str | None - Used with groups parameter
 
     Nota importante:
-    - Para magnitud con grupos, usa `quantity(None, unit, symbol=..., groups=...)`.
+    - Para magnitud con grupos, usa `quantity(groups={...}, unit=..., symbol=...)`.
 
     Devuelve un `Quantity` (dict-like) con claves estables:
     - measure: (value, sigma) or None
@@ -1026,6 +1038,7 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None)
         normalize=normalize,
         nan_policy=nan_policy,
         groups=groups,
+        unit=unit,
     )
 
 

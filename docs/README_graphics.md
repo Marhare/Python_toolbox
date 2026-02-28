@@ -10,7 +10,8 @@ High-level scientific visualization based on the universal `plot()` function. Ex
 
 ```python
 plot(*objetos, mode=None, layout=None, dims="2D", show=True, figsize=None,
-    figure=None, subplot=None, xlabel=None, ylabel=None, zlabel=None, title=None, **kwargs)
+    figure=None, subplot=None, xlabel=None, ylabel=None, zlabel=None, title=None, 
+    colors=None, **kwargs)
 ```
 
 **Parameters:**
@@ -21,7 +22,11 @@ plot(*objetos, mode=None, layout=None, dims="2D", show=True, figsize=None,
 - `figsize`, `xlabel`, `ylabel`, `title`: Standard plot parameters
 - `figure`: Integer id to group multiple calls into the same figure
 - `subplot`: Subplot index (1..N) inside the grouped figure (requires `figure`)
-- `**kwargs`: Style customization (color, marker, linestyle, etc.)
+- `colors`: Color mapping for experimental groups or single series:
+  - `None` (default): Automatic theme colors
+  - `"color_name"`: Single color for all series/groups
+  - `{"group_name": "color", ...}`: Map each group to a color (requires groups)
+- `**kwargs`: Style customization (linestyle, linewidth, markersize, etc.)
 
 **Returns:** `(fig, ax)` tuple
 
@@ -205,6 +210,121 @@ mh.plot(
 mh.plot(x_fit, y_fit, mode="line", label="R=5 ohm", figure=1, subplot=1)
 ```
 
+### Experimental Groups: Auto-Detection with Color Mapping
+
+When quantities contain **experimental groups** (multiple realizations of the same physical magnitude), `plot()` automatically detects and visualizes them as colored series on the same subplot:
+
+```python
+import marhare as mh
+
+# Two experimental measurements of wavelength (two experimental runs)
+wavelength = mh.quantity(
+    groups={
+        "red_light": ([600, 605, 610], [2, 2, 2]),  # Measured red light wavelengths
+        "blue_light": ([450, 452, 451], [3, 3, 3])  # Measured blue light wavelengths
+    },
+    unit="nm",
+    symbol="λ"
+)
+
+# Refractive index for each group
+n = mh.quantity(
+    groups={
+        "red_light": ([1.50, 1.51, 1.49], [0.05, 0.05, 0.05]),
+        "blue_light": ([1.52, 1.53, 1.51], [0.05, 0.05, 0.05])
+    },
+    unit="",
+    symbol="n"
+)
+
+# Single plot command – automatically creates colored series (red, blue)
+mh.plot(wavelength, n, title="Refractive Index vs Wavelength")
+```
+
+**Behavior:**
+- Both `λ` and `n` have matching group names (`"red_light"`, `"blue_light"`)
+- All groups are drawn on the **same subplot** with automatic colors from the theme
+- Legend shows group names ("red_light", "blue_light")
+- Axes are auto-labeled from quantity symbols and units: `"λ [nm]"` and `"n [1]"`
+
+**With custom colors:**
+
+```python
+# Apply specific colors to each group
+mh.plot(wavelength, n, colors={
+    "red_light": "#FF0000",
+    "blue_light": "#0000FF"
+})
+
+# Single color for all groups
+mh.plot(wavelength, n, colors="#FF5500")
+```
+
+**Color parameter rules:**
+- `colors=None` (default): Use automatic color cycle
+- `colors="color_name"`: Apply single color to all groups
+- `colors={"group1": "color1", "group2": "color2", ...}`: Map each group to a color
+- `colors=[...]` (list/array): Error when groups are present (ambiguous)
+
+**Edge cases:**
+- If only `y` has groups and `x` doesn't: groups are applied to `y` rows
+- If `x` and `y` have different group names: Error (groups must match)
+- Mismatched groups raise `ValueError` with details
+
+---
+
+## Grouping Multiple Plots with `figure` and `subplot`
+
+Use `figure` (int id) to group multiple `plot()` calls into the same Matplotlib figure,
+and `subplot` to specify which panel (1..N) each call targets.
+
+**Overlay on same axis:**
+
+```python
+import marhare as mh
+import numpy as np
+
+x = np.linspace(0, 10, 50)
+
+# Both lines are drawn on the same subplot
+mh.plot(x, np.sin(x), mode="line", label="sin(x)", figure=1, subplot=1, show=False)
+mh.plot(x, np.cos(x), mode="line", label="cos(x)", figure=1, subplot=1)
+# Single plot with two overlaid curves and shared legend
+```
+
+**Multiple panels in one figure:**
+
+```python
+# Specify layout once (on first call)
+# Then use subplot to target each panel
+
+mh.plot(x, np.sin(x), mode="line", figure=2, subplot=1, layout="1x2", 
+        title="sin(x)", show=False)
+
+mh.plot(x, np.cos(x), mode="line", figure=2, subplot=2, layout="1x2", 
+        title="cos(x)", show=False)
+
+mh.plot(x, np.tan(x), mode="line", figure=2, subplot=3, layout="2x2", 
+        title="tan(x)")  # This one shows the figure
+```
+
+**Rules:**
+- `figure`: Integer identifier (e.g., `1`, `2`, `100`). Each unique id creates or reuses a figure
+- `subplot`: Index (1..N) inside the grouped figure. Must be used with `figure`
+- `layout`: Explicit layout like `"1x2"`, `"2x2"`, etc. Set on first call to `figure`
+- Multiple calls to the same `(figure, subplot)` pair draw on the same axis (overlay)
+- `show=True` (default) displays immediately; use `show=False` to defer display until the final call
+
+**Common workflow:**
+
+```python
+# Build multi-panel figure step by step
+for i, experiment in enumerate(experiments, 1):
+    x_data, y_data = experiment
+    mh.plot(x_data, y_data, figure=10, subplot=i, layout="2x2", 
+            title=f"Exp {i}", show=(i == 4))  # Show only on last call
+```
+
 ---
 
 ## Semantic Objects (Alternative Interface)
@@ -222,34 +342,6 @@ For explicit control, use semantic classes:
 
 You can pass these semantic objects directly to `plot()`. `Panel` and `Scene`
 are available for advanced, reusable layouts, but most workflows do not need them.
-
----
-
-## Grouping by `figure` and `subplot`
-
-Use `figure` to reuse the same Matplotlib figure across multiple `plot()` calls.
-Use `subplot` to target a specific panel inside that figure. Calls that share
-the same `figure` + `subplot` draw on the same `Axes`.
-
-```python
-import marhare as mh
-import numpy as np
-
-x = np.linspace(0, 10, 50)
-y1 = np.sin(x)
-y2 = np.cos(x)
-
-# Same subplot: overlay lines
-mh.plot(x, y1, mode="line", figure=1, subplot=1, label="sin", show=False)
-mh.plot(x, y2, mode="line", figure=1, subplot=1, label="cos")
-
-# Two panels in the same figure (set layout on the first call)
-mh.plot(x, y1, mode="line", figure=2, subplot=1, layout="1x2", show=False, title="sin")
-mh.plot(x, y2, mode="line", figure=2, subplot=2, layout="1x2", title="cos")
-```
-
-![Overlay same subplot](img/plot_overlay_placeholder.svg)
-![Layout 1x2](img/plot_layout_placeholder.svg)
 
 ---
 
@@ -352,6 +444,12 @@ Do you have...
 | Smooth curve | `plot(x, y_fit, mode="line")` |
 | Symbolic function | `plot(x, Function("sin(x)"))` |
 | With quantities | `plot(qty_x, qty_y)` → auto-labels |
+| Experimental groups (auto-detect) | `plot(qty_with_groups, qty_with_groups)` → colored series |
+| Color groups explicitly | `plot(qty_x, qty_y, colors={"group1": "#FF0000", ...})` |
 | 2D matrix | `plot(Z, mode="heatmap")` |
 | 3D surface | `plot(Z, mode="surface", dims="3D")` |
-| Multiple panels | `plot(Panel(...), Panel(...), layout=(1,2))` |
+| Overlay on same subplot | `plot(..., figure=1, subplot=1, show=False); plot(..., figure=1, subplot=1)` |
+| Multiple panels (1x2) | `plot(..., figure=2, subplot=1, layout="1x2", show=False); plot(..., figure=2, subplot=2)` |
+| Multiple panels (2x2) | `plot(..., figure=3, subplot=i, layout="2x2", show=(i==4))` for i in 1..4 |
+| Multiple semantic objects | `plot(Panel(...), Panel(...), layout=(1,2))` |
+

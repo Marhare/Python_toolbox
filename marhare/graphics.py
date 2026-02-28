@@ -198,6 +198,7 @@ class Series:
         y: array_like -> dependent variable
         label: str | None -> legend label
         marker: str | None -> marker type ('o', 's', '^', 'D', etc.) or None for hollow circles
+        color: str | None -> color for data points (optional)
     
     PURPOSE:
         Store intent: "I want to plot these points"
@@ -207,6 +208,7 @@ class Series:
     y: np.ndarray = field(default_factory=lambda: np.array([]))
     label: Optional[str] = None
     marker: Optional[str] = None
+    color: Optional[str] = None
 
     def __post_init__(self):
         self.x = _ensure_1d_array(self.x, "x")
@@ -229,6 +231,7 @@ class SeriesWithError:
         sy: array_like | None -> error in y (optional)
         sx: array_like | None -> error in x (optional)
         label: str | None -> legend label
+        color: str | None -> color for data points and error bars (optional)
     
     PURPOSE:
         "I have experimental points with uncertainties"
@@ -239,6 +242,7 @@ class SeriesWithError:
     sy: Optional[np.ndarray] = None
     sx: Optional[np.ndarray] = None
     label: Optional[str] = None
+    color: Optional[str] = None
 
     def __post_init__(self):
         self.x = _ensure_1d_array(self.x, "x")
@@ -910,6 +914,53 @@ def _quantity_axis_label(q: dict) -> Optional[str]:
         return str(unit)
     return None
 
+
+def _map_colors_to_groups(colors: Optional[Any], group_names: list[str]) -> dict[str, str]:
+    """
+    Map colors parameter to group names.
+    
+    Args:
+        colors: str | dict | list | None
+            - str: apply single color to all groups
+            - dict: {"group_name": "color", ...}
+            - list/array: ERROR (ambiguous with groups)
+            - None: return empty dict (use defaults)
+        group_names: list of group names to map
+    
+    Returns:
+        dict mapping group name to color (e.g., {"red": "#1f4e79", "blue": "#2d6a4f"})
+        Empty dict if colors is None
+    
+    Raises:
+        ValueError if colors is list/array with groups (ambiguous)
+        KeyError if dict colors missing any group
+    """
+    if colors is None:
+        return {}
+    
+    if isinstance(colors, str):
+        # Single color for all groups
+        return {name: colors for name in group_names}
+    
+    if isinstance(colors, dict):
+        # Validate all groups are present
+        missing = set(group_names) - set(colors.keys())
+        if missing:
+            raise KeyError(f"colors dict missing groups: {missing}")
+        return {name: colors[name] for name in group_names}
+    
+    # If it's array-like (list, tuple, ndarray), it's ambiguous
+    try:
+        _ = len(colors)
+        # It's array-like, which is ambiguous with groups
+        raise ValueError(
+            "colors list/array is ambiguous with groups. "
+            "Use colors={'group_name': 'color'} or colors='single_color'"
+        )
+    except TypeError:
+        # Not array-like, unknown type
+        raise TypeError(f"colors must be str, dict, or None; got {type(colors)}")
+
 def plot(
     *objetos,
     layout: Optional[str] = None,
@@ -930,6 +981,7 @@ def plot(
     ax: Optional[plt.Axes] = None,
     as_line: bool = False,
     mode: Optional[str] = None,
+    colors: Optional[Any] = None,
     **kwargs
 ) -> Union[Scene, Tuple[plt.Figure, Union[plt.Axes, np.ndarray]]]:
     """
@@ -966,6 +1018,14 @@ def plot(
         mode: str | None -> visualization mode: None (auto), "scatter", "line", "heatmap", "surface"
             "heatmap": plot(Z, mode="heatmap") - creates Heatmap from 2D array
             "surface": plot(x, y, Z, mode="surface") - creates Surface from 1D x, y and 2D Z
+        colors: str | dict | list | None -> color mapping (default: None, uses theme)
+            Without groups:
+              - str: apply single color to all points
+              - list/array: apply colors to individual points
+            With groups (auto-detected):
+              - str: apply single color to all group series
+              - dict: {"group_name": "color", ...} map group names to colors
+              - list/array: ERROR (ambiguous)
         **kwargs: style options (dpi, grid_alpha, lw, etc.)
             ALWAYS applied (even with Scene)
     
@@ -1091,8 +1151,12 @@ def plot(
                     raise ValueError("plot(y, yerr=...) requires yerr when x is omitted")
                 x = np.arange(len(y))
                 auto_index = True
+                x_orig = None
+                y_orig = None
             elif len(objetos) == 2:
                 x, y = objetos
+                x_orig = x  # Save original for group detection
+                y_orig = y
             else:
                 raise ValueError("plot(x, y, ...) requires both x and y")
             
@@ -1135,28 +1199,124 @@ def plot(
                 if yerr is None:
                     yerr = y_sigma
             
-            # Use Fit (line) if as_line=True or if y was a Function
-            if mode == "line":
-                # Force line mode
-                series_obj = Fit(x, y, label=series_label)
-            elif mode == "scatter":
-                # Force scatter mode
-                if yerr is not None:
-                    sx_param = kwargs.pop('sx', None)
-                    series_obj = SeriesWithError(x, y, sy=yerr, sx=sx_param, label=series_label)
-                else:
-                    series_obj = Series(x, y, label=series_label)
-            elif use_as_line and yerr is None:
-                # Draw as line (Fit object)
-                series_obj = Fit(x, y, label=series_label)
-            elif yerr is not None:
-                # Keep as SeriesWithError for error bars
-                sx_param = kwargs.pop('sx', None)
-                series_obj = SeriesWithError(x, y, sy=yerr, sx=sx_param, label=series_label)
+            # ============= AUTO-DETECT GROUPS =============
+            # Check if x and y quantities have experimental groups
+            y_groups = None
+            x_groups = None
+            if _is_quantity_like(y_orig):
+                y_groups = y_orig.get("_groups")
+            if _is_quantity_like(x_orig):
+                x_groups = x_orig.get("_groups")
+            
+            # If either has groups, validate compatibility and process
+            if y_groups is not None or x_groups is not None:
+                # Validate that both have matching groups
+                if y_groups is not None and x_groups is not None:
+                    if set(y_groups.keys()) != set(x_groups.keys()):
+                        raise ValueError(
+                            f"x and y have mismatched groups. "
+                            f"x groups: {list(x_groups.keys())}, y groups: {list(y_groups.keys())}"
+                        )
+                
+                # Use y groups as reference (or x groups if y has no groups)
+                groups_to_use = y_groups if y_groups is not None else x_groups
+                group_names = list(groups_to_use.keys())
+                
+                # Map colors if provided
+                color_map = _map_colors_to_groups(colors, group_names)
+                
+                # Get default colors from theme cycle
+                default_colors = PLOT_DEFAULTS.get("cycle", [
+                    "#1b1f24", "#1f4e79", "#2d6a4f", "#6c2c2c", "#5b5f97"
+                ])
+                
+                # Create one SeriesWithError per group, all in a single Panel
+                group_series_list = []
+                for idx, group_name in enumerate(group_names):
+                    # Get values for this group
+                    if y_groups is not None:
+                        y_group_data = y_groups[group_name]
+                        y_val = y_group_data["value"]
+                        y_err = y_group_data["sigma"]
+                    else:
+                        y_val = y
+                        y_err = yerr
+                    
+                    if x_groups is not None:
+                        x_group_data = x_groups[group_name]
+                        x_val = x_group_data["value"]
+                        x_err = x_group_data.get("sigma")
+                    else:
+                        x_val = x
+                        x_err = None
+                    
+                    # Determine color for this group
+                    if group_name in color_map:
+                        group_color = color_map[group_name]
+                    else:
+                        # Use color cycle
+                        group_color = default_colors[idx % len(default_colors)]
+                    
+                    # Create SeriesWithError with group-specific color
+                    group_series = SeriesWithError(
+                        x_val, y_val,
+                        sy=y_err,
+                        sx=x_err,
+                        label=group_name,
+                        color=group_color if group_color else None
+                    )
+                    group_series_list.append(group_series)
+                
+                # Create a single Panel containing all group series
+                panel = Panel(*group_series_list)
+                objetos_scene = [panel]
             else:
-                # Default: scatter for array data
-                series_obj = Series(x, y, label=series_label)
-            objetos_scene = [series_obj]
+                # ============= NO GROUPS: STANDARD BEHAVIOR =============
+                # Validate colors parameter for non-group case
+                if colors is not None and isinstance(colors, dict):
+                    raise ValueError("colors dict requires quantities with groups")
+                
+                # Validate colors format: should be str or None, not list/array
+                series_color = None
+                if colors is not None:
+                    if isinstance(colors, str):
+                        series_color = colors
+                    else:
+                        # It's array-like
+                        try:
+                            _ = len(colors)
+                            # colors is array-like, which we don't support in constructor mode
+                            # (would need per-point coloring in Series/SeriesWithError)
+                            raise ValueError(
+                                "colors list/array not supported in plot(x, y, ...) "
+                                "Use colors='single_color' or colors={'group': 'color'} with groups"
+                            )
+                        except TypeError:
+                            raise TypeError(f"colors must be str, dict, or None; got {type(colors)}")
+                
+                # Use Fit (line) if as_line=True or if y was a Function
+                if mode == "line":
+                    # Force line mode
+                    series_obj = Fit(x, y, label=series_label)
+                elif mode == "scatter":
+                    # Force scatter mode
+                    if yerr is not None:
+                        sx_param = kwargs.pop('sx', None)
+                        series_obj = SeriesWithError(x, y, sy=yerr, sx=sx_param, label=series_label, color=series_color)
+                    else:
+                        series_obj = Series(x, y, label=series_label, color=series_color)
+                elif use_as_line and yerr is None:
+                    # Draw as line (Fit object)
+                    series_obj = Fit(x, y, label=series_label)
+                elif yerr is not None:
+                    # Keep as SeriesWithError for error bars
+                    sx_param = kwargs.pop('sx', None)
+                    series_obj = SeriesWithError(x, y, sy=yerr, sx=sx_param, label=series_label, color=series_color)
+                else:
+                    # Default: scatter for array data
+                    series_obj = Series(x, y, label=series_label, color=series_color)
+                objetos_scene = [series_obj]
+            
             if y_fit is not None:
                 if isinstance(y_fit, Fit) or _is_fit_like(y_fit):
                     objetos_scene.append(y_fit)
@@ -1416,7 +1576,8 @@ def _plot_series(obj: Series, ax: plt.Axes, cfg: Dict[str, Any]):
     """
     Draw a simple series (clean scatter plot).
     """
-    color = cfg["palette"]["data"]
+    # Use obj.color if provided, else use palette default
+    color = obj.color if obj.color is not None else cfg["palette"]["data"]
     marker = obj.marker if obj.marker is not None else "o"
     
     if cfg.get("hollow_markers", True) and obj.marker is None:
@@ -1447,16 +1608,19 @@ def _plot_series_with_error(obj: SeriesWithError, ax: plt.Axes, cfg: Dict[str, A
     """
     Draw a series with error bars (errorbar).
     """
+    # Use obj.color if provided, else use palette default
+    data_color = obj.color if obj.color is not None else cfg["palette"]["data"]
+    
     artist = ax.errorbar(
         obj.x, obj.y,
         xerr=obj.sx, yerr=obj.sy,
         fmt="o",
         label=obj.label,
-        color=cfg["palette"]["data"],
-        ecolor=cfg["palette"]["error"],
+        color=data_color,
+        ecolor=data_color,  # Match error bar color to data color
         capsize=cfg.get("capsize", 2.8),
         markerfacecolor="none" if cfg.get("hollow_markers", True) else None,
-        markeredgecolor=cfg["palette"]["data"] if cfg.get("hollow_markers", True) else None,
+        markeredgecolor=data_color if cfg.get("hollow_markers", True) else None,
     )
     return artist
 
