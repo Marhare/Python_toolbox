@@ -90,15 +90,16 @@ class _Uncertainties:
         return {"shape": value.shape, "kind": "vector", "sigma_vec": sigma_vec}
     
     @staticmethod
-    def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None):
+    def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None, unit=None):
         """
-        Unified quantity constructor (positional-only).
+        Unified quantity constructor.
 
         Accepted signatures:
         1) quantity(value, unit)
         2) quantity(value, sigma, unit)
         3) quantity(expr, unit)
         4) quantity(value, sigma, unit, expr)
+        5) quantity(groups={...}, unit=..., symbol=...)
 
         Optional keywords:
         - symbol: str | None
@@ -108,6 +109,7 @@ class _Uncertainties:
                   {"red": {"value": array, "sigma": array}, "blue": {...}, ...}
                   When provided, the quantity represents multiple experimental
                   realizations of the same physical magnitude.
+        - unit: str | None - Can be provided as keyword when using groups
 
         If nan_policy:
             - "keep": keeps NaN (default)
@@ -117,56 +119,21 @@ class _Uncertainties:
             - "raise": raises error if NaN/inf present
             
         Groups:
-            When groups are provided, value/sigma args are ignored and data comes
-            from the groups dict. Each group must have "value" and "sigma" keys.
-            The quantity will store all groups and provide global concatenated views.
+            When groups are provided, no positional args are needed. Simply use:
+            quantity(groups={...}, unit="...", symbol="...")
         """
 
         if nan_policy not in ("keep", "drop", "raise"):
             raise ValueError("nan_policy must be 'keep', 'drop', or 'raise'")
 
-        # ================= ARGUMENT PARSING =================
-
-        if len(args) == 4:
-            value, sigma, unit, expr = args
-            if not isinstance(expr, (str, sp.Expr, type(None))):
-                raise TypeError("expr must be a string, sympy.Expr, or None")
-            has_sigma = sigma is not None
-
-        elif len(args) == 3:
-            if isinstance(args[0], str):
-                raise TypeError(
-                    "quantity(...) with 3 args: use (value, sigma, unit)"
-                )
-            else:
-                value, sigma, unit = args
-                expr = None
-                has_sigma = sigma is not None
-
-        elif len(args) == 2:
-            arg0, arg1 = args
-            expr = None
-
-            if isinstance(arg0, str):
-                expr = arg0
-                value = sigma = None
-                unit = arg1
-                has_sigma = False
-            else:
-                value = arg0
-                sigma = None
-                unit = arg1
-                has_sigma = False
-        else:
-            raise TypeError(
-                "quantity(...) expects (value, unit), (value, sigma, unit), "
-                "(expr, unit), or (value, sigma, unit, expr)"
-            )
-
-        # ================= GROUPS HANDLING =================
+        # ================= GROUPS MODE =================
         
-        if groups is not None:
-            # When groups are provided, ignore normal value/sigma
+        if groups is not None and len(args) == 0:
+            # Pure keyword mode for groups
+            if unit is None:
+                raise TypeError("unit is required when using groups")
+            
+            # Process groups directly (skip argument parsing)
             if not isinstance(groups, dict):
                 raise TypeError("groups must be a dict")
             
@@ -216,12 +183,6 @@ class _Uncertainties:
                     "sigma": sigma_out
                 }
             
-            # For grouped quantities, we don't have a single measure
-            # The Quantity class will build global views from _groups
-            measure = None
-            measure_si = None
-            dimension = None
-            
             # Build result dict with groups
             symbol_value = symbol
             if symbol_value is None and UNIT_CONVERSION_AVAILABLE and unit is not None:
@@ -231,17 +192,63 @@ class _Uncertainties:
                     symbol_value = None
             
             result_dict = {
-                "measure": measure,
-                "measure_si": measure_si,
+                "measure": None,
+                "measure_si": None,
                 "result": None,
-                "expr": expr,
+                "expr": None,
                 "unit": unit,
-                "dimension": dimension,
+                "dimension": None,
                 "symbol": symbol_value if symbol_value else unit,
                 "_groups": processed_groups,
             }
             
             return Quantity(result_dict)
+
+        # ================= ARGUMENT PARSING =================
+
+        if len(args) == 4:
+            value, sigma, unit, expr = args
+            if not isinstance(expr, (str, sp.Expr, type(None))):
+                raise TypeError("expr must be a string, sympy.Expr, or None")
+            has_sigma = sigma is not None
+
+        elif len(args) == 3:
+            if isinstance(args[0], str):
+                raise TypeError(
+                    "quantity(...) with 3 args: use (value, sigma, unit)"
+                )
+            else:
+                value, sigma, unit = args
+                expr = None
+                has_sigma = sigma is not None
+
+        elif len(args) == 2:
+            arg0, arg1 = args
+            expr = None
+
+            if isinstance(arg0, str):
+                expr = arg0
+                value = sigma = None
+                unit = arg1
+                has_sigma = False
+            else:
+                value = arg0
+                sigma = None
+                unit = arg1
+                has_sigma = False
+        else:
+            raise TypeError(
+                "quantity(...) expects (value, unit), (value, sigma, unit), "
+                "(expr, unit), or (value, sigma, unit, expr)"
+            )
+        
+        # If we get here with groups, it means positional args were passed
+        # Groups only works in keyword-only mode (no positional args)
+        if groups is not None:
+            raise TypeError(
+                "When using 'groups', call quantity with keywords only: "
+                "quantity(groups={...}, unit='...', symbol='...')"
+            )
 
         # ================= MEASUREMENT VALIDATION =================
 
