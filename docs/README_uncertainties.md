@@ -20,6 +20,8 @@ Every quantity is a Python dictionary with these stable keys:
 - **`measure_si`** (tuple): **Internal only** — always in SI base units for calculations
 - **`expr`** (SymPy expression or str): Formula definition (e.g., `"V/I"` for resistance)
 - **`result`** (tuple): Computed result `(value, sigma)` in display units (same unit as `measure`), or `None` (cached, never used as input)
+- **`expr_latex`** (str or None): LaTeX string of the formula. Added by `propagate_quantity()` for derived quantities; `None` for base measurements
+- **`sigma_latex`** (str or None): LaTeX string of the symbolic uncertainty propagation formula. Added by `propagate_quantity()`; `None` for base measurements
 
 **Critical Guarantee:** `value ± sigma` in `measure` and `measure_si` ALWAYS have **exactly the same units** within their respective tuples.
 
@@ -89,8 +91,41 @@ quantity(value, sigma, unit, expr_str, symbol=None, normalize=True, nan_policy="
 - **`normalize`**: If `True` (default), uses SI-normalized output units/values; if `False`, keeps the original display units
 - **`nan_policy`**: How to handle NaN/inf in `value`
     - `"keep"` (default): keeps all entries, including NaN/inf
-    - `"drop"`: removes vector entries where `value` is NaN/inf
+    - `"drop"`: removes entries where `value` is NaN/inf. Works seamlessly with scalar or vector `sigma`:
+      - Scalar sigma: remains constant for all remaining (valid) values
+      - Vector sigma: matching invalid entries are also removed
     - `"raise"`: raises `ValueError` if NaN/inf is found
+
+### Important Notes on Parameters and Usage
+
+**`sigma` must always be numeric**, not a string:
+```python
+# ✓ Correct
+q = mh.quantity([1, 2, 3], 0.5, "m")      # sigma=0.5 (numeric)
+q = mh.quantity([1, 2, 3], 0.5, "m")      # sigma = 0.5
+
+# ✗ Wrong
+q = mh.quantity([1, 2, 3], "0.5", "m")    # TypeError: "0.5" is string, not numeric
+```
+
+**Argument order is strict:**
+```python
+quantity(value, unit)                      # 2 args: sigma defaults to 0
+quantity(value, sigma, unit)               # 3 args: standard measurement
+quantity(expr, unit)                       # 2 args, expr is string: formula only
+quantity(value, sigma, unit, expr)         # 4 args: measurement + formula
+```
+
+**`nan_policy="drop"` with scalar sigma (common case):**
+```python
+import numpy as np
+import marhare as mh
+
+# 5 measurements, some invalid; constant ±0.1 m uncertainty
+data = np.array([1.5, np.nan, 2.3, 3.1, np.nan])
+q = mh.quantity(data, 0.1, "m", nan_policy="drop", symbol="x")
+# Result: x = [1.5, 2.3, 3.1] m ± 0.1 m (sigma unchanged for all valid values)
+```
 
 ---
 
@@ -464,6 +499,44 @@ $$\sigma_R = \sqrt{\left(\frac{\partial f}{\partial V} \sigma_V\right)^2 + \left
 
 The function computes partial derivatives symbolically and evaluates at the measured values.
 
+### Accessing Symbolic Expressions (LaTeX)
+
+After calling `propagate_quantity()`, the returned quantity dict contains LaTeX strings of the symbolic formulas:
+
+- **`expr_latex`**: LaTeX representation of the formula (e.g., `\frac{V}{I}`)
+- **`sigma_latex`**: LaTeX representation of the uncertainty propagation formula
+
+**Example:**
+
+```python
+import marhare as mh
+
+# Define measurements
+V = mh.quantity(10.0, 0.5, "V", symbol="V")
+I = mh.quantity(2.0, 0.1, "A", symbol="I")
+R = mh.quantity("V/I", "ohm", symbol="R")
+
+# Propagate
+magnitudes = mh.register(V, I, R)
+R_result = mh.propagate_quantity(R, magnitudes)
+
+# Access symbolic LaTeX expressions
+print("Formula:", R_result["expr_latex"])
+# Output: \frac{V}{I}
+
+print("Uncertainty:", R_result["sigma_latex"])
+# Output: \sqrt{\frac{\sigma_{I}^{2} V^{2}}{I^{4}} + \frac{\sigma_{V}^{2}}{I^{2}}}
+
+# Use in LaTeX documents
+print(f"$$R = {R_result['expr_latex']}$$")
+print(f"$$\\sigma_R = {R_result['sigma_latex']}$$")
+```
+
+**Notes:**
+- Base quantities (measurements without formulas) have `expr_latex = None` and `sigma_latex = None`
+- The `simplify=True` parameter (default) simplifies expressions before converting to LaTeX
+- These show the *analytical* propagation formulas, not numeric values
+
 ---
 
 ## Full Workflow: From Measurement to Result
@@ -668,7 +741,9 @@ print(f"PE = {v:.1f} ± {s:.1f} J")
 |-------|-------|----------|
 | `Symbol not in registry` | Formula uses undefined variable | Add all variables to `register()` |
 | `Negative sigma` | Uncertainty < 0 | Check input data; uncertainty must be ≥ 0 |
+| `TypeError: ... is not numeric (string)` | Passed `sigma="1"` instead of `sigma=1` | Always use numeric sigma: `1.0` or `1`, never `"1"` |
 | `value contains NaN or infinite values` | `nan_policy="raise"` with NaN/inf in input | Clean input data or use `nan_policy="keep"` / `"drop"` |
+| `too many indices for array` (0-dimensional) | Bug in scalar sigma + `nan_policy="drop"` with vectors (older versions) | Update to latest library version; now handles correctly |
 | `Circular dependency` | Formula refers to itself | Define separate quantities for measurements vs. formulas |
 | `Missing symbol` | `register()` called inside `quantity()` | Call `register()` after all quantities are created |
 

@@ -93,7 +93,9 @@ class _Uncertainties:
 
         If nan_policy:
             - "keep": keeps NaN (default)
-            - "drop": removes entries where value is NaN/inf
+            - "drop": removes entries where value is NaN/inf (works with scalar or vector sigma).
+                     When value is array and sigma is scalar, only invalid value
+                     entries are removed and sigma remains constant for remaining values.
             - "raise": raises error if NaN/inf present
         """
 
@@ -153,7 +155,12 @@ class _Uncertainties:
                 if nan_policy == "drop":
                     value_arr = value_arr[finite_mask]
                     if has_sigma and sigma is not None:
-                        sigma = np.asarray(sigma, dtype=float)[finite_mask]
+                        sigma_arr = np.asarray(sigma, dtype=float)
+                        # Only index if sigma is vectorial; keep scalar as is
+                        if sigma_arr.ndim > 0:
+                            sigma = sigma_arr[finite_mask]
+                        else:
+                            sigma = sigma_arr
             else:
                 if nan_policy == "raise" and not np.isfinite(value_arr):
                     raise ValueError("value contains NaN or infinite values")
@@ -395,16 +402,23 @@ class _Uncertainties:
             If True, converts result units to compact SI prefixes (e.g., 5000 mV → 5 V).
             If False, keeps units from quantity definition.
 
-        Returns:
-            value
-            uncertainty
-            analytic expression (latex)
-            analytic uncertainty expression (latex)
+        Returns
+        -------
+        dict
+            Updated quantity dictionary with added keys:
+            - result : tuple (value, sigma) with propagated numeric values
+            - expr_latex : str or None, LaTeX formula (None for base quantities)
+            - sigma_latex : str or None, LaTeX uncertainty formula (None for base)
         
         Notes
         -----
         When compact=True, automatically applies to_compact() to result units, showing
         the most readable SI prefix (1e-9 m → 1 nm, 2.4e9 Hz → 2.4 GHz, etc.).
+        
+        Access symbolic expressions:
+            result = propagate_quantity(R, magnitudes)
+            print(result["expr_latex"])      # LaTeX formula
+            print(result["sigma_latex"])     # LaTeX uncertainty formula
         """
         # 1) Normalize magnitudes and target
         if isinstance(magnitudes, dict):
@@ -518,6 +532,10 @@ class _Uncertainties:
         # 3) Return the updated quantity dictionary with the result cached
         target_qty = registry[name]
         
+        # 3.5) Add LaTeX expressions to the quantity dict
+        target_qty["expr_latex"] = res.get("expr_latex", None)
+        target_qty["sigma_latex"] = res.get("sigma_latex", None)
+        
         # 4) Apply compact units if requested
         if compact and UNIT_CONVERSION_AVAILABLE:
             unit_str = target_qty.get("unit", None)
@@ -563,7 +581,8 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="keep"):
                                       If False, keeps original units unchanged.
     - nan_policy: "keep" | "drop" | "raise" (default "keep")
                   Behavior when value contains NaN/inf:
-                  keep = preserve data, drop = filter invalid entries,
+                  keep = preserve data, 
+                  drop = filter invalid entries (works with scalar or vector sigma),
                   raise = raise ValueError.
 
     Returns a dict with stable keys:
@@ -607,13 +626,19 @@ def propagate_quantity(target, magnitudes, simplify=True, compact=False):
     Returns
     -------
     dict
-        Updated quantity dict with computed result
+        Updated quantity dict with computed result. Added keys after propagation:
+        - result : tuple (value, sigma) - numeric results
+        - expr_latex : str or None - LaTeX formula
+        - sigma_latex : str or None - LaTeX uncertainty formula
         
     Examples
     --------
     >>> V = quantity(5.0, 0.1, "V", symbol="V")
     >>> R = quantity(1000.0, 10.0, "ohm", symbol="R")
     >>> I = {"symbol": "I", "expr": "V/R", "unit": "A"}
+    >>> result = propagate_quantity(I, [V, R])
+    >>> val, sig = value_quantity(result)
+    >>> print(result["expr_latex"])  # Access symbolic expressions
     >>> result = propagate_quantity(I, [V, R])
     >>> # With compact=True, would convert to mA if result is in milliamperes
     >>> result_compact = propagate_quantity(I, [V, R], compact=True)
