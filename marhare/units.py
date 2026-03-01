@@ -651,6 +651,10 @@ def is_unit_conversion_enabled() -> bool:
     return _converter.is_enabled()
 
 
+# Backwards compatibility alias for quantities/propagation modules
+is_unit_conversion_available = is_unit_conversion_enabled
+
+
 def normalize_with_uncertainty(value: Any, sigma: Any, unit: str) -> Tuple[Any, Any, Optional[str]]:
     """
     Convenience function to normalize value and uncertainty with the same factor.
@@ -724,3 +728,130 @@ def get_compact_units(value: Any, sigma: Any, unit: str) -> Tuple[Any, Any, Opti
     All exceptions are caught and warned about gracefully.
     """
     return _converter.to_compact(value, sigma, unit)
+
+
+# ==============================================================================
+# High-level wrapper functions for uncertainties module
+# ==============================================================================
+
+def normalize_value_with_uncertainty(
+    value: np.ndarray | float,
+    sigma: np.ndarray | float,
+    unit: str | None,
+) -> Tuple[np.ndarray | float, np.ndarray | float, str | None]:
+    """
+    Convert value and uncertainty to SI base units.
+    
+    This is a convenience wrapper for the uncertainties module.
+    
+    Parameters
+    ----------
+    value : numeric
+        Value in original units
+    sigma : numeric
+        Uncertainty in original units
+    unit : str or None
+        Unit string (e.g., "mV", "GHz", "mm")
+    
+    Returns
+    -------
+    value_si : numeric
+        Value in SI base units
+    sigma_si : numeric
+        Uncertainty in SI base units
+    unit_si : str or None
+        SI base unit string (e.g., "volt", "hertz", "meter")
+        
+    Notes
+    -----
+    - If unit conversion unavailable, returns inputs unchanged
+    - If conversion fails, issues warning and returns inputs unchanged
+    - Maintains value/sigma ratio (no precision loss)
+    """
+    if not is_unit_conversion_enabled() or unit is None:
+        return value, sigma, unit
+    
+    try:
+        value_si, sigma_si, unit_base = _converter.normalize_value_with_uncertainty(
+            value, sigma, unit
+        )
+        
+        if unit_base is not None:
+            return value_si, sigma_si, unit_base
+        else:
+            return value, sigma, unit
+            
+    except Exception as e:
+        warnings.warn(
+            f"Unit normalization failed for '{unit}': {e}. Using original units.",
+            UserWarning
+        )
+        return value, sigma, unit
+
+
+def get_unit_symbol(unit: str | None) -> str | None:
+    """
+    Extract display symbol for a unit.
+    
+    Parameters
+    ----------
+    unit : str or None
+        Unit string
+    
+    Returns
+    -------
+    symbol : str or None
+        Unit symbol (e.g., "V" for "volt", "Hz" for "hertz")
+        Returns None if unavailable or extraction fails
+    """
+    if not is_unit_conversion_enabled() or unit is None:
+        return None
+    
+    try:
+        return _converter.get_unit_symbol(unit)
+    except Exception:
+        return None
+
+
+def compact_units(
+    value: np.ndarray | float,
+    sigma: np.ndarray | float,
+    unit: str | None,
+) -> Tuple[np.ndarray | float, np.ndarray | float, str | None]:
+    """
+    Apply automatic SI prefix compacting for display.
+    
+    Converts to human-readable prefix (e.g., 5000 mV → 5 V, 0.001 A → 1 mA).
+    
+    Parameters
+    ----------
+    value : numeric
+        Value to compact
+    sigma : numeric
+        Uncertainty to compact (scaled by same factor as value)
+    unit : str or None
+        Unit string
+    
+    Returns
+    -------
+    compact_value : numeric
+        Value with compact prefix
+    compact_sigma : numeric
+        Uncertainty with compact prefix (same scaling as value)
+    compact_unit : str or None
+        Compact unit string (e.g., "millivolt", "kilohertz")
+        
+    Notes
+    -----
+    - This is ONLY for display/representation
+    - Does NOT change physical unit_internal
+    - If compacting fails, returns inputs unchanged
+    """
+    if not is_unit_conversion_enabled() or unit is None:
+        return value, sigma, unit
+    
+    try:
+        return get_compact_units(value, sigma, unit)
+    except Exception as e:
+        warnings.warn(f"Could not apply compact units: {e}", UserWarning)
+        return value, sigma, unit

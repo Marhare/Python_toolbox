@@ -815,7 +815,14 @@ def _parse_band(x, bands) -> Band:
 
 
 def _is_quantity_like(obj: Any) -> bool:
-    return isinstance(obj, dict) and "unit" in obj and ("measure" in obj or "result" in obj)
+    # Check if it's a Quantity object or a dict-like quantity
+    from .uncertainties import Quantity
+    if isinstance(obj, Quantity):
+        return True
+    # For dict-based quantities (legacy support)
+    if isinstance(obj, dict) and "unit" in obj and ("measure" in obj or "result" in obj):
+        return True
+    return False
 
 
 def _is_fit_result_like(obj: Any) -> bool:

@@ -335,7 +335,16 @@ def valor_pm(
             isinstance(item, dict) for item in valor
         ):
             raise TypeError("valor_pm(): cannot mix dict and non-dict magnitudes")
-    if isinstance(valor, dict) and not magnitudes:
+    
+    # Import Quantity for isinstance checks
+    try:
+        from .uncertainties import Quantity
+    except ImportError:
+        Quantity = None
+    
+    is_quantity = isinstance(valor, dict) or (Quantity is not None and isinstance(valor, Quantity))
+    
+    if is_quantity and not magnitudes:
         if sigma is None:
             # Single quantity dict: normalize first, then format as scalar or 1D table.
             v, s = value_quantity(valor)
@@ -394,17 +403,17 @@ def valor_pm(
     if isinstance(valor, (list, tuple)) and not magnitudes:
         if len(valor) == 0:
             raise ValueError("valor_pm(): empty list/tuple of magnitudes")
-        if all(isinstance(item, dict) for item in valor):
+        if all(isinstance(item, (dict, Quantity)) for item in valor):
             if sigma is not None:
                 raise TypeError("valor_pm(): sigma must be None when passing a list of magnitudes")
             mags = list(valor)
 
-    if mags is None and isinstance(valor, dict) and magnitudes:
+    if mags is None and is_quantity and magnitudes:
         # Support valor_pm(q1, q2, q3) by treating dict sigma as a magnitude.
-        if sigma is not None and not isinstance(sigma, dict):
+        if sigma is not None and not isinstance(sigma, (dict, Quantity)):
             raise TypeError("valor_pm(): sigma must be None for magnitudes tables")
         mags = [valor]
-        if isinstance(sigma, dict):
+        if isinstance(sigma, (dict, Quantity)):
             mags.append(sigma)
         for m in magnitudes:
             mags.append(m)
@@ -412,9 +421,9 @@ def valor_pm(
     if mags is not None:
         # Multiple quantities: build a magnitudes table via tabla_latex.
         for i, mag in enumerate(mags):
-            if not isinstance(mag, dict):
+            if not isinstance(mag, (dict, Quantity)):
                 raise TypeError(
-                    f"valor_pm(): expected dict at index {i}, got {type(mag).__name__}"
+                    f"valor_pm(): expected dict or Quantity at index {i}, got {type(mag).__name__}"
                 )
 
         if headers is not None or row_headers is not None:

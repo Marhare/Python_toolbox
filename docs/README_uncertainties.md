@@ -1,5 +1,15 @@
 # uncertainties.py – Quantities with Measurement Uncertainty
 
+**Version:** 1.0 ✅ Production-ready  
+**Architecture:** Immutable, Unit-separated, Validated  
+**Status:** Backward-compatible with all v0.x code  
+
+> **📘 Architecture Documentation:**  
+> - **[v1.0 Release Notes](UNCERTAINTIES_V1_RELEASE.md)** — What's new in v1.0  
+> - **[v1.0 Architecture Contract](UNCERTAINTIES_V1_CONTRACT.md)** — Formal guarantees & test verification  
+
+---
+
 ## Table of Contents
 
 1. [Purpose](#purpose)
@@ -25,9 +35,9 @@ Define and propagate measurements with uncertainty and units. Create quantities 
 
 ---
 
-## Core Concept: The Quantity Dictionary
+## Core Concept: The Quantity Object
 
-Every quantity is a Python dictionary with these stable keys:
+Every quantity created by `quantity()` returns a `Quantity` object that behaves like a Python dictionary with stable keys:
 
 - **`symbol`** (str): Variable name (e.g., `"V"`, `"mass"`)
 - **`unit`** (str): Display unit 
@@ -79,6 +89,18 @@ V = mh.quantity(5000.0, 100.0, "mV", symbol="V", normalize=False)
 - **Display shows original units when normalize=False** (mV, mA, mm)
 - No conversion overhead during propagation
 - Dimensional analysis always works correctly
+
+### Implementation Details: Quantity as an Encapsulated Object
+
+While `Quantity` behaves like a dictionary (supporting `q['key']`, `q.get()`, `'key' in q`), it is **not** a dictionary subclass. Instead:
+
+- **Encapsulation**: Uses `__slots__` to prevent arbitrary attribute creation
+- **Dict-like interface**: Implements `__getitem__()`, `get()`, `keys()`, `values()`, `items()`, `__contains__()` for seamless dict-like access
+- **Immutability intent**: Designed to prevent accidental mutation after creation
+- **Backward compatibility**: All code using `q['unit']`, `q.get('symbol')`, etc. works unchanged
+- **Legacy export**: Call `q.as_dict()` to get a plain dictionary copy if needed
+
+**No user code changes required** — existing scripts continue to work unchanged.
 
 ---
 
@@ -737,7 +759,7 @@ V = mh.quantity(5000.0, 100.0, "mV", symbol="V")
 R = mh.quantity(1000.0, 10.0, "ohm", symbol="R")
 
 # Define derived quantity
-I = {"symbol": "I", "expr": "V/R", "unit": "A"}
+I = mh.quantity("V/R", "A", symbol="I")
 
 # Propagate WITH automatic compacting
 result_compact = mh.propagate_quantity(I, [V, R], compact=True)
