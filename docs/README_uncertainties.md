@@ -106,6 +106,7 @@ quantity(groups={...}, unit="...", symbol=None, normalize=True, nan_policy="keep
 - **`unit`**: Physical unit string (e.g., `"V"`, `"kg"`, `"m/s²"`) - supports SI prefixes
 - **`expr_str`**: Optional formula (string or SymPy expression) for computed quantities
 - **`symbol`**: Optional variable name (keyword-only); auto-detected via `register()` if `None`
+- **`groups`**: Keyword-only dict of experimental groups: `{"group_name": (value, sigma), ...}` or `{"group_name": {"value": ..., "sigma": ...}, ...}` (alternative to individual `value`/`sigma`)
 - **`normalize`**: If `True` (default), uses SI-normalized units; if `False`, keeps original display units
 - **`nan_policy`**: How to handle NaN/inf in `value`
     - `"keep"` (default): keeps all entries
@@ -144,7 +145,7 @@ wl = mh.quantity(
         "LHC-b": ([700, 705], [3, 3])
     },
     unit="nm",
-    symbol="λ"
+    symbol=r"\lambda"
 )
 
 # Dict syntax also works
@@ -154,7 +155,7 @@ wl = mh.quantity(
         "blue": {"value": [450, 455], "sigma": [1, 1]}
     },
     unit="nm",
-    symbol="λ"
+    symbol=r"\lambda"
 )
 
 # Global view (all data concatenated)
@@ -351,7 +352,7 @@ wl = mh.quantity(
         "blue": ([450, 452, 448], [1.5, 1, 2])
     },
     unit="nm",
-    symbol="λ"
+    symbol=r"\lambda"
 )
 ```
 
@@ -554,13 +555,13 @@ wl = mh.quantity(
         "blue": {"value": [450, 455], "sigma": [1, 1]}
     },
     unit="nm",
-    symbol="λ"
+    symbol=r"\lambda"
 )
 
 # Speed of light
 c = mh.quantity(3e8, 0, "m/s", symbol="c")
 
-# Frequency = c / λ
+# Frequency = c / \lambda (or use "c / wl" where wl is the quantity variable)
 f = mh.quantity("c / wl", "Hz", symbol="f")
 magnitudes = mh.register(wl, c, f)
 
@@ -639,7 +640,7 @@ wavelength = mh.quantity(
         "plastic": ([451, 502, 551], [3, 3, 3])
     },
     unit="nm",
-    symbol="λ"
+    symbol=r"\lambda"
 )
 
 refractive_index = mh.quantity(

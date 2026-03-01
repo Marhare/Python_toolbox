@@ -174,13 +174,11 @@ mh.plot(x_qty, y_qty, title="Time vs Distance")
 
 ### Functions with Quantities
 
-Combine symbolic expressions with measured data:
+Combine symbolic expressions with measured data. The cleanest approach uses quantities directly, which auto-labels axes:
 
 ```python
 import marhare as mh
 import numpy as np
-from marhare.uncertainties import value_quantity
-from marhare.uncertainties import value_quantity
 
 # Measured voltage and current
 V = mh.quantity([1.0, 2.0, 3.0], [0.1, 0.1, 0.1], "V", symbol="V")
@@ -189,22 +187,34 @@ I = mh.quantity([0.2, 0.4, 0.6], [0.01, 0.01, 0.01], "A", symbol="I")
 # Plot measured data directly – quantities auto-extract values and errors
 mh.plot(I, V, title="Voltage vs Current")  # Auto-labels "I [A]" and "V [V]"
 
-# Plot with a fitted line overlay
-I_val, I_err = value_quantity(I)
-V_val, V_err = value_quantity(V)
-
+# Plot with a fitted line overlay using figure and subplot
 x_fit = np.linspace(0.1, 0.7, 50)
 y_fit = 5 * x_fit  # Theory: R = 5Ω
 
+mh.plot(I, V, label="Measured", figure=1, subplot=1, show=False, title="V-I Curve with Theory")
+mh.plot(x_fit, y_fit, mode="line", label="R=5 ohm", figure=1, subplot=1)
+# Auto-labels from quantity symbols and units: "I [A]" and "V [V]"
+```
+
+If you need to extract values for data processing, manually specify labels:
+
+```python
+from marhare.uncertainties import value_quantity
+
+# Extract values and errors for processing
+I_val, I_err = value_quantity(I)
+V_val, V_err = value_quantity(V)
+
+# When using raw values, you must specify labels manually
 mh.plot(
     I_val, V_val,
     yerr=V_err,
     label="Measured",
+    xlabel="I [A]",
+    ylabel="V [V]",
     figure=1,
     subplot=1,
     show=False,
-    xlabel="I [A]",
-    ylabel="V [V]",
     title="V-I Curve with Theory"
 )
 mh.plot(x_fit, y_fit, mode="line", label="R=5 ohm", figure=1, subplot=1)
@@ -429,7 +439,7 @@ Do you have...
 ├─ Symbolic expression? → Use Function class, auto-evaluates
 ├─ 2D matrix (Z)? → Use mode="heatmap" or Heatmap object
 ├─ 3D surface? → Use mode="surface" or Surface object
-├─ Multiple plots? → Use Panel or Scene
+├─ Multiple plots? → Use figure and subplot arguments
 └─ Error bars + fit + residuals? → Combine semantic objects
 ```
 
