@@ -302,6 +302,11 @@ class Quantity:
         return self._unit_raw
     
     @property
+    def unit_display(self) -> Optional[str]:
+        """Return display unit if set (compact mode), else None (read-only)."""
+        return self._unit_display
+    
+    @property
     def symbol(self) -> Optional[str]:
         return self._symbol
     
@@ -341,6 +346,8 @@ class Quantity:
             return self._unit_internal
         elif key == "unit_raw":
             return self._unit_raw
+        elif key == "unit_display":
+            return self._unit_display
         elif key == "symbol":
             return self._symbol
         elif key == "expr":
@@ -380,6 +387,14 @@ class Quantity:
     def keys(self):
         """Return dict-like keys for iterating."""
         keys = ["measure", "result", "unit", "symbol", "expr", "dimension"]
+        # Add unit tier keys
+        if self._unit_raw is not None:
+            keys.append("unit_raw")
+        if self._unit_internal is not None:
+            keys.append("unit_internal")
+        if self._unit_display is not None:
+            keys.append("unit_display")
+        # Add groups and latex
         if self._groups is not None:
             keys.append("_groups")
         if self._expr_latex is not None:
@@ -550,15 +565,19 @@ class Quantity:
         Export as a legacy dict for compatibility with old code.
         
         Keys: "measure", "result", "unit", "symbol", "expr", "dimension",
+              "unit_raw", "unit_internal", "unit_display",
               "_groups", "expr_latex", "sigma_latex"
         
-        Note: "unit" returns display unit (backward compatibility)
+        Note: "unit" returns display unit if set, else internal (backward compatibility)
         """
         result_dict = {
             "measure": (self._measure_value, self._measure_sigma) if self._measure_value is not None else None,
             "measure_si": (self._measure_value, self._measure_sigma) if self._measure_value is not None else None,
             "result": (self._result_value, self._result_sigma) if self._result_value is not None else None,
             "unit": self.unit,  # Use property (returns display or internal)
+            "unit_raw": self._unit_raw,
+            "unit_internal": self._unit_internal,
+            "unit_display": self._unit_display,
             "symbol": self._symbol,
             "expr": self._expr,
             "dimension": None,

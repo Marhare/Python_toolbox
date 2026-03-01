@@ -910,9 +910,19 @@ def _build_dense_fit(x: np.ndarray, y_fit: Any, n_points: int = 400) -> Fit:
     raise ValueError("y_fit must be an evaluated array or a model/fit result")
 
 def _quantity_axis_label(q: dict) -> Optional[str]:
-    symbol = q.get("symbol")
-    # Use unit (which contains SI if normalize=True, original if normalize=False)
-    unit = q.get("unit")
+    """Generate axis label from quantity (dict or Quantity object)."""
+    try:
+        from .uncertainties import Quantity
+    except ImportError:
+        Quantity = None
+    
+    # Use properties for Quantity objects, dict access for dicts
+    if Quantity is not None and isinstance(q, Quantity):
+        symbol = q.symbol
+        unit = q.unit  # Property returns display unit if set, else internal
+    else:
+        symbol = q.get("symbol")
+        unit = q.get("unit")
     if symbol and unit:
         return f"{symbol} [{unit}]"
     if symbol:

@@ -348,9 +348,13 @@ def valor_pm(
         if sigma is None:
             # Single quantity dict: normalize first, then format as scalar or 1D table.
             v, s = value_quantity(valor)
-            # Use display unit (original) if available, else internal unit
-            unit = valor.get("unit_display", None) or valor.get("unit", None)
-            symbol = valor.get("symbol", "") or ""
+            # Get unit properly: use .unit property for Quantity, dict access for dicts
+            if isinstance(valor, Quantity):
+                unit = valor.unit  # Property returns display unit if set, else internal
+                symbol = valor.symbol or ""
+            else:
+                unit = valor.get("unit", None)
+                symbol = valor.get("symbol", "") or ""
             v_arr = np.asarray(v)
             s_arr = np.asarray(s)
 
