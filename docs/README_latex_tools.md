@@ -1,5 +1,9 @@
 # latex_tools.py – Scientific Notation and Uncertainty Formatting
 
+**Version:** 1.0+  
+**Key Updates:** ✅ Experimental groups as table columns | ✅ Group inheritance in propagation | ✅ Cleaner table format (no parentheses, no "(1)")  
+**See also:** [CHANGELOG_V1_LATEXTOOLS.md](CHANGELOG_V1_LATEXTOOLS.md) for detailed v1.0 updates
+
 ## Purpose
 
 Format measurements with uncertainty and units for publication-quality LaTeX documents. Handles scalars, vectors, and groups with proper significant figures, metrological rounding, and scientific notation.
@@ -304,6 +308,95 @@ tex_y = mh.latex_quantity(y_mean)
 # Mean distance: {tex_x}
 # Mean time: {tex_y}
 ```
+
+---
+
+## New Features: Experimental Data Groups (v1.0+)
+
+### Automatic Group-Based Tables
+
+When a quantity has **groups** (experimental groups, trials, or colored filters), `latex_quantity()` automatically generates a table with groups as columns:
+
+```python
+import marhare as mh
+import numpy as np
+
+# Quantity with groups (e.g., measurements for different colors)
+wavelength = mh.quantity(
+    groups={
+        "red":    (np.array([650.1, 650.2, 650.3]), 0.5),
+        "blue":   (np.array([470.0, 470.1, 469.9]), 0.5),
+        "green":  (np.array([550.2, 550.1, 550.3]), 0.5),
+    },
+    unit="nm",
+    symbol="λ"
+)
+
+# Automatic table with groups as columns
+tex = mh.latex_quantity(wavelength)
+print(tex)
+
+# Output:
+# \begin{table}[htbp]
+# \centering
+# \begin{tabular}{cccc}
+# \hline
+# λ & blue & green & red \\
+# \hline
+# $470.0 \pm 0.5\,\mathrm{nm}$ & $550.2 \pm 0.5\,\mathrm{nm}$ & $650.1 \pm 0.5\,\mathrm{nm}$ \\
+# $470.1 \pm 0.5\,\mathrm{nm}$ & $550.1 \pm 0.5\,\mathrm{nm}$ & $650.2 \pm 0.5\,\mathrm{nm}$ \\
+# $469.9 \pm 0.5\,\mathrm{nm}$ & $550.3 \pm 0.5\,\mathrm{nm}$ & $650.3 \pm 0.5\,\mathrm{nm}$ \\
+# \hline
+# \end{tabular}
+# \end{table}
+```
+
+**Features:**
+- ✅ Groups automatically ordered alphabetically as columns
+- ✅ Symbol shown as row header (if provided)
+- ✅ Units included in each cell
+- ✅ Array values expanded row-by-row across groups
+
+### Group Inheritance in Propagation
+
+When you propagate a derived quantity through `propagate_quantity()`, **groups are automatically inherited** even if not all input values have groups:
+
+```python
+import marhare as mh
+import numpy as np
+
+# Quantity WITH groups
+delta_angle = mh.quantity(
+    groups={
+        "exp1": (np.array([0.10, 0.11, 0.12]), 0.01),
+        "exp2": (np.array([0.15, 0.16, 0.17]), 0.01),
+        "exp3": (np.array([0.12, 0.13, 0.14]), 0.01),
+    },
+    unit="rad",
+    symbol="Δθ"
+)
+
+# Quantity WITHOUT groups (scalar)
+reference = mh.quantity(0.5, 0.05, "rad", symbol="α")
+
+# Create derived quantity
+n_index = mh.quantity("sin((delta_angle + reference)/2) / sin(reference/2)", unit="1", symbol="n")
+
+# Register quantities
+registry = mh.register(delta_angle, reference, n_index)
+
+# Propagate: n_index INHERITS groups from delta_angle even though reference doesn't have them!
+n_result = mh.propagate_quantity(n_index, registry)
+
+# This generates a table with exp1, exp2, exp3 as columns:
+print(mh.latex_quantity(n_result))
+```
+
+**Rules:**
+- If ANY input quantity has groups, the result inherits that group structure
+- Quantities without groups are treated as global (same value for all groups)
+- All grouped inputs must have **identical** group names
+- Group structure works seamlessly with unit propagation
 
 ---
 

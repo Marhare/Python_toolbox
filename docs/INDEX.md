@@ -34,9 +34,22 @@
 | **[UNCERTAINTIES_V1_SUMMARY.md](UNCERTAINTIES_V1_SUMMARY.md)** | ~300 | Implementation summary and deliverables |
 | **[UNIT_CONVERSION_IMPLEMENTATION.md](UNIT_CONVERSION_IMPLEMENTATION.md)** | ~400 | Unit conversion system details |
 
+### latex_tools v1.0
+
+| Document | Purpose |
+|----------|---------|
+| **[CHANGELOG_V1_LATEXTOOLS.md](CHANGELOG_V1_LATEXTOOLS.md)** | Detailed changelog: groups as columns, group inheritance, format improvements |
+
 ---
 
-## 🎯 Quick Navigation
+## 🔄 v1.0 Changes & Improvements
+
+| Document | Purpose |
+|----------|---------|
+| **[SUMMARY_V1_CHANGES.md](SUMMARY_V1_CHANGES.md)** | Quick overview of all v1.0 changes (tables, groups, format) |
+| **[CHANGELOG_V1_LATEXTOOLS.md](CHANGELOG_V1_LATEXTOOLS.md)** | Detailed changelog for LaTeX improvements |
+
+---
 
 ### For New Users
 1. Start with the main **[README.md](../README.md)** in repository root

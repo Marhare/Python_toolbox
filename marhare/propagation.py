@@ -280,9 +280,9 @@ def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, gr
                     "Target magnitude appears multiple times in registry"
                 )
             elif name is None:
-                raise ValueError(
-                    "Target magnitude must define a non-empty 'symbol' or be present in registry"
-                )
+                # No symbol and not in registry: use default "_result" symbol
+                name = "_result"
+                registry[name] = target
     else:
         name = target
 
@@ -324,13 +324,13 @@ def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, gr
                 )
         # We'll extract this specific group data
         
-    elif quantities_with_groups and not quantities_without_groups:
-        # Mode 3: Auto-inheritance only if ALL quantities have groups
-        # and they all have identical groups
+    elif quantities_with_groups:
+        # Mode 3: Auto-inheritance if quantities with groups have identical groups.
+        # This works even if some quantities don't have groups (they're treated as global).
         if len(all_group_names) > 0:
             first_groups = all_group_names[0]
             if all(g == first_groups for g in all_group_names):
-                # All have the same groups - auto-inherit
+                # All grouped quantities have the same groups - auto-inherit
                 inherit_groups = True
                 target_groups = sorted(first_groups)
     

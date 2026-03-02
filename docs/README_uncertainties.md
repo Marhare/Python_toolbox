@@ -7,6 +7,7 @@
 > **📘 Architecture Documentation:**  
 > - **[v1.0 Release Notes](UNCERTAINTIES_V1_RELEASE.md)** — What's new in v1.0  
 > - **[v1.0 Architecture Contract](UNCERTAINTIES_V1_CONTRACT.md)** — Formal guarantees & test verification  
+> - **💡 v1.0 LaTeX Updates:** [CHANGELOG_V1_LATEXTOOLS.md](CHANGELOG_V1_LATEXTOOLS.md) — Groups as table columns, group inheritance, cleaner formatting
 
 ---
 
@@ -561,11 +562,54 @@ print(f"$$\\sigma_R = {R_result['sigma_latex']}$$")
    - Computes result for only that group
    - Other groups are ignored
 
-3. **Automatic inheritance (when all dependencies share identical groups)**
+3. **Automatic inheritance (when dependencies have identical groups)**
    - Each group processes independently
    - Result inherits group structure
+   - ✅ **NEW:** Works even if SOME inputs don't have groups! (treated as global)
 
-**Example:**
+**Example with Mixed Groups:**
+
+```python
+import marhare as mh
+import numpy as np
+
+# Measurement WITH groups (e.g., different colored filters)
+wavelength = mh.quantity(
+    groups={
+        "red":   (np.array([650.1, 650.2, 650.3]), 0.5),
+        "green": (np.array([550.2, 550.1, 550.3]), 0.5),
+        "blue":  (np.array([470.0, 470.1, 469.9]), 0.5),
+    },
+    unit="nm",
+    symbol="λ"
+)
+
+# Constant WITHOUT groups (same for all colors)
+speed_light = mh.quantity(3e8, 0, "m/s", symbol="c")
+
+# Frequency formula
+frequency = mh.quantity("c / λ", "Hz", symbol="ν")
+
+# Register all
+magnitudes = mh.register(wavelength, speed_light, frequency)
+
+# Propagate: frequency INHERITS groups from wavelength even though speed_light doesn't have groups!
+freq_result = mh.propagate_quantity(frequency, magnitudes)
+
+# Result has groups: red, green, blue (one frequency per group)
+print(freq_result.groups)  # ['red', 'green', 'blue']
+
+# Generate table with groups as columns
+print(mh.latex_quantity(freq_result))
+```
+
+**Key Rules:**
+- ✅ If ANY input has groups, result inherits that group structure
+- ✅ Inputs without groups are treated as **global** (same value for all groups)
+- ✅ All grouped inputs must have **identical** group names
+- ✅ Group structure is preserved through unit propagation
+
+**Original example (all inputs grouped):**
 
 ```python
 import marhare as mh

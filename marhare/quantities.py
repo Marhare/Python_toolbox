@@ -651,7 +651,7 @@ class _Uncertainties:
         return {"shape": value.shape, "kind": "vector", "sigma_vec": sigma_vec}
     
     @staticmethod
-    def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None, unit=None):
+    def quantity(*args, symbol=None, normalize=True, nan_policy="drop", groups=None, unit=None):
         """
         Unified quantity constructor.
 
@@ -666,7 +666,7 @@ class _Uncertainties:
         - symbol: str | None
         - normalize: bool (default True) - If True, converts units to SI base.
                                           If False, keeps original units unchanged.
-        - nan_policy: "keep" | "drop" | "raise"
+        - nan_policy: "keep" | "drop" | "raise" (default "drop")
         - groups: dict | None - Experimental groups structure. Each group can be:
                   Format 1 (tuple): {"red": (value, sigma), "blue": (value, sigma), ...}
                   Format 2 (dict):  {"red": {"value": array, "sigma": array}, ...}
@@ -675,7 +675,7 @@ class _Uncertainties:
         - unit: str | None - Can be provided as keyword when using groups
 
         If nan_policy:
-            - "keep": keeps NaN (default)
+            - "keep": keeps NaN
             - "drop": removes entries where value is NaN/inf (works with scalar or vector sigma).
                      When value is array and sigma is scalar, only invalid value
                      entries are removed and sigma remains constant for remaining values.
@@ -787,8 +787,6 @@ class _Uncertainties:
             
             # Build result dict with groups (all in unit_internal)
             symbol_value = symbol
-            if symbol_value is None and units.is_unit_conversion_available() and unit_internal is not None:
-                symbol_value = units.get_unit_symbol(unit_internal)
             
             result_dict = {
                 "measure": None,
@@ -799,7 +797,7 @@ class _Uncertainties:
                 "unit_internal": unit_internal,
                 "unit_display": unit_display,
                 "dimension": None,
-                "symbol": symbol_value if symbol_value else unit_internal,
+                "symbol": symbol_value,
                 "_groups": processed_groups,
             }
             
@@ -837,6 +835,26 @@ class _Uncertainties:
                 sigma = None
                 unit = arg1
                 has_sigma = False
+        
+        elif len(args) == 1:
+            # Support single positional arg with unit as keyword
+            if unit is None:
+                raise TypeError(
+                    "quantity(...) expects (value, unit), (value, sigma, unit), "
+                    "(expr, unit), or (value, sigma, unit, expr)"
+                )
+            arg0 = args[0]
+            expr = None
+            
+            if isinstance(arg0, str):
+                expr = arg0
+                value = sigma = None
+                has_sigma = False
+            else:
+                value = arg0
+                sigma = None
+                has_sigma = False
+        
         else:
             raise TypeError(
                 "quantity(...) expects (value, unit), (value, sigma, unit), "
@@ -850,6 +868,9 @@ class _Uncertainties:
                 "When using 'groups', call quantity with keywords only: "
                 "quantity(groups={...}, unit='...', symbol='...')"
             )
+
+        if unit is None:
+            raise TypeError("quantity(...): unit is required")
 
         # ================= MEASUREMENT VALIDATION =================
 
@@ -938,21 +959,6 @@ class _Uncertainties:
             unit_internal = unit if normalize else unit
 
         symbol_value = symbol
-        if symbol_value is None and units.is_unit_conversion_available() and unit is not None:
-            symbol_value = units.get_unit_symbol(unit)
-
-        if normalize and measure_si is not None and unit_internal is not None:
-            # Get preferred symbol for internal unit
-            if units.is_unit_conversion_available() and symbol_value is None:
-                symbol_value = units.get_unit_symbol(unit_internal)
-            
-            # Set display unit to symbol if available, else internal
-            if symbol_value and symbol_value != unit_internal:
-                unit_display = symbol_value
-        
-        # Final symbol fallback
-        if symbol_value is None:
-            symbol_value = unit_internal if unit_internal else unit_raw
 
         return Quantity({
             "measure": measure,  # Always in unit_internal after normalization
@@ -972,7 +978,7 @@ incertidumbres = _Uncertainties()
 
 
 @functools.wraps(_Uncertainties.quantity)
-def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None, unit=None):
+def quantity(*args, symbol=None, normalize=True, nan_policy="drop", groups=None, unit=None):
     """
     Constructor unificado de magnitudes con incertidumbre.
 
@@ -987,7 +993,7 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="keep", groups=None,
     - symbol: str | None
     - normalize: bool (default True) - If True, converts units to SI base.
                                       If False, keeps original units unchanged.
-    - nan_policy: "keep" | "drop" | "raise" (default "keep")
+    - nan_policy: "keep" | "drop" | "raise" (default "drop")
                   Behavior when value contains NaN/inf:
                   keep = preserve data, 
                   drop = filter invalid entries (works with scalar or vector sigma),

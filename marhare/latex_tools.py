@@ -125,9 +125,17 @@ def _valor_pm_escalar(
         return f"$\\SI{{{v_str} \\pm {s_str}}}{{{unidad}}}$"
 
     if unidad:
-        return f"$({v_str} \\pm {s_str})\\,\\mathrm{{{unidad}}}$"
+        return f"${v_str} \\pm {s_str}\\,\\mathrm{{{unidad}}}$"
 
-    return f"$({v_str} \\pm {s_str})$"
+    return f"${v_str} \\pm {s_str}$"
+
+
+def _is_dimensionless_unit(unit: Optional[str]) -> bool:
+    """Return True when a unit should be treated as adimensional in display."""
+    if unit is None:
+        return True
+    text = str(unit).strip().lower()
+    return text in {"", "1", "dimensionless", "adimensional"}
 
 
 def tabla_latex(
@@ -352,9 +360,102 @@ def valor_pm(
             if isinstance(valor, Quantity):
                 unit = valor.unit  # Property returns display unit if set, else internal
                 symbol = valor.symbol or ""
+                is_quantity_obj = True
             else:
                 unit = valor.get("unit", None)
                 symbol = valor.get("symbol", "") or ""
+                is_quantity_obj = False
+            render_unit = None if _is_dimensionless_unit(unit) else unit
+            
+            # Check if this Quantity has groups
+            if is_quantity_obj and valor.has_groups():
+                if siunitx:
+                    raise ValueError(
+                        "valor_pm(): siunitx is not supported for magnitude tables with groups"
+                    )
+                # Build table with groups as columns
+                group_names = sorted(valor.groups)  # Sorted list of group names
+                
+                # First, check if each group is scalar or array
+                group_data = []  # List of (v_arr, v_raw, s_arr, s_raw) tuples
+                is_array_groups = False
+                
+                for group_name in group_names:
+                    group_q = valor[group_name]
+                    v_g, s_g = value_quantity(group_q)
+                    v_g_arr = np.asarray(v_g)
+                    s_g_arr = np.asarray(s_g)
+                    group_data.append((v_g_arr, v_g, s_g_arr, s_g))
+                    if v_g_arr.ndim > 0 and v_g_arr.shape != ():
+                        is_array_groups = True
+                
+                if is_array_groups:
+                    # Multiple rows per group: rows are array indices, columns are groups
+                    # Get max length
+                    max_len = max(
+                        np.asarray(v_raw).size 
+                        for _, v_raw, _, _ in group_data
+                    )
+                    
+                    headers = group_names
+                    filas = []
+                    for idx in range(max_len):
+                        fila = []
+                        for v_arr, _, s_arr, _ in group_data:
+                            if v_arr.ndim > 0 and v_arr.shape != () and idx < v_arr.size:
+                                formatted = _valor_pm_escalar(
+                                    float(v_arr.flat[idx]),
+                                    float(s_arr.flat[idx]),
+                                    unidad=render_unit,
+                                    cifras=cifras,
+                                    siunitx=False,
+                                )
+                            else:
+                                formatted = ""
+                            fila.append(formatted)
+                        filas.append(fila)
+                    
+                    return tabla_latex(
+                        filas,
+                        headers=headers,
+                        row_headers=None,
+                        caption=caption,
+                        label=label,
+                        centrar=centrar,
+                        tamano=tamano,
+                        lineas=lineas,
+                        envolver=envolver,
+                        posicion=posicion,
+                    )
+                else:
+                    # Scalar per group: single row
+                    headers = group_names
+                    fila = []
+                    for group_name in group_names:
+                        group_q = valor[group_name]
+                        v_g, s_g = value_quantity(group_q)
+                        formatted = _valor_pm_escalar(
+                            float(np.asarray(v_g).item()),
+                            float(np.asarray(s_g).item()),
+                            unidad=render_unit,
+                            cifras=cifras,
+                            siunitx=False,
+                        )
+                        fila.append(formatted)
+                    
+                    return tabla_latex(
+                        [fila],
+                        headers=headers,
+                        row_headers=[symbol],
+                        caption=caption,
+                        label=label,
+                        centrar=centrar,
+                        tamano=tamano,
+                        lineas=lineas,
+                        envolver=envolver,
+                        posicion=posicion,
+                    )
+            
             v_arr = np.asarray(v)
             s_arr = np.asarray(s)
 
@@ -362,7 +463,7 @@ def valor_pm(
                 return valor_pm(
                     v,
                     s,
-                    unidad=unit,
+                    unidad=render_unit,
                     cifras=cifras,
                     siunitx=siunitx,
                 )
@@ -376,7 +477,8 @@ def valor_pm(
                     "valor_pm(): siunitx is not supported for magnitude tables"
                 )
 
-            header = f"{symbol} ({unit})" if unit else symbol
+            show_unit = render_unit
+            header = f"{symbol} ({show_unit})" if show_unit else symbol
             filas = [
                 [
                     _valor_pm_escalar(
@@ -450,7 +552,8 @@ def valor_pm(
             sigmas.append(s_arr)
             symbols.append(mag.get("symbol", "") or "")
             # Use unit (which contains SI if normalize=True, original if normalize=False)
-            units.append(mag.get("unit", None))
+            unit_value = mag.get("unit", None)
+            units.append(None if _is_dimensionless_unit(unit_value) else unit_value)
 
         if any_vector:
             # Vector magnitudes: build a data table with one column per quantity.
