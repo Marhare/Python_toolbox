@@ -15,7 +15,7 @@ pip install -e .
 
 Or directly from GitHub:
 ```bash
-pip install git+https://github.com/yourusername/Python_toolbox.git
+pip install git+https://github.com/Marhare/Python_toolbox.git
 ```
 
 ---
