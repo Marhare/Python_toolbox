@@ -690,18 +690,40 @@ class FitResult:
 
 def fit_quantity(model, xq, yq, *, degree=None, p0=None, variable="x"):
     """
-    Fit yq vs xq to a model and return a FitResult wrapper.
+    Fit ``yq`` versus ``xq`` and return a ``FitResult`` wrapper.
 
-    INPUT:
-        model: "linear" | "polynomial" | callable | sympy.Expr
-        xq: quantity dict for the independent variable
-        yq: quantity dict for the dependent variable
-        degree: int | None -> required if model is "polynomial"
-        p0: initial guess for parameters (optional)
-        variable: str -> independent variable name for symbolic models
+    Parameters
+    ----------
+    model : "linear" | "polynomial" | callable | sympy.Expr
+        Model to fit.
+        - ``"linear"`` uses ``y = a + b*x``.
+        - ``"polynomial"`` uses ``degree`` with weighted ``np.polyfit``.
+        - ``callable`` must follow ``f(x, *params)`` signature.
+          Example: ``def f(x, a, b): return a*x + b``.
+        - ``sympy.Expr`` is lambdified internally; parameters are inferred from
+          free symbols excluding the independent variable.
+    xq, yq : quantity-like
+        Independent and dependent quantities (value + uncertainty).
+    degree : int | None, optional
+        Required only when ``model == "polynomial"``.
+    p0 : sequence | None, optional
+        Initial parameter guess for non-linear callable or symbolic models.
+    variable : str, default "x"
+        Independent variable name for symbolic models.
 
-    OUTPUT:
-        FitResult with access to raw fit results and helpers.
+    Returns
+    -------
+    FitResult
+        Wrapper exposing:
+        - ``raw`` (fit dictionary)
+        - ``confidence_interval(level=...)``
+        - ``prediction(x0)``
+
+    Notes
+    -----
+    - Uncertainties are taken from ``yq`` and used as absolute sigma weights.
+    - Callables without fit parameters (signature ``f(x)``) are not suitable for
+      parameter estimation with this API.
     """
     x, sx = value_quantity(xq)
     y, sy = value_quantity(yq)

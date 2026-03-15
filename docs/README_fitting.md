@@ -83,6 +83,19 @@ print(fit.raw["expression"])  # Shows symbolic expression
 print(fit.raw["symbolic_parameters"])  # List of symbols [A, B]
 ```
 
+### 3b) Callable Model Fit (Python `def`)
+
+You can also define the model as a regular Python function with signature
+`f(x, *params)`. For example:
+
+```python
+def f(x, a, b):
+    return a*x + b
+
+fit = mh.fit_quantity(f, xq, yq, p0=[1.0, 0.0])
+print(fit.raw["parameters"])  # array [a, b]
+```
+
 ### 4) Prediction Uncertainty
 
 ```python

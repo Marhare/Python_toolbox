@@ -184,52 +184,43 @@ def _propagate(expr, values: dict, sigmas: dict, simplify=True):
 
 def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, group=None, **bindings):
     """
-    High-level uncertainty propagation for a derived quantity.
+    High-level symbolic uncertainty propagation for derived quantities.
 
     Parameters
     ----------
-    target : dict/Quantity or str
-        Target quantity (with "symbol" key)
-    magnitudes : dict or iterable, optional
-        Dictionary or iterable of magnitude dicts/Quantity objects
+    target : dict | Quantity | str
+        Target quantity to be updated. If a string is provided, it is interpreted
+        as the target symbol key in the registry.
+    magnitudes : dict | iterable, optional
+        Source registry of quantities. Accepted forms:
+        - ``{"symbol": quantity_like, ...}``
+        - iterable of quantity-like objects with ``symbol``.
     simplify : bool, default True
-        Whether to simplify symbolic expressions
+        Whether to simplify symbolic expressions before evaluation.
     compact : bool, default False
-        If True, converts result units to compact SI prefixes (e.g., 5000 mV → 5 V).
-        NOTE: This affects ONLY unit_display, NOT unit_internal (physical identity).
-        If False, keeps units from quantity definition.
-    group : str or None, default None
-        Group mode selection:
-        - None (default): Global mode - use concatenated values from all groups
-        - "group_name": Specific group mode - use only data from specified group
-        - Auto-inheritance: If all quantities have identical groups and group=None,
-          result inherits the group structure (evaluated per group)
-    **bindings : dict
-        Optional direct symbol bindings. Each keyword must be a symbol name present
-        in expressions and each value must be a quantity dict/Quantity object.
-        These bindings take priority over entries from magnitudes.
+        If True, computes compact display units for the propagated result.
+        This modifies display representation only.
+    group : str | None, default None
+        Group propagation mode:
+        - ``None``: global propagation using concatenated/group-global data.
+        - ``"group_name"``: propagate only one specific group.
+        - auto-inherit: if grouped inputs share the same group set, result can
+          be propagated per-group and keep that structure.
+    **bindings
+        Direct symbol bindings (keyword name is symbol). These override entries
+        from ``magnitudes`` when keys overlap.
 
     Returns
     -------
     Quantity
-        Updated quantity with added:
-        - result : tuple (value, sigma) with propagated numeric values
-        - expr_latex : str or None, LaTeX formula (None for base quantities)
-        - sigma_latex : str or None, LaTeX uncertainty formula (None for base)
-    
+        New immutable quantity with propagated result values and uncertainty,
+        plus optional ``expr_latex`` and ``sigma_latex``.
+
     Notes
     -----
-    When compact=True, automatically applies compact SI prefixes to result units for
-    display purposes only. The physical unit (unit_internal) remains unchanged.
-    
-    Group modes:
-    1. Global (group=None, default): Use concatenated global views
-    2. Specific group (group="red"): Use only that group's data
-    3. Auto-inheritance: If all quantities have same groups, result inherits structure
-    
-    Design guarantee:
-    - unit_internal NEVER changes (preserves physical identity)
-    - compact affects ONLY unit_display (representation)
+    - ``unit_internal`` is preserved as physical identity.
+    - ``compact=True`` affects only ``unit_display``.
+    - Circular dependencies between symbolic quantities are detected and reported.
     """
     # 1) Normalize magnitudes and apply direct bindings (kwargs have priority)
     if magnitudes is None:

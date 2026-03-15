@@ -1049,83 +1049,70 @@ def plot(
     **kwargs
 ) -> Union[Scene, Tuple[plt.Figure, Union[plt.Axes, np.ndarray]]]:
     """
-    Core engine and fast Scene constructor.
-    
-    INPUT:
-        *objetos: Series, SeriesWithError, Histogram, Fit, Band, Panel, Scene
-              or quantity dicts for x/y (constructor mode)
-        layout: str | None
-            None -> auto (1→1x1, 2→1x2, etc.)
-            "2x3" -> force specific layout
-            Ignored if Scene is passed (uses scene.layout)
-        dims: str -> "2D" (default) or "3D"
-            Ignored if Scene is passed (uses scene.dims)
-        show: bool -> if True, calls plt.show() (default: True)
-        figsize: tuple | None -> figure size; if None uses PLOT_DEFAULTS
-            Ignored if Scene is passed (uses scene.figsize)
-        figure: int | None -> figure id for grouping calls (same id reuses figure)
-            If None, each call creates a new figure (default)
-        subplot: int | None -> subplot index (1..N) inside the grouped figure
-            Requires figure; if omitted defaults to 1
-        xlabel, ylabel, title: str | None -> global labels (if applicable)
-            Ignored if Scene is passed (uses scene.xlabel, etc.)
-        y_fit: array_like | Fit | quantity dict | None -> fitted curve (constructor mode)
-        yerr: array_like | None -> symmetric y errors (constructor mode)
-        sy: array_like | None -> alias for yerr (SeriesWithError API compatibility)
-        sx: array_like | None -> symmetric x errors (constructor mode)
-        bands: Band | (y_low, y_high) | dict | None -> band (constructor mode)
-        hist: array_like | (data, bins) | Histogram | quantity dict | None -> histogram (constructor mode)
-        ax: matplotlib.axes.Axes | None -> draw into a provided axis (single panel)
-            Ignored if figure/subplot is provided
-        as_line: bool -> if True, draw array data as line instead of scatter (default: False)
-            Function objects are ALWAYS drawn as lines (evaluated on 400-point dense grid)
-        mode: str | None -> visualization mode: None (auto), "scatter", "line", "heatmap", "surface"
-            "heatmap": plot(Z, mode="heatmap") - creates Heatmap from 2D array
-            "surface": plot(x, y, Z, mode="surface") - creates Surface from 1D x, y and 2D Z
-        colors: str | dict | list | None -> color mapping (default: None, uses theme)
-            Without groups:
-              - str: apply single color to all points
-              - list/array: apply colors to individual points
-            With groups (auto-detected):
-              - str: apply single color to all group series
-              - dict: {"group_name": "color", ...} map group names to colors
-              - list/array: ERROR (ambiguous)
-        **kwargs: style options (dpi, grid_alpha, lw, etc.)
-            ALWAYS applied (even with Scene)
-    
-    OUTPUT:
-        (fig, ax) si n_objetos == 1
-        (fig, axs) si n_objetos > 1
-        
-        NOTA: Siempre retorna (fig, ax) de forma consistente, incluso en constructor_mode.
-        Si necesitas reutilizar la estructura de gráfica, crea explícitamente una Scene.
-    
-    EXAMPLES:
-        # Fast constructor - siempre retorna (fig, ax)
-        fig, ax = mh.plot(x, y)  # scatter plot (default for arrays)
-        fig, ax = mh.plot(x, y, as_line=True)  # draw as line
-        fig, ax = mh.plot(x, f)  # f is Function: draws as smooth curve (400 points)
-        fig, ax = mh.plot(Z, mode="heatmap")  # heatmap from 2D array
-        fig, ax = mh.plot(x, y, Z, mode="surface")  # 3D surface
-        fig, ax = mh.plot(x, y, show=False)  # no mostrar aún, guardar figura
-        
-        # Con Scene (manejo de estructura)
-        scene = Scene(Series(x, y), Histogram(data), layout="1x2")
-        fig, axes = mh.plot(scene)  # Scene structure
-        fig, axes = mh.plot(scene, dpi=300, show=False)  # estilo diferente, no mostrar
-    
-    NOTES ABOUT Scene:
-        - Scene puede ser pasada como argumento: plot(scene)
-        - Scene define ESTRUCTURA (objetos, layout, dims, etiquetas)
-        - kwargs definen ESTÉTICA (dpi, colores, líneas, etc.)
-        - Si show=False: la figura se crea y se retorna (fig, ax) para manipulación manual
-        - Si show=True (default): plt.show() se ejecuta al final
-    
-    PURPOSE:
-        The user only declares what they have; this engine:
-        - Builds a Scene when called with raw data
-        - Plots existing Scene/Panel/semantic objects
-        - Applies consistent styling
+    Central plotting engine and fast Scene constructor.
+
+    Parameters
+    ----------
+    *objetos
+        Semantic plotting objects (`Series`, `SeriesWithError`, `Fit`, `Band`,
+        `Histogram`, `Panel`, `Scene`) or raw data/quantities in constructor mode.
+    layout : str | None
+        Grid layout for multi-panel scenes (for example, ``"2x3"``). If None,
+        layout is inferred from panel count.
+    dims : {"2D", "3D"}, default "2D"
+        Plot dimensionality.
+    show : bool, default True
+        If True, calls ``plt.show()`` before returning.
+    figsize : tuple[float, float] | None
+        Figure size. If None, uses theme defaults.
+    figure : int | None
+        Grouped figure id. Reusing the same id lets multiple calls draw into
+        subplots of the same figure.
+    subplot : int | None
+        Subplot index inside a grouped figure (requires ``figure``).
+    xlabel, ylabel, title : str | None
+        Axis labels and title.
+    y_fit : array_like | Fit | quantity-like | callable | None
+        Optional fitted curve. In constructor mode, arrays with same length as x
+        are drawn directly; callables/models are sampled on a dense grid.
+    yerr, sy : array_like | None
+        Symmetric y-errors. ``sy`` is an alias of ``yerr``.
+    sx : array_like | None
+        Symmetric x-errors.
+    bands : Band | tuple | dict | None
+        Optional uncertainty band.
+    hist : array_like | tuple | Histogram | quantity-like | None
+        Optional histogram input (constructor mode).
+    ax : matplotlib.axes.Axes | None
+        Existing axis to draw into (single panel only).
+    as_line : bool, default False
+        If True, raw x-y data are drawn as a line instead of scatter.
+    mode : {None, "scatter", "line", "heatmap", "surface"}, default None
+        Optional rendering mode override.
+    colors : str | dict | None
+        Color mapping.
+        Without groups:
+        - ``str``: one color for the whole series.
+        - ``dict``: not allowed.
+        - list/array: not supported in constructor mode.
+        With auto-detected quantity groups:
+        - ``str``: same color for all groups.
+        - ``dict``: ``{"group_name": "color", ...}`` per-group colors.
+        - list/array: rejected as ambiguous.
+    **kwargs
+        Style overrides (dpi, grid, line widths, legend options, etc.).
+
+    Returns
+    -------
+    tuple
+        ``(fig, ax)`` for single-panel plots, or ``(fig, axs)`` for multi-panel plots.
+
+    Notes
+    -----
+    - Quantity axis labels are auto-generated from symbol/unit metadata.
+    - If grouped quantities are passed, one series per group is drawn in the same
+      axis and legend entries use group names.
+    - For grouped quantities, x and y must expose the same group keys.
     """
     # Handle sy/sx aliases for backwards compatibility with SeriesWithError API
     if sy is not None and yerr is None:
