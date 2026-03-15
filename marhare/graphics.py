@@ -909,12 +909,44 @@ def _build_dense_fit(x: np.ndarray, y_fit: Any, n_points: int = 400) -> Fit:
 
     raise ValueError("y_fit must be an evaluated array or a model/fit result")
 
+
+def _is_dimensionless_unit(unit: Optional[str]) -> bool:
+    """Return True when a unit should be hidden as adimensional in labels."""
+    if unit is None:
+        return True
+    text = str(unit).strip().lower()
+    return text in {"", "1", "dimensionless", "adimensional", "unitless"}
+
+
+def _format_symbol_for_plot(symbol: Optional[str]) -> Optional[str]:
+    """Format quantity symbols so LaTeX-like inputs render in Matplotlib mathtext."""
+    if symbol is None:
+        return None
+    sym = str(symbol).strip()
+    if not sym:
+        return None
+    if sym.startswith("$") and sym.endswith("$"):
+        return sym
+    if "\\" in sym or "^" in sym or "_" in sym or "{" in sym or "}" in sym:
+        return f"${sym}$"
+    return sym
+
+
 def _quantity_axis_label(q: dict) -> Optional[str]:
-    """Generate axis label from quantity (dict or Quantity object)."""
+    """
+    Generate axis label from quantity (dict or Quantity object).
+
+    Uses symbol + display/internal unit, suppresses adimensional units ("1"),
+    and wraps LaTeX-like symbols in Matplotlib mathtext delimiters.
+    """
     try:
         from .uncertainties import Quantity
     except ImportError:
         Quantity = None
+    try:
+        from . import units as _units
+    except ImportError:
+        _units = None
     
     # Use properties for Quantity objects, dict access for dicts
     if Quantity is not None and isinstance(q, Quantity):
@@ -922,13 +954,28 @@ def _quantity_axis_label(q: dict) -> Optional[str]:
         unit = q.unit  # Property returns display unit if set, else internal
     else:
         symbol = q.get("symbol")
-        unit = q.get("unit")
+        unit_display = q.get("unit_display", None)
+        unit_internal = q.get("unit_internal", None)
+        unit = unit_display if unit_display not in (None, "") else unit_internal
+        if unit in (None, ""):
+            unit = q.get("unit")
+
+    symbol = _format_symbol_for_plot(symbol)
+    if _is_dimensionless_unit(unit):
+        return symbol
+
+    unit_text = str(unit)
+    if _units is not None:
+        unit_symbol = _units.get_unit_symbol(unit_text)
+        if unit_symbol:
+            unit_text = unit_symbol
+
     if symbol and unit:
-        return f"{symbol} [{unit}]"
+        return f"{symbol} [{unit_text}]"
     if symbol:
-        return str(symbol)
+        return symbol
     if unit:
-        return str(unit)
+        return unit_text
     return None
 
 
@@ -1160,7 +1207,7 @@ def plot(
                 if _is_quantity_like(y):
                     y_value, y_sigma = value_quantity(y)
                     ylabel = ylabel or _quantity_axis_label(y)
-                    series_label = y.get("symbol") or None
+                    series_label = _format_symbol_for_plot(y.get("symbol")) or None
                     y = y_value
                     if yerr is None:
                         yerr = y_sigma
@@ -1211,7 +1258,7 @@ def plot(
             if _is_quantity_like(y):
                 y_value, y_sigma = value_quantity(y)
                 ylabel = ylabel or _quantity_axis_label(y)
-                series_label = y.get("symbol") or None
+                series_label = _format_symbol_for_plot(y.get("symbol")) or None
                 y = y_value
                 if yerr is None:
                     yerr = y_sigma

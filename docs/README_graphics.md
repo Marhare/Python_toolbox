@@ -47,6 +47,9 @@ time = mh.quantity([2.08, 2.10, 2.12], [0.1, 0.1, 0.1], "s", symbol="t")
 # Plot directly – auto-labels with symbol and unit
 mh.plot(length, time, title="Measurement")
 # X-axis: "L [m]", Y-axis: "t [s]"
+
+# Si normalize=True en quantity(), la etiqueta usa la unidad ya normalizada
+# (por ejemplo, "degree" -> "radian" internamente).
 ```
 
 You can also plot single scalar measurements (automatically wrapped as single-point series):
@@ -170,7 +173,11 @@ y_qty = mh.quantity(y_vals, y_unc, "s", symbol="t")
 
 # X-axis shows "x [cm]", Y-axis shows "t [s]"
 mh.plot(x_qty, y_qty, title="Time vs Distance")
+
+# Si symbol usa estilo LaTeX (por ejemplo r"\lambda"), se renderiza como mathtext.
 ```
+
+Dimensionless units (`"1"`, `"dimensionless"`, `"adimensional"`) are shown without `[1]` in axis labels.
 
 ### Functions with Quantities
 
@@ -256,6 +263,7 @@ mh.plot(wavelength, n, title="Refractive Index vs Wavelength")
 - All groups are drawn on the **same subplot** with automatic colors from the theme
 - Legend shows group names ("red_light", "blue_light")
 - Axes are auto-labeled from quantity symbols and units: `"λ [nm]"` and `"n [1]"`
+- Axes are auto-labeled from quantity symbols and units: `"λ [nm]"` and `"n"` (adimensional without `[1]`)
 
 **With custom colors:**
 

@@ -76,14 +76,36 @@ class UnitConverter:
         
         if not unit_str or unit_str.strip() == "":
             return None
+
+        unit_str_clean = unit_str.strip()
+        if unit_str_clean.lower() in {"1", "dimensionless", "adimensional", "unitless"}:
+            return self.ureg.dimensionless
         
         # Check cache
-        if unit_str in self._unit_cache:
-            return self._unit_cache[unit_str]
+        if unit_str_clean in self._unit_cache:
+            return self._unit_cache[unit_str_clean]
         
         try:
+            normalized = unit_str_clean
+            normalized_lc = normalized.lower()
+
+            # Common angle aliases and plural forms.
+            angle_aliases = {
+                "degree": "degree",
+                "degrees": "degree",
+                "deg": "degree",
+                "radian": "radian",
+                "radians": "radian",
+                "rad": "radian",
+                "gradian": "gradian",
+                "gradians": "gradian",
+                "gon": "gradian",
+            }
+            if normalized_lc in angle_aliases:
+                normalized = angle_aliases[normalized_lc]
+
             # Preprocess common LaTeX patterns
-            processed = unit_str.replace('²', '**2').replace('³', '**3')
+            processed = normalized.replace('²', '**2').replace('³', '**3')
             processed = processed.replace('·', '*')
             processed = processed.replace('µ', 'u')  # micro prefix
             processed = processed.replace('Ω', 'ohm')
@@ -93,7 +115,7 @@ class UnitConverter:
             unit = quantity.units
             
             # Cache for future use
-            self._unit_cache[unit_str] = unit
+            self._unit_cache[unit_str_clean] = unit
             return unit
             
         except (pint.UndefinedUnitError, pint.DimensionalityError, AttributeError) as e:

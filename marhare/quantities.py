@@ -666,6 +666,9 @@ class _Uncertainties:
         - symbol: str | None
         - normalize: bool (default True) - If True, converts units to SI base.
                                           If False, keeps original units unchanged.
+                                          With normalize=True, Quantity.unit reflects
+                                          the normalized internal unit unless an
+                                          explicit display unit is later set.
         - nan_policy: "keep" | "drop" | "raise" (default "drop")
         - groups: dict | None - Experimental groups structure. Each group can be:
                   Format 1 (tuple): {"red": (value, sigma), "blue": (value, sigma), ...}
@@ -993,6 +996,9 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="drop", groups=None,
     - symbol: str | None
     - normalize: bool (default True) - If True, converts units to SI base.
                                       If False, keeps original units unchanged.
+                                      Con normalize=True, la unidad visible en
+                                      Quantity.unit coincide con la unidad interna
+                                      (salvo que se establezca una display unit).
     - nan_policy: "keep" | "drop" | "raise" (default "drop")
                   Behavior when value contains NaN/inf:
                   keep = preserve data, 
@@ -1004,6 +1010,10 @@ def quantity(*args, symbol=None, normalize=True, nan_policy="drop", groups=None,
               Si se usa, la magnitud sigue siendo única (mismo `symbol`) y
               se habilita acceso global + por grupo.
     - unit: str | None - Used with groups parameter
+
+    Nota de graficado:
+    - En plot(), símbolos tipo "\\lambda" se renderizan como mathtext.
+    - Unidades adimensionales ("1", "dimensionless") no se muestran como "[1]".
 
     Nota importante:
     - Para magnitud con grupos, usa `quantity(groups={...}, unit=..., symbol=...)`.

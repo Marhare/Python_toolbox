@@ -203,6 +203,8 @@ For derived quantities without dimension, use unit `"1"` (or `"dimensionless"`):
 n = mh.quantity("delta_m * alpha / wl", "1", symbol="n")
 ```
 
+When plotting a dimensionless quantity with `mh.plot(...)`, axis labels omit `[1]` and show only the symbol.
+
 ---
 
 ## Automatic Unit Conversion
@@ -258,6 +260,10 @@ When you write `quantity(5000, 100, "mV", symbol="V")` with `normalize=True`:
 ```
 
 **Step 3: Convert to SI SYMBOL**
+
+The same rule applies to angular units. For example, `"degree"`/`"degrees"` normalize to the internal base angle unit, and plots use that normalized unit.
+
+If you use LaTeX-like symbols (e.g. `symbol=r"\lambda"`), `mh.plot(...)` renders them as mathtext in axis/legend labels.
 ```python
 {
     'unit': 'V',              # SI SYMBOL
