@@ -373,8 +373,8 @@ def valor_pm(
                     raise ValueError(
                         "valor_pm(): siunitx is not supported for magnitude tables with groups"
                     )
-                # Build table with groups as columns
-                group_names = sorted(valor.groups)  # Sorted list of group names
+                # Build table with groups as columns preserving user insertion order
+                group_names = list(valor.groups)
                 
                 # First, check if each group is scalar or array
                 group_data = []  # List of (v_arr, v_raw, s_arr, s_raw) tuples

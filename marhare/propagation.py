@@ -286,6 +286,7 @@ def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, gr
     quantities_with_groups = []
     quantities_without_groups = []
     all_group_names = []
+    all_group_orders = []
     
     for sym, q in registry.items():
         if sym == name:
@@ -293,10 +294,14 @@ def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, gr
             continue
         if isinstance(q, Quantity) and q.has_groups():
             quantities_with_groups.append(sym)
-            all_group_names.append(set(q.groups))
+            group_order = list(q.groups)
+            all_group_orders.append(group_order)
+            all_group_names.append(set(group_order))
         elif isinstance(q, dict) and "_groups" in q and q["_groups"]:
             quantities_with_groups.append(sym)
-            all_group_names.append(set(q["_groups"].keys()))
+            group_order = list(q["_groups"].keys())
+            all_group_orders.append(group_order)
+            all_group_names.append(set(group_order))
         else:
             quantities_without_groups.append(sym)
     
@@ -323,7 +328,8 @@ def propagate_quantity(target, magnitudes=None, simplify=True, compact=False, gr
             if all(g == first_groups for g in all_group_names):
                 # All grouped quantities have the same groups - auto-inherit
                 inherit_groups = True
-                target_groups = sorted(first_groups)
+                # Preserve user insertion order from the first grouped quantity
+                target_groups = all_group_orders[0]
     
     # If group is specified or we're inheriting groups, we need to process per-group
     process_groups = group is not None or inherit_groups

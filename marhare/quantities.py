@@ -246,7 +246,7 @@ class Quantity:
         all_values = []
         all_sigmas = []
         
-        for group_name in sorted(self._groups.keys()):
+        for group_name in self._groups.keys():
             group_data = self._groups[group_name]
             all_values.append(np.asarray(group_data["value"]))
             all_sigmas.append(np.asarray(group_data["sigma"]))
