@@ -1,5 +1,7 @@
 # LaTeX Formatting Layer
 
+Navigation: [Documentation Index](INDEX.md) | [Main README](../README.md)
+
 This guide documents marhare.latex, the presentation layer.
 
 ## Recommended Imports

@@ -1,5 +1,7 @@
 # graphics.py – Scientific Visualization
 
+Navigation: [Documentation Index](INDEX.md) | [Main README](../README.md)
+
 ## Purpose
 
 High-level scientific visualization based on the universal `plot()` function. Express **what you want to visualize** and the engine decides **how to render it**. Supports measurements with uncertainty, symbolic functions, 2D/3D plots, heatmaps, surfaces, and complex multi-panel layouts.

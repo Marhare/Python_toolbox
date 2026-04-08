@@ -1,5 +1,7 @@
 # ajustes.py - Curve Fitting with Quantity Objects
 
+Navigation: [Documentation Index](INDEX.md) | [Main README](../README.md)
+
 ## Purpose
 Weighted least-squares (WLS) curve fitting designed to work naturally with `quantity` objects. The key idea: pass measured `x` and `y` as quantities (values + uncertainties), and use `fit_quantity()` to handle extraction, weighting, and metadata.
 

@@ -215,13 +215,18 @@ except ValueError as e:
 
 ## Documentation
 
-- docs/INDEX.md: full documentation index
-- docs/MIGRATION_GUIDE.md: V1 to V2 migration and compatibility map
-- docs/README_uncertainties.md: quantities module guide
-- docs/README_latex_tools.md: latex layer guide
-- docs/README_statistics.md: statistics guide
-- docs/README_fitting.md: fitting guide
-- docs/UNIT_CONVERSION_IMPLEMENTATION.md: unit conversion details
+- [Documentation Index](docs/INDEX.md): full documentation index
+- [Migration Guide](docs/MIGRATION_GUIDE.md): V1 to V2 migration and compatibility map
+- [Quantities Guide](docs/README_uncertainties.md): quantities module guide
+- [LaTeX Tools Guide](docs/README_latex_tools.md): latex layer guide
+- [Statistics Guide](docs/README_statistics.md): statistics guide
+- [Fitting Guide](docs/README_fitting.md): fitting guide
+- [Functions Guide](docs/README_functions.md): math and symbolic tools guide
+- [Graphics Guide](docs/README_graphics.md): plotting and visualization guide
+- [FFT Tools Guide](docs/README_fft_tools.md): Fourier transform helper guide
+- [Monte Carlo Guide](docs/README_monte_carlo.md): simulation workflows
+- [Animations Guide](docs/README_animations.md): animation helpers
+- [Unit Conversion Note](docs/UNIT_CONVERSION_IMPLEMENTATION.md): unit conversion details
 
 ## Backward Compatibility
 

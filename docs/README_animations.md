@@ -1,5 +1,7 @@
 # animations.py
 
+Navigation: [Documentation Index](INDEX.md) | [Main README](../README.md)
+
 ## Purpose
 Declarative time engine to animate objects defined in `graphics.py`. It does not compute data; it only updates artists from time‑evolution functions.
 

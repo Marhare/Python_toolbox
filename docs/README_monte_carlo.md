@@ -1,5 +1,7 @@
 # montecarlo.py
 
+Navigation: [Documentation Index](INDEX.md) | [Main README](../README.md)
+
 ## Purpose
 Monte Carlo utilities for integration and uncertainty propagation.
 

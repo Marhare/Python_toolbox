@@ -1,5 +1,7 @@
 # functions.py – Symbolic Functions
 
+Navigation: [Documentation Index](INDEX.md) | [Main README](../README.md)
+
 ## Purpose
 
 Provide a lightweight symbolic `Function` object built on SymPy with lazy numeric compilation, operator overloading, and simple calculus helpers. The goal is to make symbolic expressions easy to combine, evaluate, and pass into other modules (graphics, latex, etc.).

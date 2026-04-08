@@ -1,5 +1,7 @@
 # statistics.py - Statistics with Quantity Support
 
+Navigation: [Documentation Index](INDEX.md) | [Main README](../README.md)
+
 ## Purpose
 Descriptive statistics, confidence intervals, and hypothesis tests, designed to work naturally with `quantity` objects. The workflow is:
 

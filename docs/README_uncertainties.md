@@ -1,5 +1,7 @@
 # Quantities and Uncertainty Propagation
 
+Navigation: [Documentation Index](INDEX.md) | [Main README](../README.md)
+
 This guide documents the computation layer exposed by marhare.quantities.
 
 ## Recommended Imports

@@ -1,5 +1,7 @@
 # fft_tools.py
 
+Navigation: [Documentation Index](INDEX.md) | [Main README](../README.md)
+
 ## Purpose
 Simple tools for 1D FFT with `scipy.fft`.
 
