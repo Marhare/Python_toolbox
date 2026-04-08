@@ -1,3 +1,12 @@
+"""Symbolic function wrapper and calculus helpers.
+
+This module provides ``Function``, a thin layer over SymPy expressions with:
+
+- callable numeric evaluation via ``lambdify``,
+- operator overloading between functions/scalars,
+- basic calculus helpers (derivatives/integrals) exposed by module aliases.
+"""
+
 import sympy as sp
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations
 

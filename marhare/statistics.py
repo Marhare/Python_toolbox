@@ -1,107 +1,14 @@
-"""
-QUICK SUMMARY (Public functions)
---------------------------------
-mean
-    INPUT:
-        x: array_like (n,) -> numeric data (list/np.ndarray)
-    OUTPUT:
-        float -> arithmetic mean
-    ERRORS:
-        ValueError -> empty array
+"""Descriptive and inferential statistics helpers.
 
-variance
-    INPUT:
-        x: array_like (n,) -> numeric data
-        ddof: int -> degrees of freedom
-    OUTPUT:
-        float -> sample variance
-    ERRORS:
-        ValueError -> empty array, n <= ddof
+The public singleton ``statistics`` exposes methods for:
 
-standard_deviation
-    INPUT:
-        x: array_like (n,) -> numeric data
-        ddof: int -> degrees of freedom
-    OUTPUT:
-        float -> sample standard deviation
-    ERRORS:
-        ValueError -> empty array, n <= ddof
+- descriptive stats (mean, variance, standard deviation, standard error),
+- weighted estimators (from explicit weights or sigmas),
+- confidence intervals and hypothesis tests,
+- Kolmogorov-Smirnov goodness-of-fit tests.
 
-standard_error
-    INPUT:
-        x: array_like (n,) -> numeric data
-    OUTPUT:
-        float -> standard error of the mean
-    ERRORS:
-        ValueError -> empty array
-
-weighted_mean
-    INPUT:
-        x: array_like (n,) -> numeric data
-        w: array_like (n,) | None -> positive weights
-        sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
-    OUTPUT:
-        float -> weighted mean
-    ERRORS:
-        ValueError -> empty array, mismatched lengths, non‑finite values
-
-weighted_standard_error
-    INPUT:
-        x: array_like (n,) -> numeric data (not used, only for validation)
-        w: array_like (n,) | None -> positive weights
-        sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
-    OUTPUT:
-        float -> standard error of weighted mean: sqrt(1/Σw)
-    ERRORS:
-        ValueError -> empty array, mismatched lengths, non‑finite values
-
-weighted_variance
-    INPUT:
-        x: array_like (n,) -> numeric data
-        w: array_like (n,) | None -> positive weights
-        sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
-        ddof: int -> degrees of freedom (only tipo="frecuentista")
-        tipo: str -> "frecuentista" | "mle"
-    OUTPUT:
-        float -> weighted variance
-    ERRORS:
-        ValueError -> empty array, n_eff <= ddof, unsupported tipo, invalid weights
-
-confidence_interval
-    INPUT:
-        x: array_like (n,) -> numeric data
-        nivel: float -> confidence level (0,1)
-        distribucion: str -> "normal" | "poisson" | "binomial"
-        sigma: float | None -> known σ (normal only)
-    OUTPUT:
-        dict -> lower_bound, upper_bound, level, method, estimated_parameter, n
-    NOTES:
-        includes degrees_of_freedom if applicable
-    ERRORS:
-        ValueError -> invalid assumptions, incompatible data
-
-mean_test
-    INPUT:
-        x: array_like (n,) -> numeric data
-        mu0: float -> value under H0
-        alternativa: str -> "dos_colas" | "mayor" | "menor"
-        distribucion: str -> "normal" | "poisson" | "binomial"
-        sigma: float | None -> known σ (normal only)
-    OUTPUT:
-        dict -> estadistico, p_valor, metodo, parametro_nulo, parametro_estimado, n
-    NOTES:
-        includes grados_libertad if applicable
-    ERRORS:
-        ValueError -> invalid assumptions, incompatible data
-
-ks_test
-    INPUT:
-        x: array_like (n,) -> numeric data
-        distribucion: str -> "normal" | "uniforme"
-    OUTPUT:
-        dict -> estadistico (float), p_valor (float)
-    ERRORS:
-        ValueError -> n < 2, unsupported distribution
+All methods operate on numeric array-like inputs and return plain Python values
+or dictionaries suitable for reporting.
 """
 
 import numpy as np
@@ -304,15 +211,15 @@ class _Statistics:
     @staticmethod
     def weighted_mean(
         x: Union[list, np.ndarray],
-        w: Union[list, np.ndarray, None] = None,
-        sigma: Union[list, np.ndarray, None] = None
+        sigma: Union[list, np.ndarray, None] = None,
+        w: Union[list, np.ndarray, None] = None
     ) -> float:
         """
         Compute the weighted mean: μ_w = Σ(w_i·x_i) / Σ(w_i)
         INPUT:
             x: array_like (n,) -> numeric data
-            w: array_like (n,) | None -> positive weights
             sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
+            w: array_like (n,) | None -> positive weights
         OUTPUT:
             float -> weighted mean
         ERRORS:
@@ -325,11 +232,11 @@ class _Statistics:
         ----------
         x : array_like
             Data sample.
-        w : array_like, optional
-            Weights for each data point. Must be positive and finite.
         sigma : array_like, optional
             Uncertainties for each data point. Converted to weights w = 1/σ².
             w and sigma cannot be specified simultaneously.
+        w : array_like, optional
+            Weights for each data point. Must be positive and finite.
         
         Returns
         -------
@@ -347,9 +254,9 @@ class _Statistics:
         >>> x = [1.0, 2.0, 3.0]
         >>> statistics.weighted_mean(x)  # Simple mean
         2.0
-        >>> statistics.weighted_mean(x, w=[1, 2, 1])  # Weighted mean
+        >>> statistics.weighted_mean(x, None, [1, 2, 1])  # Weighted mean
         2.0
-        >>> statistics.weighted_mean(x, sigma=[0.1, 0.2, 0.1])  # Uncertainty weights
+        >>> statistics.weighted_mean(x, [0.1, 0.2, 0.1])  # Uncertainty weights (sigma positional)
         2.0
         """
         x = np.asarray(x, dtype=float)
@@ -367,15 +274,15 @@ class _Statistics:
     @staticmethod
     def weighted_standard_error(
         x: Union[list, np.ndarray],
-        w: Union[list, np.ndarray, None] = None,
-        sigma: Union[list, np.ndarray, None] = None
+        sigma: Union[list, np.ndarray, None] = None,
+        w: Union[list, np.ndarray, None] = None
     ) -> float:
         """
         Compute the standard error of the weighted mean: σ_w = sqrt(1/Σw_i).
         INPUT:
             x: array_like (n,) -> numeric data (used only for validation)
-            w: array_like (n,) | None -> positive weights
             sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
+            w: array_like (n,) | None -> positive weights
         OUTPUT:
             float -> standard error of weighted mean
         ERRORS:
@@ -391,11 +298,11 @@ class _Statistics:
         ----------
         x : array_like
             Data sample (used for validation of length).
-        w : array_like, optional
-            Weights for each data point. Must be positive and finite.
         sigma : array_like, optional
             Uncertainties for each data point. Converted to weights w = 1/σ².
             w and sigma cannot be specified simultaneously.
+        w : array_like, optional
+            Weights for each data point. Must be positive and finite.
         
         Returns
         -------
@@ -412,7 +319,7 @@ class _Statistics:
         --------
         >>> x = [9.78, 9.81, 9.79, 9.82, 9.80]
         >>> s = [0.04, 0.04, 0.05, 0.04, 0.04]
-        >>> statistics.weighted_standard_error(x, sigma=s)
+        >>> statistics.weighted_standard_error(x, s)  # sigma positional
         0.018...
         """
         x = np.asarray(x, dtype=float)
@@ -428,15 +335,14 @@ class _Statistics:
             return _Statistics.standard_error(x)
         
         w = _Statistics._compute_weights(x, w, sigma)
-        
         # Standard error of weighted mean: sqrt(1/Σw)
         return float(np.sqrt(1.0 / np.sum(w)))
 
     @staticmethod
     def weighted_variance(
         x: Union[list, np.ndarray],
-        w: Union[list, np.ndarray, None] = None,
         sigma: Union[list, np.ndarray, None] = None,
+        w: Union[list, np.ndarray, None] = None,
         ddof: int = 1,
         tipo: str = "frecuentista"
     ) -> float:
@@ -444,8 +350,8 @@ class _Statistics:
         Compute the weighted variance of a sample.
         INPUT:
             x: array_like (n,) -> numeric data
-            w: array_like (n,) | None -> positive weights
             sigma: array_like (n,) | None -> positive uncertainties (w=1/sigma^2)
+            w: array_like (n,) | None -> positive weights
             ddof: int -> degrees of freedom (only tipo="frecuentista")
             tipo: str -> "frecuentista" | "mle"
         OUTPUT:
@@ -462,11 +368,11 @@ class _Statistics:
         ----------
         x : array_like
             Data sample.
-        w : array_like, optional
-            Weights for each data point. Must be positive and finite.
         sigma : array_like, optional
             Uncertainties for each data point. Converted to weights w = 1/σ².
             w and sigma cannot be specified simultaneously.
+        w : array_like, optional
+            Weights for each data point. Must be positive and finite.
         ddof : int, default 1
             Degrees of freedom for bias correction (only tipo="frecuentista").
             Typically 1 for sample variance, 0 for population.
@@ -499,7 +405,7 @@ class _Statistics:
         >>> x = [1.0, 2.0, 3.0]
         >>> statistics.weighted_variance(x)  # Simple variance (ddof=1)
         1.0
-        >>> statistics.weighted_variance(x, w=[1, 2, 1], tipo="mle")
+        >>> statistics.weighted_variance(x, None, [1, 2, 1], tipo="mle")  # weighted with MLE
         0.5
         """
         x = np.asarray(x, dtype=float)

@@ -123,17 +123,21 @@ print(F.expr)  # 3*(x-3)**2/2
 
 ### Graphics
 
-`marhare.plot()` accepts `Function` objects directly and evaluates them on a dense grid. This makes it easy to overlay symbolic curves with data.
+Use Matplotlib directly with `Function` evaluation.
 
 ```python
 import marhare as mh
-import numpy as np, vars=["x"])
+import numpy as np
+import matplotlib.pyplot as plt
 
-# Plot symbolic function over the x range
+# Evaluate symbolic function over the x range and plot
 x = np.linspace(0, 2*np.pi, 50)
 f = mh.Function("sin(x)")
+y = f(x)
 
-mh.plot(x, f, label="sin(x)")
+plt.plot(x, y, label="sin(x)")
+plt.legend()
+plt.show()
 ```
 
 ### LaTeX Tools
@@ -142,7 +146,7 @@ mh.plot(x, f, label="sin(x)")
 
 ```python
 from marhare import Function
-, vars=["x"]
+
 f = Function("x**2 + 2*x + 1")
 print(f.latex())  # x^{2} + 2 x + 1
 ```

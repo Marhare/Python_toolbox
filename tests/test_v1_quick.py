@@ -1,5 +1,9 @@
 """Quick test of v1.0 immutable uncertainties architecture."""
-from marhare.uncertainties import quantity, propagate_quantity, register
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from marhare.uncertainties import quantity, register, evaluate_quantity
 
 print("Testing v1.0 immutable architecture...")
 print("-" * 50)
@@ -14,7 +18,7 @@ print(f"  V = {V['measure'][0]} ± {V['measure'][1]} {V.unit}")
 print(f"  I = {I['measure'][0]} ± {I['measure'][1]} {I.unit}")
 
 registry = register(V, I, R)
-R_result = propagate_quantity(R, registry)
+R_result = evaluate_quantity(R, registry)
 
 print(f"  R = {R_result['result'][0]:.2f} ± {R_result['result'][1]:.2f} {R_result.unit}")
 print(f"  unit_raw: {R_result.unit_raw}")
@@ -33,7 +37,7 @@ except AttributeError as e:
 print("\n[3] Compact mode check")
 R2 = quantity("V/I", "ohm", symbol="R2")
 registry2 = register(V, I, R2)
-R2_result = propagate_quantity(R2, registry2, compact=True)
+R2_result = evaluate_quantity(R2, registry2, compact=True)
 print(f"  R2 (compact) = {R2_result['result'][0]:.2f} ± {R2_result['result'][1]:.2f} {R2_result.unit}")
 print(f"  unit_internal: {R2_result.unit_internal}")
 print(f"  unit_display: {R2_result._unit_display}")

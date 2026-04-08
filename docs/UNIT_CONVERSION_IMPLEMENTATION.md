@@ -142,9 +142,9 @@ x = mh.quantity(10.0, 0.5, "cm", symbol="x", normalize=False)
 
 1. **Mixed Units Work Automatically**
    ```python
-   V = mh.quantity(5000, 100, "mV")   # millivolts
-   I = mh.quantity(2000, 50, "mA")     # milliamps
-   R = mh.quantity("V/I", "ohm")       # Just works!
+   voltage = mh.quantity(5000, 100, "mV")   # millivolts
+   current = mh.quantity(2000, 50, "mA")    # milliamps
+   resistance = voltage / current             # Just works!
    # Result: ~2.5 ohm (5V / 2A)
    ```
 
@@ -153,7 +153,7 @@ x = mh.quantity(10.0, 0.5, "cm", symbol="x", normalize=False)
    # These would raise errors:
    m = mh.quantity(5, 0.1, "kg")
    t = mh.quantity(2, 0.05, "s")
-   wrong = mh.quantity("m + t", "???")  # Can't add mass + time
+   wrong = m + t  # Can't add mass + time
    ```
 
 3. **Consistent Results**
@@ -204,20 +204,19 @@ The `UnitConverter.to_compact()` method:
 
 Direct usage:
 ```python
-from marhare.unit_converter import get_compact_units
+from marhare.quantities.units import compact_units
 
-val, sig, unit = get_compact_units(1e-9, 1e-12, "s")
+val, sig, unit = compact_units(1e-9, 1e-12, "s")
 # Returns: (1.0, 0.001, "nanosecond")
 
-val, sig, unit = get_compact_units(5000, 100, "mV")
+val, sig, unit = compact_units(5000, 100, "mV")
 # Returns: (5.0, 0.1, "volt")
 ```
 
-With `propagate_quantity()`:
+With evaluation flow:
 ```python
-# Propagate with automatic compacting (target can be quantity object or symbol)
-result = mh.propagate_quantity(target, magnitudes, compact=True)
-# Equivalent: mh.propagate_quantity("R", magnitudes, compact=True)
+# Evaluate quantity with automatic compacting
+result = mh.evaluate_quantity(target, magnitudes, compact=True)
 # If result is 0.005 A, now displays as 5 mA
 ```
 
@@ -225,15 +224,15 @@ result = mh.propagate_quantity(target, magnitudes, compact=True)
 
 ```python
 # Large frequency in Hz → converts to GHz
-val, sig, unit = get_compact_units(2.4e9, 1e8, "Hz")
+val, sig, unit = compact_units(2.4e9, 1e8, "Hz")
 # (2.4, 0.1, "gigahertz")
 
 # Tiny resistance in ohm → converts to milli-ohm
-val, sig, unit = get_compact_units(0.005, 0.0001, "ohm")
+val, sig, unit = compact_units(0.005, 0.0001, "ohm")
 # (5.0, 0.1, "milliohm")
 
 # Voltage needs no conversion (5V already readable)
-val, sig, unit = get_compact_units(5.0, 0.1, "V")
+val, sig, unit = compact_units(5.0, 0.1, "V")
 # (5.0, 0.1, "volt")
 ```
 
@@ -268,7 +267,7 @@ The method ensures dimensional correctness:
 Potential improvements:
 1. **Smart unit inference**: Guess output units from formula
    ```python
-   R = mh.quantity("V/I", ???)  # Auto-detect "ohm"
+   R = voltage / current  # Auto-detect "ohm"
    ```
 
 2. **Custom display units**: Convert result to preferred unit
@@ -310,3 +309,4 @@ Current system does NOT:
 ## Conclusion
 
 This implementation provides professional-grade unit handling with zero API changes. Users can write natural scientific code with prefixes, and the system handles all conversions transparently.
+

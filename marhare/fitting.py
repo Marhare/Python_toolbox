@@ -1,229 +1,78 @@
-"""
-fitting.py
-==========
+"""Curve fitting tools for quantity-based workflows.
 
-PURPOSE AND DIFFERENCES:
-- Curve fitting module using weighted least squares (WLS).
-- fitting.py: fits models to data (linear, polynomial, generic, symbolic).
-- estadistica.py: hypothesis tests, p‑values, confidence intervals for distributions.
-- incertidumbres.py: propagates parameter uncertainties to observables (derivatives, etc.).
-- This module COMBINES WLS + a covariance matrix to allow later propagation via incertidumbres.py.
+This module provides weighted least-squares fitting and helper wrappers used by
+the public API:
 
-DEFAULT ASSUMPTIONS:
-- sy errors are interpreted as known absolute uncertainties in y.
-- absolute_sigma=True is assumed (no automatic error rescaling).
-- residuals are assumed independent and Gaussian.
-- statistical validity (normality, homoscedasticity) is the user's responsibility.
+- ``fit_quantity``: fit directly from Quantity-like inputs (value + sigma).
+- ``fit``: generic fit from arrays/tuples/Quantity-like inputs.
+- ``FitResult``: convenience wrapper around the raw fit dictionary.
 
+Core assumptions:
 
-PUBLIC FUNCTIONS
-================
+- ``sy`` is treated as absolute uncertainty in ``y``.
+- Residual diagnostics are reported as ``chi2``, ``chi2_red``, and ``p``.
+- Statistical validity depends on user-side assumptions (model form, residual
+  independence, realistic uncertainties).
 
-1) linear_fit(x, y, sy=None)
-   Exact analytic WLS fit for y = a + b·x.
-   
-   INPUT:
-       x: array_like (n,) -> independent variable
-       y: array_like (n,) -> dependent variable
-       sy: array_like (n,) | None -> absolute uncertainty of y; if None → sy=1 (all equal)
-   
-   OUTPUT: dict with
-       "parameters": {"a": float, "b": float}  -> intercept and slope
-       "errors": {"sa": float, "sb": float}   -> parameter standard errors
-       "covariance": array (2,2)               -> covariance matrix (a,b)
-       "yfit": array (n,)                      -> fitted values
-       "chi2": float                           -> sum of residuals²/sy²
-       "ndof": int                             -> degrees of freedom = n - 2
-       "chi2_red": float                       -> chi2 / ndof
-       "p": float                              -> p‑value (1 - CDF_chi2(chi2,ndof))
-   
-   NOTES:
-       - Uses an analytic formulation (no numeric optimization).
-       - absolute_sigma=True implied.
-   
-   ERRORS:
-       - ValueError if len(x) != len(y)
-       - ValueError if sy contains values <= 0 or shape differs from y
-       - ValueError if x,y are not 1D arrays
+Notes on units:
 
-2) polynomial_fit(x, y, degree, sy=None)
-   Polynomial fit y = p0·x^n + ... + pn by WLS.
-   
-   INPUT:
-       x: array_like (n,) -> independent variable
-       y: array_like (n,) -> dependent variable
-       grado: int         -> polynomial degree (grado >= 0)
-       sy: array_like (n,) | None -> absolute uncertainty of y; if None → sy=1
-   
-   OUTPUT: dict with
-       "coefficients": array (degree+1,)       -> coefficients in descending order (x^n, ..., x^0)
-       "errors": array (degree+1,)            -> standard error of each coefficient
-       "covariance": array (degree+1,degree+1)  -> covariance matrix
-       "yfit": array (n,)                     -> fitted values
-       "chi2": float                          -> sum of residuals²/sy²
-       "ndof": int                            -> degrees of freedom = n - (grado+1)
-       "chi2_red": float                      -> chi2 / ndof
-       "p": float                             -> p‑value
-   
-   NOTES:
-       - Based on np.polyfit with weights 1/sy².
-       - Coefficients in descending order (standard polynomial).
-       - absolute_sigma=True implied (unscaled covariance).
-   
-   ERRORS:
-       - ValueError if len(x) != len(y)
-       - ValueError if sy <= 0 or shape differs from y
-       - ValueError if x,y are not 1D arrays
-       - Error if grado < 0 or grado >= n
-
-3) fit(model, x, y, sy=None, p0=None, *, variable="x")
-   Unified generic fit: accepts callable OR sympy expression.
-   
-   INPUT:
-       model: callable f(x, *params) | sympy.Expr
-               If callable: function that returns f(x, p1, p2, ...).
-               If sympy.Expr: symbolic expression in "x" and parameters (p, a, k, etc.).
-       x: array_like (n,)  -> independent variable
-       y: array_like (n,)  -> dependent variable
-       sy: array_like (n,) | None -> absolute uncertainty of y
-       p0: array_like (m,) | None -> initial values for m parameters
-       variable: str -> independent variable name in expr (default "x")
-   
-   OUTPUT: dict with
-       "parameters": array (m,)                -> fitted parameter values
-       "errors": array (m,)                   -> standard error of each parameter
-       "covariance": array (m,m)               -> covariance matrix
-       "yfit": array (n,)                      -> fitted values
-       "chi2": float                           -> sum of residuals²/sy²
-       "ndof": int                             -> degrees of freedom = n - m
-       "chi2_red": float                       -> chi2 / ndof
-       "p": float                              -> p‑value
-       [if model is sympy.Expr, adds:]
-       "expression": sympy.Expr                 -> original expression
-       "symbolic_parameters": list[sympy.Symbol] -> parameter symbols ordered by name
-   
-   NOTES:
-       - Based on scipy.optimize.curve_fit with absolute_sigma=True.
-       - If model is sympy.Expr: automatically lambdified.
-       - Symbolic parameters detected and ordered alphabetically.
-       - If p0 is None: tries p0=ones(m) (may fail with poor initialization).
-   
-   ERRORS:
-       - TypeError if model is neither callable nor sympy.Expr
-       - ValueError if variable is not in expr
-       - ValueError if len(p0) != number of parameters
-       - ValueError if len(x) != len(y) or sy shape/values are invalid
-       - RuntimeError if curve_fit does not converge
-
-4) parameter_confidence_interval(fit_result, level=0.95)
-   Computes confidence intervals (CI) for fitted parameters.
-   
-   INPUT:
-       fit_result: dict -> output of fit()/linear_fit()/polynomial_fit()
-       level: float in (0,1) -> confidence level (default 0.95 → 95%)
-   
-   OUTPUT: dict with
-       "parameters": list[dict] with one entry per parameter:
-           {
-               "name": str,           -> parameter name
-               "estimate": float,     -> fitted value
-               "error": float,        -> standard error
-               "lower_bound": float,       -> lower CI bound
-               "upper_bound": float,       -> upper CI bound
-               "level": float,          -> confidence level used
-               "distribution": "t" | "normal" -> quantile used
-           }
-   
-   NOTES:
-       - Uses Student‑t if ndof<=30, normal if ndof>30 or missing.
-       - CI = parameter ± quantile * error
-       - DOES NOT modify the original fit.
-       - NOT a prediction interval (that would include experimental sy).
-   
-   ERRORS:
-       - ValueError if level is not in (0,1)
-       - ValueError if fit_result lacks 'parameters' or 'errors'
-
-5) prediction_uncertainty(fit_result, model, x0)
-   Computes statistical uncertainty of the model prediction at x0.
-   
-   INPUT:
-       fit_result: dict -> output of fit()/linear_fit()/polynomial_fit()
-       model: callable f(x, *params) | sympy.Expr -> same model used in fit
-       x0: float | array_like -> point(s) to evaluate the prediction
-   
-   ERROR: dict with
-       "x": float | array -> evaluation point(s)
-       "y": float | array -> model prediction
-       "sigma_model": float | array -> statistical uncertainty of the prediction
-       (x and sigma_model are scalars if x0 is scalar, arrays if x0 is array)
-   
-   NOTES:
-       - Computes ONLY parameter‑propagated uncertainty.
-       - DOES NOT include experimental instrument error sy.
-       - Formula: Var(f) = ∇f^T · Cov · ∇f
-       - Symbolic gradient if model is sympy.Expr, numeric if callable.
-       - WARNING: this is a confidence band (uncertainty of the mean).
-         For a prediction band, you must add experimental sy.
-   
-   ERRORS:
-       - ValueError if fit_result lacks 'parameters' or 'covariance'
-       - ValueError if model is sympy.Expr but 'symbolic_parameters' is missing
-       - RuntimeError if lambdify or differentiation fails
-
-
-CONVENTIONS AND TYPICAL FLOW
-============================
-
-1. Fit data:
-    res = _Fitting.linear_fit(x, y, sy=sy_data)
-   or
-    res = _Fitting.fit(model, x, y, sy=sy_data, p0=p0_inicial)
-
-2. Interpret results:
-   params = res["parameters"]
-   p_valor = res["p"]  -> if p > 0.05, fit is "acceptable"
-   chi2_red = res["chi2_red"]  -> if ~1, fit is good
-
-3. Build CI for parameters:
-    ic = _Fitting.parameter_confidence_interval(res, level=0.95)
-   for param_ic in ic["parameters"]:
-       print(f"{param_ic['name']}: {param_ic['lower_bound']} - {param_ic['upper_bound']}")
-
-4. Evaluate prediction uncertainty:
-    pred = _Fitting.prediction_uncertainty(res, model, x_nuevo)
-   print(f"y({x_nuevo}) = {pred['y']} ± {pred['sigma_model']}")
-
-5. Propagate to other observables (use incertidumbres.py):
-   # Combine fitted parameters + covariances → new observable
-   # (See incertidumbres.py module for details)
+- This module fits numeric arrays only.
+- If your input quantities were created with ``normalize=True`` (default),
+  fitting runs on SI-normalized values.
+- Parameter units should therefore be assigned consistently when using
+  ``FitResult.parameter_quantity(...)``.
 """
 
 import numpy as np
 from scipy import stats, optimize
-import sympy as sp
 
-from marhare.uncertainties import value_quantity
+
+def _extract_value_sigma(obj):
+    if hasattr(obj, "value") and hasattr(obj, "sigma"):
+        return np.asarray(obj.value, dtype=float), np.asarray(obj.sigma, dtype=float)
+    if isinstance(obj, dict):
+        if obj.get("result", None) is not None:
+            return np.asarray(obj["result"][0], dtype=float), np.asarray(obj["result"][1], dtype=float)
+        if obj.get("measure", None) is not None:
+            return np.asarray(obj["measure"][0], dtype=float), np.asarray(obj["measure"][1], dtype=float)
+        if "value" in obj and "sigma" in obj:
+            return np.asarray(obj["value"], dtype=float), np.asarray(obj["sigma"], dtype=float)
+    val = np.asarray(obj, dtype=float)
+    return val, np.zeros_like(val)
 
 class _Fitting:
 
     @staticmethod
     def _validate_data(x, y, sy=None):
-        x = np.asarray(x)
-        y = np.asarray(y)
+        x = np.asarray(x, dtype=float)
+        y = np.asarray(y, dtype=float)
         if x.shape != y.shape:
             raise ValueError("x and y must have the same shape")
         if x.ndim != 1:
             raise ValueError("x and y must be 1D arrays")
+        if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y))):
+            raise ValueError("x and y must contain only finite values")
         if sy is None:
             sy = np.ones_like(y)
         else:
-            sy = np.asarray(sy)
+            sy = np.asarray(sy, dtype=float)
+            if sy.ndim == 0:
+                sy = np.full_like(y, float(sy), dtype=float)
             if sy.shape != y.shape:
                 raise ValueError("sy must have the same shape as y")
             if np.any(sy <= 0):
                 raise ValueError("sy must be positive at all points")
+            if not np.all(np.isfinite(sy)):
+                raise ValueError("sy must contain only finite values")
         return x, y, sy
+
+    @staticmethod
+    def _safe_fit_stats(chi2, ndof):
+        chi2 = float(chi2)
+        ndof = int(ndof)
+        if ndof > 0:
+            return float(chi2 / ndof), float(stats.chi2.sf(chi2, ndof))
+        return float("nan"), float("nan")
 
     @staticmethod
     def _curve_fit(f, x, y, sy=None, p0=None):
@@ -236,7 +85,7 @@ class _Fitting:
         yfit = f(x, *popt)
         chi2 = np.sum(((y - yfit) / sy)**2)
         ndof = len(x) - len(popt)
-        p = stats.chi2.sf(chi2, ndof)
+        chi2_red, p = _Fitting._safe_fit_stats(chi2, ndof)
 
         return {
             "parameters": popt,
@@ -245,28 +94,27 @@ class _Fitting:
             "yfit": yfit,
             "chi2": chi2,
             "ndof": ndof,
-            "chi2_red": chi2 / ndof,
+            "chi2_red": chi2_red,
             "p": p,
         }
 
     # ---------- Linear ----------
     @staticmethod
     def linear_fit(x, y, sy=None):
-        """
-        INPUT:
-            x: array_like (n,)
-            y: array_like (n,)
-            sy: array_like (n,) | None  -> absolute errors in y
-        OUTPUT:
-            dict with:
-                - parameters: {"a": intercept, "b": slope}
-                - errors: {"sa": error_a, "sb": error_b}
-                - covariance: 2x2 matrix
-                - chi2, ndof, chi2_red, p
-                - yfit
-        NOTAS:
-            - Analytic weighted linear fit (WLS)
-            - Assumes absolute sigma is known (no error rescaling)
+        """Analytic weighted linear fit for ``y = a + b*x``.
+
+        Parameters
+        ----------
+        x, y : array_like
+            1D arrays with matching shape.
+        sy : array_like | float | None
+            Absolute uncertainty in ``y``. If ``None``, uses ones.
+
+        Returns
+        -------
+        dict
+            Keys: ``parameters`` (``{"a", "b"}``), ``errors`` (``{"sa", "sb"}``),
+            ``covariance``, ``yfit``, ``chi2``, ``ndof``, ``chi2_red``, ``p``.
         """
         x, y, sy = _Fitting._validate_data(x, y, sy)
         w = 1 / sy**2
@@ -294,7 +142,7 @@ class _Fitting:
         yfit = a + b * x
         chi2 = np.sum(((y - yfit) / sy)**2)
         ndof = len(x) - 2
-        p = stats.chi2.sf(chi2, ndof)
+        chi2_red, p = _Fitting._safe_fit_stats(chi2, ndof)
 
         return {
             "parameters": {"a": float(a), "b": float(b)},
@@ -302,7 +150,7 @@ class _Fitting:
             "covariance": cov,
             "chi2": float(chi2),
             "ndof": ndof,
-            "chi2_red": float(chi2 / ndof),
+            "chi2_red": chi2_red,
             "p": float(p),
             "yfit": yfit,
         }
@@ -310,22 +158,22 @@ class _Fitting:
     # ---------- Polynomial ----------
     @staticmethod
     def polynomial_fit(x, y, degree, sy=None):
-        """
-        INPUT:
-            x: array_like (n,)
-            y: array_like (n,)
-            degree: int
-            sy: array_like (n,) | None  -> absolute errors in y
-        OUTPUT:
-            dict with:
-                - coefficients (descending order)
-                - errors (sqrt(diag(cov)))
-                - covariance
-                - chi2, ndof, chi2_red, p
-                - yfit
-        NOTAS:
-            - Based on np.polyfit with weights
-            - Assumes absolute sigma is known (no error rescaling)
+        """Weighted polynomial fit using ``numpy.polyfit``.
+
+        Parameters
+        ----------
+        x, y : array_like
+            1D arrays with matching shape.
+        degree : int
+            Polynomial degree.
+        sy : array_like | float | None
+            Absolute uncertainty in ``y``. If ``None``, uses ones.
+
+        Returns
+        -------
+        dict
+            Keys: ``parameters`` (coefficients in descending order), ``errors``,
+            ``covariance``, ``yfit``, ``chi2``, ``ndof``, ``chi2_red``, ``p``.
         """
         x, y, sy = _Fitting._validate_data(x, y, sy)
         coef, cov = np.polyfit(x, y, degree, w=1 / sy, cov="unscaled")
@@ -333,7 +181,7 @@ class _Fitting:
         yfit = np.polyval(coef, x)
         chi2 = np.sum(((y - yfit) / sy)**2)
         ndof = len(x) - (degree + 1)
-        p = stats.chi2.sf(chi2, ndof)
+        chi2_red, p = _Fitting._safe_fit_stats(chi2, ndof)
         return {
             "parameters": coef,
             "errors": errors_arr,
@@ -341,101 +189,56 @@ class _Fitting:
             "yfit": yfit,
             "chi2": chi2,
             "ndof": ndof,
-            "chi2_red": chi2 / ndof,
+            "chi2_red": chi2_red,
             "p": p,
         }
 
     # ---------- Unified ----------
     @staticmethod
     def fit(model, x, y, sy=None, p0=None, *, variable="x"):
+        """Generic weighted fit for callable models.
+
+        Parameters
+        ----------
+        model : callable
+            Callable with signature ``f(x, *params)``.
+        x, y : array_like
+            1D arrays with matching shape.
+        sy : array_like | float | None
+            Absolute uncertainty in ``y``. If ``None``, uses ones.
+        p0 : sequence | None
+            Optional initial parameter guess.
+        variable : str
+            Reserved compatibility argument (currently ignored).
+
+        Returns
+        -------
+        dict
+            Keys: ``parameters``, ``errors``, ``covariance``, ``yfit``, ``chi2``,
+            ``ndof``, ``chi2_red``, ``p``.
         """
-        INPUT:
-            model: callable f(x, *params) | sympy.Expr
-            x: array_like (n,)
-            y: array_like (n,)
-            sy: array_like (n,) | None  -> absolute errors in y
-            p0: initial values | None
-            variable: str -> independent variable name
-        OUTPUT:
-            dict with:
-                - parameters, errors, covariance, yfit
-                - chi2, ndof, chi2_red, p
-            If the model is symbolic, adds:
-                - expression
-                - symbolic_parameters
-        NOTAS:
-            - Weighted least squares fit (curve_fit)
-            - absolute_sigma=True always
-        """
-        if callable(model) and not isinstance(model, sp.Expr):
-            return _Fitting._curve_fit(model, x, y, sy, p0)
-
-        if isinstance(model, sp.Expr):
-            expr = model
-            var_symbol = None
-            for s in expr.free_symbols:
-                if s.name == variable:
-                    var_symbol = s
-                    break
-            if var_symbol is None:
-                if len(expr.free_symbols) == 1:
-                    var_symbol = list(expr.free_symbols)[0]
-                else:
-                    raise ValueError(
-                        "Could not identify the independent variable; "
-                        "specify the name with 'variable'"
-                    )
-
-            params = sorted(expr.free_symbols - {var_symbol}, key=lambda s: s.name)
-            if p0 is not None and len(p0) != len(params):
-                raise ValueError("p0 must have the same length as the parameters")
-            if p0 is None:
-                p0 = np.ones(len(params))
-
-            f = sp.lambdify((var_symbol, *params), expr, "numpy")
-
-            def f_num(x, *p):
-                return f(x, *p)
-
-            res = _Fitting._curve_fit(f_num, x, y, sy, p0)
-            res["expression"] = expr
-            res["symbolic_parameters"] = params
-            return res
-
-        raise TypeError("model must be callable or sympy.Expr")
+        if not callable(model):
+            raise TypeError("model must be callable")
+        return _Fitting._curve_fit(model, x, y, sy, p0)
 
     # ---------- A.1 Parameter confidence intervals ----------
     @staticmethod
     def parameter_confidence_interval(fit_result, level=0.95):
-        """
-        Compute confidence intervals for fitted parameters.
-        
-        INPUT:
-            fit_result: dict result from fit()/linear_fit()/polynomial_fit()
-            level: float [0, 1] -> confidence level (default 0.95)
-        
-        OUTPUT:
-            dict with interval list:
-            {
-                "parameters": [
-                    {
-                        "name": str,
-                        "estimate": float,
-                        "lower_bound": float,
-                        "upper_bound": float,
-                        "error": float,
-                        "level": float,
-                        "distribution": "t" | "normal"
-                    },
-                    ...
-                ]
-            }
-        
-        NOTAS:
-            - Uses Student‑t if ndof is available and small
-            - Uses normal distribution if ndof is large (>30) or missing
-            - Does NOT modify the fit
-            - Parameter CI, NOT a prediction interval
+        """Compute confidence intervals for fitted parameters.
+
+        Parameters
+        ----------
+        fit_result : dict
+            Result dictionary from ``fit``, ``linear_fit`` or ``polynomial_fit``.
+        level : float, default 0.95
+            Confidence level in ``(0, 1)``.
+
+        Returns
+        -------
+        ConfidenceIntervalResult
+            Dict-like wrapper containing ``{"parameters": [...]}`` where each
+            entry has ``name``, ``estimate``, ``error``, ``lower_bound``,
+            ``upper_bound``, ``level``, and ``distribution``.
         """
         if level <= 0 or level >= 1:
             raise ValueError("level must be in (0, 1)")
@@ -500,33 +303,26 @@ class _Fitting:
     # ---------- A.2 Model prediction uncertainty ----------
     @staticmethod
     def prediction_uncertainty(fit_result, model, x0):
-        """
-        Compute the statistical uncertainty of the model prediction at x0.
-        
-        INPUT:
-            fit_result: dict result from fit()/linear_fit()/polynomial_fit()
-            model: callable f(x, *params) | sympy.Expr
-            x0: float | array_like -> prediction point(s)
-        
-        OUTPUT:
-            If x0 is scalar:
-                dict with:
-                    "x": float,
-                    "y": float,
-                    "sigma_model": float,
-            If x0 is array:
-                dict with:
-                    "x": array,
-                    "y": array,
-                    "sigma_model": array
-        
-        NOTAS:
-                        - Computes ONLY parameter uncertainty
-                        - DOES NOT include experimental instrument error (sy)
-                        - Uses error propagation: Var(f) = grad_f^T · Cov · grad_f
-                        - Gradient is computed symbolically (if expr) or numerically
-                        - WARNING: this is uncertainty of the MEAN (confidence band),
-                            NOT a prediction interval (prediction band)
+        """Compute model prediction uncertainty from parameter covariance.
+
+        Parameters
+        ----------
+        fit_result : dict
+            Result dictionary from ``fit``, ``linear_fit`` or ``polynomial_fit``.
+        model : callable
+            Callable ``f(x, *params)`` used for fitting.
+        x0 : float | array_like
+            Evaluation point(s).
+
+        Returns
+        -------
+        dict
+            ``{"x", "y", "sigma_model"}`` as scalars or arrays.
+
+        Notes
+        -----
+        ``sigma_model`` includes only parameter-propagated uncertainty
+        (confidence-band style), not measurement noise of new observations.
         """
         params = fit_result.get("parameters")
         covariance = fit_result.get("covariance")
@@ -549,57 +345,22 @@ class _Fitting:
         else:
             x0_arr = x0
         
-        # Compute prediction and gradient
-        if isinstance(model, sp.Expr):
-            # Symbolic case: analytic derivative
-            expr = model
-            param_symbols = fit_result.get("symbolic_parameters")
-            
-            if param_symbols is None:
-                raise ValueError(
-                    "fit_result must contain 'symbolic_parameters' "
-                    "if the model is symbolic"
-                )
-            
-            # Detect independent variable
-            var_symbol = None
-            for s in expr.free_symbols:
-                if s.name == "x":
-                    var_symbol = s
-                    break
-            if var_symbol is None:
-                if len(expr.free_symbols) == 1:
-                    var_symbol = list(expr.free_symbols)[0]
-            
-            # Lambdify for prediction
-            f_eval = sp.lambdify((var_symbol, *param_symbols), expr, "numpy")
-            y_pred = np.atleast_1d(f_eval(x0_arr, *param_vals))
-            
-            # Gradient with respect to parameters
-            # Evaluate each gradient directly and ensure consistent array shape
-            grad_vals = []
-            for p in param_symbols:
-                grad_func = sp.lambdify((var_symbol, *param_symbols), sp.diff(expr, p), "numpy")
-                grad_result = np.atleast_1d(grad_func(x0_arr, *param_vals))
-                grad_vals.append(grad_result)
-            grad_vals = np.array(grad_vals)
-        else:
-            # Numeric case: numerical derivative
-            y_pred = model(x0_arr, *param_vals)
-            
-            # Numerical gradient by finite differences
-            eps = np.sqrt(np.finfo(float).eps)
-            grad_vals = np.zeros((len(param_vals), len(x0_arr)))
-            
-            for i in range(len(param_vals)):
-                p_plus = param_vals.copy()
-                p_plus[i] += eps
-                p_minus = param_vals.copy()
-                p_minus[i] -= eps
-                
-                grad_vals[i] = (
-                    model(x0_arr, *p_plus) - model(x0_arr, *p_minus)
-                ) / (2 * eps)
+        # Numerical case: numerical derivative
+        y_pred = model(x0_arr, *param_vals)
+
+        # Numerical gradient by finite differences
+        eps = np.sqrt(np.finfo(float).eps)
+        grad_vals = np.zeros((len(param_vals), len(x0_arr)))
+
+        for i in range(len(param_vals)):
+            p_plus = param_vals.copy()
+            p_plus[i] += eps
+            p_minus = param_vals.copy()
+            p_minus[i] -= eps
+
+            grad_vals[i] = (
+                model(x0_arr, *p_plus) - model(x0_arr, *p_minus)
+            ) / (2 * eps)
         
         # Error propagation: Var(f) = grad_f^T · Cov · grad_f
         sigma_model = np.sqrt(
@@ -663,23 +424,117 @@ class ConfidenceIntervalResult:
 
 
 class FitResult:
-    def __init__(self, raw, *, model, xq=None, yq=None, degree=None):
+    def __init__(self, raw, *, model, x, y, sy):
         self._raw = raw
         self.model = model
-        self.degree = degree
+        self._x = np.asarray(x, dtype=float)
+        self._y = np.asarray(y, dtype=float)
+        self._sy = np.asarray(sy, dtype=float)
 
-        # metadatos opcionales (para plots, LaTeX futuro)
-        self.x_symbol = getattr(xq, "symbol", None) if xq is not None else None
-        self.y_symbol = getattr(yq, "symbol", None) if yq is not None else None
-        self.x_unit = getattr(xq, "unit", None) if xq is not None else None
-        self.y_unit = getattr(yq, "unit", None) if yq is not None else None
+        raw_params = raw.get("parameters")
+        if isinstance(raw_params, dict):
+            self._param_names = list(raw_params.keys())
+            self.params = np.asarray([raw_params[k] for k in self._param_names], dtype=float)
+        else:
+            self._param_names = [f"p{i}" for i in range(len(raw_params))]
+            self.params = np.asarray(raw_params, dtype=float)
 
-    # acceso directo a los resultados numéricos
+        self.cov = np.asarray(raw.get("covariance"), dtype=float)
+        self.dof = len(self._x) - len(self.params)
+
     @property
     def raw(self):
         return self._raw
 
-    # --- Métodos de fitting.py ---
+    @property
+    def parameters(self):
+        return self.params
+
+    @property
+    def covariance(self):
+        return self.cov
+
+    @property
+    def sigma(self):
+        return np.sqrt(np.diag(self.cov))
+
+    def predict(self, x):
+        x = np.asarray(x, dtype=float)
+        return self.model(x, *self.params)
+
+    @property
+    def residuals(self):
+        return self._y - self.predict(self._x)
+
+    @property
+    def chi2(self):
+        return float(np.sum((self.residuals / self._sy) ** 2))
+
+    @property
+    def reduced_chi2(self):
+        if self.dof <= 0:
+            return float("nan")
+        return float(self.chi2 / self.dof)
+
+    def params_quantity(self, unit="1"):
+        """Return all fitted parameters as a list of ``Quantity``.
+
+        Parameters
+        ----------
+        unit : str, default "1"
+            Unit assigned to all returned parameters. Use ``"1"`` for
+            dimensionless parameters.
+        """
+        # Local import to avoid circular imports at module load time.
+        from marhare.quantities import Quantity
+
+        return [
+            Quantity(float(v), float(s), unit=unit, symbol=name, traceable=False)
+            for name, v, s in zip(self._param_names, self.params, self.sigma)
+        ]
+
+    def parameter_quantity(self, key, *, unit="1", symbol=None):
+        """Return a single fitted parameter as ``Quantity``.
+
+        Parameters
+        ----------
+        key : str | int
+            Parameter name (e.g. ``"b"``) or index (e.g. ``1``).
+        unit : str, default "1"
+            Unit assigned to the returned parameter quantity.
+            Use ``"1"`` when the fit was performed on normalized SI values and
+            the parameter is dimensionless in that representation.
+        symbol : str | None
+            Optional symbol override. If omitted, the parameter name is used.
+        """
+        # Local import to avoid circular imports at module load time.
+        from marhare.quantities import Quantity
+
+        if isinstance(key, str):
+            if key not in self._param_names:
+                raise KeyError(f"Unknown parameter name: {key}")
+            idx = self._param_names.index(key)
+            name = key
+        else:
+            try:
+                idx = int(key)
+            except (TypeError, ValueError):
+                raise TypeError("key must be a parameter name (str) or index (int)")
+
+            if idx < 0 or idx >= len(self.params):
+                raise IndexError(f"Parameter index out of range: {idx}")
+            name = self._param_names[idx]
+
+        return Quantity(
+            float(self.params[idx]),
+            float(self.sigma[idx]),
+            unit=unit,
+            symbol=name if symbol is None else symbol,
+            traceable=False,
+        )
+
+    def as_dict(self):
+        return dict(self._raw)
 
     def confidence_interval(self, level=0.95):
         return _Fitting.parameter_confidence_interval(self._raw, level=level)
@@ -688,28 +543,118 @@ class FitResult:
         return _Fitting.prediction_uncertainty(self._raw, self.model, x0)
 
 
+def _is_quantity_like(obj):
+    return (
+        hasattr(obj, "value") and hasattr(obj, "sigma")
+    ) or (
+        isinstance(obj, dict)
+        and (
+            "measure" in obj
+            or "result" in obj
+            or ("value" in obj and "sigma" in obj)
+        )
+    )
+
+
+def fit(model, X, Y, p0=None):
+    """
+    Generic curve fit for Quantity-like inputs or raw numpy arrays.
+
+    Parameters
+    ----------
+    model : callable
+        Model function with signature ``f(x, *params)``.
+    X : array-like | Quantity-like
+        Independent variable data.
+    Y : array-like | Quantity-like | tuple(array-like, array-like)
+        Dependent variable data. If a tuple/list of length 2 is provided,
+        it is interpreted as ``(y, sy)`` for raw numpy workflows.
+    p0 : sequence | None
+        Optional initial parameter guess.
+
+    Returns
+    -------
+    FitResult
+        Encapsulated fit result.
+    """
+    if not callable(model):
+        raise TypeError("model must be a callable with signature f(x, *params)")
+
+    if _is_quantity_like(X):
+        x, _ = _extract_value_sigma(X)
+        x = np.asarray(x, dtype=float)
+    elif isinstance(X, (tuple, list)) and len(X) == 2:
+        x = np.asarray(X[0], dtype=float)
+    else:
+        x = np.asarray(X, dtype=float)
+
+    sy = None
+    if _is_quantity_like(Y):
+        y, sy = _extract_value_sigma(Y)
+        y = np.asarray(y, dtype=float)
+        sy = np.asarray(sy, dtype=float)
+    elif isinstance(Y, (tuple, list)) and len(Y) == 2:
+        y = np.asarray(Y[0], dtype=float)
+        sy = np.asarray(Y[1], dtype=float)
+    else:
+        y = np.asarray(Y, dtype=float)
+
+    if x.shape != y.shape:
+        raise ValueError("X and Y must have the same shape")
+    if x.ndim != 1:
+        raise ValueError("X and Y must be 1D arrays")
+
+    if sy is not None:
+        if sy.ndim == 0:
+            sy = np.full_like(y, float(sy), dtype=float)
+        if sy.shape != y.shape:
+            raise ValueError("sy must have the same shape as Y")
+        if np.any(sy <= 0):
+            raise ValueError("sy must be positive at all points")
+
+    popt, pcov = optimize.curve_fit(model, x, y, sigma=sy, p0=p0)
+    yfit = model(x, *popt)
+
+    # Keep chi2-based diagnostics consistent, even when no sy is provided.
+    sy_eff = np.ones_like(y) if sy is None else sy
+    chi2 = np.sum(((y - yfit) / sy_eff) ** 2)
+    ndof = len(x) - len(popt)
+    chi2_red, p = _Fitting._safe_fit_stats(chi2, ndof)
+
+    raw = {
+        "parameters": np.asarray(popt, dtype=float),
+        "errors": np.sqrt(np.diag(pcov)),
+        "covariance": np.asarray(pcov, dtype=float),
+        "yfit": np.asarray(yfit, dtype=float),
+        "chi2": float(chi2),
+        "ndof": int(ndof),
+        "chi2_red": float(chi2_red),
+        "p": float(p),
+    }
+
+    return FitResult(raw, model=model, x=x, y=y, sy=sy_eff)
+
+
 def fit_quantity(model, xq, yq, *, degree=None, p0=None, variable="x"):
     """
     Fit ``yq`` versus ``xq`` and return a ``FitResult`` wrapper.
 
     Parameters
     ----------
-    model : "linear" | "polynomial" | callable | sympy.Expr
+        model : "linear" | "polynomial" | callable
         Model to fit.
         - ``"linear"`` uses ``y = a + b*x``.
         - ``"polynomial"`` uses ``degree`` with weighted ``np.polyfit``.
         - ``callable`` must follow ``f(x, *params)`` signature.
           Example: ``def f(x, a, b): return a*x + b``.
-        - ``sympy.Expr`` is lambdified internally; parameters are inferred from
-          free symbols excluding the independent variable.
     xq, yq : quantity-like
         Independent and dependent quantities (value + uncertainty).
     degree : int | None, optional
         Required only when ``model == "polynomial"``.
     p0 : sequence | None, optional
-        Initial parameter guess for non-linear callable or symbolic models.
+        Initial parameter guess for non-linear callable models.
     variable : str, default "x"
-        Independent variable name for symbolic models.
+        Reserved for compatibility; ignored for numeric models.
 
     Returns
     -------
@@ -725,8 +670,17 @@ def fit_quantity(model, xq, yq, *, degree=None, p0=None, variable="x"):
     - Callables without fit parameters (signature ``f(x)``) are not suitable for
       parameter estimation with this API.
     """
-    x, sx = value_quantity(xq)
-    y, sy = value_quantity(yq)
+    x, _ = _extract_value_sigma(xq)
+    y, sy = _extract_value_sigma(yq)
+
+    # Quantity objects are only accepted at the API boundary.
+    # Internal fitting always runs on plain numpy float arrays.
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    sy = np.asarray(sy, dtype=float)
+
+    if sy.ndim == 0:
+        sy = np.full_like(y, float(sy), dtype=float)
 
     # Convert model string to actual callable for prediction
     actual_model = model
@@ -744,7 +698,7 @@ def fit_quantity(model, xq, yq, *, degree=None, p0=None, variable="x"):
             actual_model = lambda x, *coeffs: np.polyval(coeffs, x)
         else:
             raise ValueError(f"Unknown model shortcut: {model}")
-    elif callable(model) or isinstance(model, sp.Expr):
+    elif callable(model):
         raw = _Fitting.fit(
             model,
             x,
@@ -755,12 +709,53 @@ def fit_quantity(model, xq, yq, *, degree=None, p0=None, variable="x"):
         )
         actual_model = model
     else:
-        raise ValueError("model must be a string, callable, or sympy expression")
+        raise ValueError("model must be a string or callable")
 
     return FitResult(
         raw,
         model=actual_model,
-        xq=xq,
-        yq=yq,
-        degree=degree,
+        x=x,
+        y=y,
+        sy=sy,
     )
+
+
+def errorbar(X, Y, ax=None, **kwargs):
+    """Plot data with uncertainties using matplotlib error bars."""
+    import matplotlib.pyplot as plt
+
+    x, sx = _extract_value_sigma(X)
+    y, sy = _extract_value_sigma(Y)
+
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    sx = np.asarray(sx, dtype=float)
+    sy = np.asarray(sy, dtype=float)
+
+    if ax is None:
+        ax = plt.gca()
+
+    if "xerr" not in kwargs:
+        kwargs["xerr"] = sx
+    if "yerr" not in kwargs:
+        kwargs["yerr"] = sy
+
+    ax.errorbar(x, y, **kwargs)
+    return ax
+
+
+def plot_fit(fit, ax=None, n=200, **kwargs):
+    """Plot fitted model curve over the x-range used in fitting."""
+    import matplotlib.pyplot as plt
+
+    if ax is None:
+        ax = plt.gca()
+
+    xdata = np.asarray(fit._x, dtype=float)
+    xmin = float(np.min(xdata))
+    xmax = float(np.max(xdata))
+    xline = np.linspace(xmin, xmax, int(n))
+    yline = fit.predict(xline)
+
+    ax.plot(xline, yline, **kwargs)
+    return ax

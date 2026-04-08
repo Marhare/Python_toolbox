@@ -18,6 +18,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import numpy as np
 from marhare.uncertainties import quantity, propagate_quantity, register
 
+
+def _value_sigma(result):
+    return result["value"], result["sigma"]
+
 print("=" * 70)
 print("UNCERTAINTIES MODULE — DEEP TESTS")
 print("=" * 70)
@@ -48,14 +52,13 @@ try:
     R_result = propagate_quantity(R, registry, compact=True)
     
     # Verify results
-    R_values = R_result["result"][0]
-    R_sigmas = R_result["result"][1]
+    R_values, R_sigmas = _value_sigma(R_result)
     
     print(f"✓ Propagation successful")
     print(f"  Input: V={V_array[0]:.2f}..{V_array[-1]:.2f} V, I={I_array[0]:.3f}..{I_array[-1]:.3f} A")
-    print(f"  Output: R={R_values[0]:.2f}..{R_values[-1]:.2f} ± {R_sigmas[0]:.2f}..{R_sigmas[-1]:.2f} {R_result['unit']}")
+    print(f"  Output: R={R_values[0]:.2f}..{R_values[-1]:.2f} ± {R_sigmas[0]:.2f}..{R_sigmas[-1]:.2f} ohm")
     print(f"  Array shape: {R_values.shape}")
-    print(f"  Compact unit: {R_result['unit']}")
+    print("  Compact unit: handled in evaluation layer")
     
     # Sanity check: R ≈ 10 ohm in the middle
     mid_idx = N // 2
@@ -121,13 +124,13 @@ try:
     print(f"  V_in = {V_in['measure'][0]:.2f} ± {V_in['measure'][1]:.2f} V")
     print(f"  I_in = {I_in['measure'][0]:.2f} ± {I_in['measure'][1]:.2f} A")
     print(f"  V_out = {V_out['measure'][0]:.2f} ± {V_out['measure'][1]:.2f} V")
-    print(f"  → R = {R_result['result'][0]:.3f} ± {R_result['result'][1]:.3f} {R_result['unit']}")
-    print(f"  → P_in = {P_in_result['result'][0]:.2f} ± {P_in_result['result'][1]:.2f} {P_in_result['unit']}")
-    print(f"  → P_out = {P_out_result['result'][0]:.2f} ± {P_out_result['result'][1]:.2f} {P_out_result['unit']}")
-    print(f"  → η = {eta_result['result'][0]:.4f} ± {eta_result['result'][1]:.4f} {eta_result['unit']}")
+    print(f"  → R = {R_result['value']:.3f} ± {R_result['sigma']:.3f} ohm")
+    print(f"  → P_in = {P_in_result['value']:.2f} ± {P_in_result['sigma']:.2f} W")
+    print(f"  → P_out = {P_out_result['value']:.2f} ± {P_out_result['sigma']:.2f} W")
+    print(f"  → η = {eta_result['value']:.4f} ± {eta_result['sigma']:.4f} {eta_result.get('unit', '')}")
     
     # Sanity check: η should be < 1 (cannot exceed 100% efficiency)
-    eta_value = eta_result['result'][0]
+    eta_value = eta_result['value']
     if 0 < eta_value < 1:
         print(f"✓ Physical sanity: η = {eta_value:.2%} (within [0, 1])")
     else:
@@ -143,14 +146,13 @@ except Exception as e:
 
 
 # ============================================================================
-# TEST 3: Group auto-inheritance
+# TEST 3: Groups are intentionally unsupported
 # ============================================================================
-print("\n[TEST 3] Group auto-inheritance")
+print("\n[TEST 3] Groups are unsupported (new philosophy)")
 print("-" * 70)
 
 try:
-    # Create quantities with identical groups: "red", "blue"
-    V_grouped = quantity(
+    quantity(
         groups={
             "red": ([5.0, 5.1], [0.1, 0.1]),
             "blue": ([4.8, 4.9], [0.08, 0.08])
@@ -158,62 +160,11 @@ try:
         unit="V",
         symbol="V"
     )
-    
-    I_grouped = quantity(
-        groups={
-            "red": ([0.5, 0.51], [0.01, 0.01]),
-            "blue": ([0.48, 0.49], [0.008, 0.008])
-        },
-        unit="A",
-        symbol="I"
-    )
-    
-    R_grouped = quantity("V/I", "ohm", symbol="R")
-    
-    # Propagate in global mode (should concatenate all groups)
-    registry = register(V_grouped, I_grouped, R_grouped)
-    R_global = propagate_quantity(R_grouped, registry, group=None)
-    
-    print(f"✓ Global propagation (concatenated groups)")
-    print(f"  V groups: {V_grouped.groups}")  # groups is a list of names
-    print(f"  I groups: {I_grouped.groups}")
-    
-    # Debug: Check what R_global contains
-    if R_global['result'] is None:
-        print(f"  WARNING: R_global['result'] is None — group propagation may need explicit mode")
-        print(f"  R_global keys: {list(R_global.as_dict().keys())}")
-        print(f"  R_global has_groups: {R_global.has_groups()}")
-        if R_global.has_groups():
-            print(f"  R_global groups: {R_global.groups}")
-            # Try accessing group data directly
-            for gname in R_global.groups:
-                gdata = R_global['_groups'][gname]
-                print(f"    Group '{gname}': value={gdata['value']}, sigma={gdata['sigma']}")
-    else:
-        print(f"  R_global: {R_global['result'][0]} ± {R_global['result'][1]} {R_global['unit']}")
-        print(f"  R_global shape: {np.shape(R_global['result'][0])}")
-    
-    # Propagate for specific group "red"
-    R_red = propagate_quantity(quantity("V/I", "ohm", symbol="R_red"), registry, group="red")
-    print(f"✓ Group 'red' propagation")
-    print(f"  R_red: {R_red['result'][0]} ± {R_red['result'][1]} {R_red['unit']}")
-    
-    # Propagate for specific group "blue"
-    R_blue = propagate_quantity(quantity("V/I", "ohm", symbol="R_blue"), registry, group="blue")
-    print(f"✓ Group 'blue' propagation")
-    print(f"  R_blue: {R_blue['result'][0]} ± {R_blue['result'][1]} {R_blue['unit']}")
-    
-    # Sanity check: R values should be around 10 ohm
-    R_red_mean = np.mean(R_red['result'][0])
-    R_blue_mean = np.mean(R_blue['result'][0])
-    
-    if 9 < R_red_mean < 11 and 9 < R_blue_mean < 11:
-        print(f"✓ Physical sanity: R_red ≈ {R_red_mean:.2f} Ω, R_blue ≈ {R_blue_mean:.2f} Ω")
-    else:
-        print(f"✗ FAILED: R_red = {R_red_mean:.2f} Ω, R_blue = {R_blue_mean:.2f} Ω (expected ~10 Ω)")
-    
+    print("[TEST 3] FAILED ✗")
+    print("  Error: groups argument should be rejected")
+except TypeError:
+    print("✓ groups argument correctly rejected")
     print("[TEST 3] PASSED ✓")
-    
 except Exception as e:
     print(f"[TEST 3] FAILED ✗")
     print(f"  Error: {e}")
@@ -245,10 +196,10 @@ try:
     print(f"✓ Scalar × Vector propagation")
     print(f"  g = {G['measure'][0]:.2f} ± {G['measure'][1]:.3f} {G['unit']}")
     print(f"  m = {m_array} ± {m_sigma[0]:.3f} {m['unit']}")
-    print(f"  F = {F_result['result'][0]} ± {F_result['result'][1]} {F_result['unit']}")
+    print(f"  F = {F_result['value']} ± {F_result['sigma']} N")
     
     # Sanity check: F[0] ≈ 9.81 N, F[4] ≈ 49.05 N
-    F_values = F_result['result'][0]
+    F_values = F_result['value']
     expected_F0 = m_array[0] * G['measure'][0]
     expected_F4 = m_array[4] * G['measure'][0]
     
@@ -268,37 +219,31 @@ except Exception as e:
 
 
 # ============================================================================
-# TEST 5: Edge case — NaN filtering with groups
+# TEST 5: Edge case — NaN filtering for standard arrays
 # ============================================================================
-print("\n[TEST 5] Edge case: NaN filtering with groups")
+print("\n[TEST 5] Edge case: NaN filtering on array quantities")
 print("-" * 70)
 
 try:
-    # Create grouped data with NaNs
     V_with_nan = quantity(
-        groups={
-            "experiment1": ([5.0, np.nan, 5.2], [0.1, 0.1, 0.1]),
-            "experiment2": ([4.8, 4.9, 5.0], [0.08, 0.08, 0.08])
-        },
-        unit="V",
+        [5.0, np.nan, 5.2],
+        [0.1, 0.1, 0.1],
+        "V",
         symbol="V_nan",
-        nan_policy="drop"  # Should filter NaNs
+        nan_policy="drop"
     )
-    
+
+    cleaned_values = V_with_nan["measure"][0]
     print(f"✓ NaN filtering applied")
-    print(f"  Original experiment1: 3 values (1 NaN)")
-    print(f"  Filtered experiment1: {V_with_nan['_groups']['experiment1']['value']}")
-    print(f"  Experiment2 unchanged: {V_with_nan['_groups']['experiment2']['value']}")
-    
-    # Check that NaN was removed
-    exp1_values = V_with_nan['_groups']['experiment1']['value']
-    if len(exp1_values) == 2 and not np.any(np.isnan(exp1_values)):
-        print(f"✓ NaN successfully removed from experiment1")
+    print(f"  Filtered values: {cleaned_values}")
+
+    if len(cleaned_values) == 2 and not np.any(np.isnan(cleaned_values)):
+        print(f"✓ NaN successfully removed")
     else:
         print(f"✗ FAILED: NaN filtering did not work correctly")
-    
+
     print("[TEST 5] PASSED ✓")
-    
+
 except Exception as e:
     print(f"[TEST 5] FAILED ✗")
     print(f"  Error: {e}")
@@ -326,14 +271,14 @@ try:
     print(f"✓ Zero-sigma propagation")
     print(f"  π = {pi['measure'][0]:.6f} ± {pi['measure'][1]} (deterministic)")
     print(f"  r = {r['measure'][0]:.2f} ± {r['measure'][1]:.2f} {r['unit']}")
-    print(f"  A = {A_result['result'][0]:.4f} ± {A_result['result'][1]:.4f} {A_result['unit']}")
+    print(f"  A = {A_result['value']:.4f} ± {A_result['sigma']:.4f} meter ** 2")
     
     # Expected: A = π·(2.0)² = 12.566..., σ_A comes only from σ_r
     expected_A = np.pi * (2.0**2)
-    if abs(A_result['result'][0] - expected_A) < 0.01:
+    if abs(A_result['value'] - expected_A) < 0.01:
         print(f"✓ Correct value: A ≈ {expected_A:.4f} m²")
     else:
-        print(f"✗ FAILED: A = {A_result['result'][0]:.4f} (expected {expected_A:.4f})")
+        print(f"✗ FAILED: A = {A_result['value']:.4f} (expected {expected_A:.4f})")
     
     print("[TEST 6] PASSED ✓")
     
@@ -353,7 +298,7 @@ print("=" * 70)
 print("\nIf all tests passed, the architecture handles:")
 print("  ✓ Large vectorial quantities (N=100)")
 print("  ✓ Multi-level chained propagation (4 levels)")
-print("  ✓ Group-based calculations (global + specific)")
+print("  ✓ No-groups policy enforcement")
 print("  ✓ Scalar-vector broadcasting")
 print("  ✓ Edge cases (NaN filtering, zero sigma)")
 print("\nThese tests cover production-grade scenarios beyond basic V=IR.")

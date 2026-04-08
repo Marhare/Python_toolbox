@@ -194,3 +194,7 @@ cython_debug/
 *.nav
 *.snm
 *.vrb
+
+# --- Generated docs artifacts ---
+docs/*.html
+docs/*_files/

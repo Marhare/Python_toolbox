@@ -41,16 +41,17 @@ print(fit.raw["parameters"], fit.raw["chi2_red"], fit.raw["p"])
 **Purpose:** Fit `yq` vs `xq` directly from quantities. It extracts values and uncertainties, applies WLS, and returns a `FitResult` wrapper.
 
 **Inputs:**
-- `model`: `"linear"` | `"polynomial"` | callable | `sympy.Expr`
+- `model`: `"linear"` | `"polynomial"` | callable
 - `xq`, `yq`: quantity dicts
 - `degree`: required for polynomial fits
 - `p0`: initial guess for non-linear models
-- `variable`: variable name for symbolic models
+- `variable`: reserved compatibility argument (kept for API stability)
 
 **Output:** `FitResult`
 - `fit.raw`: dict with `parameters`, `errors`, `covariance`, `chi2`, `ndof`, `chi2_red`, `p`, `yfit`
 - `fit.confidence_interval(level=0.95)` -> dict with parameter confidence intervals
 - `fit.prediction(x0)` -> dict with model prediction and uncertainty
+- `fit.parameter_quantity(name_or_index, unit="1")` -> one fitted parameter as `Quantity`
 
 ---
 
@@ -70,20 +71,7 @@ fit = mh.fit_quantity("polynomial", xq, yq, degree=2)
 print(fit.raw["parameters"])  # array [a2, a1, a0] for y = a2*x^2 + a1*x + a0
 ```
 
-### 3) Symbolic Model Fit
-
-```python
-import sympy as sp
-x = sp.Symbol("x")
-model = sp.exp(-x) * sp.Symbol("A") + sp.Symbol("B")
-
-fit = mh.fit_quantity(model, xq, yq, p0=[1.0, 0.0], variable="x")
-print(fit.raw["parameters"])  # array [A, B]
-print(fit.raw["expression"])  # Shows symbolic expression
-print(fit.raw["symbolic_parameters"])  # List of symbols [A, B]
-```
-
-### 3b) Callable Model Fit (Python `def`)
+### 3) Callable Model Fit (Python `def`)
 
 You can also define the model as a regular Python function with signature
 `f(x, *params)`. For example:
@@ -113,6 +101,34 @@ print(ci)  # Automatic formatted output
 # Or access data programmatically:
 for param in ci["parameters"]:
     print(f"{param['name']}: [{param['lower_bound']:.3f}, {param['upper_bound']:.3f}]")
+```
+
+### 6) Using fitted parameters as `Quantity`
+
+This is useful when a fitted parameter is reused in uncertainty propagation.
+
+How parameter selection works:
+
+- By name (string): use the exact parameter key, for example `"a"` or `"b"` in linear fits.
+- By index (int): use the parameter position (`0`, `1`, ...), useful for array-based models.
+- If the name/index does not exist, an error is raised (`KeyError` or `IndexError`).
+
+```python
+# Linear model y = a + b*x
+bq = fit.parameter_quantity("a", unit="um", symbol="a")
+bq = fit.parameter_quantity("b", unit="um/cm", symbol="b")
+
+# Same idea by index
+p0 = fit.parameter_quantity(0, unit="um")
+p1 = fit.parameter_quantity(1, unit="um/cm")
+
+# Inspect available keys/shape first
+print(fit.raw["parameters"])
+
+# If d is a quantity, lambda can be propagated directly
+bq = fit.parameter_quantity("b", unit="um/cm", symbol="b")
+lambda_q = bq * d
+print(lambda_q.value, lambda_q.sigma, lambda_q.unit)
 ```
 
 ---
@@ -180,7 +196,9 @@ Returns `ConfidenceIntervalResult` object that:
 
 ## Notes
 
-- `fit_quantity()` uses `value_quantity()` internally; uncertainties are treated as absolute.
+- `fit_quantity()` accepts quantity inputs directly and handles values/sigmas internally; uncertainties are treated as absolute.
+- By default, quantities are normalized to SI before fitting (`normalize=True` in `quantity(...)`). This means fit parameters are computed from internal normalized values.
+- If you want lab units to be preserved in fit inputs (for example `um` vs `cm`), build those input quantities with `normalize=False` consistently.
 - Returned `FitResult` is a lightweight wrapper with convenience helpers.
 
 ---
@@ -219,21 +237,95 @@ pred = fit.prediction(x_new)
 print(f"\n=== Prediction at x={x_new} ===")
 print(f"y = {pred['y']:.3f} ± {pred['sigma_model']:.3f}")
 
-# Plot data and fit together
-# Method 1: Pass callable (auto-evaluates on dense 400-point grid)
-y_fit_func = lambda x: fit.raw['parameters']['a'] + fit.raw['parameters']['b']*x
-mh.plot(xq, yq, y_fit=y_fit_func, label="Data")
+# Plot data and fit together (current API)
+import matplotlib.pyplot as plt
 
-# Method 2: Pass evaluated array (same length as data)
-# a = fit.raw['parameters']['a']
-# b = fit.raw['parameters']['b']
-# x_vals, _ = mh.value_quantity(xq)
-# mh.plot(xq, yq, y_fit=a + b*x_vals, label="Data")
+fig, ax = plt.subplots()
+mh.errorbar(xq, yq, ax=ax, label="Data")
+mh.plot_fit(fit, ax=ax, label="Linear fit")
+ax.legend()
+plt.show()
+```
 
-# Method 3: Use ax parameter for custom x grid
-# fig, ax = mh.plot(xq, yq, label="Data", show=False)
-# x_fit = np.linspace(0.5, 5.5, 100)
-# mh.plot(x_fit, y_fit_func, mode="line", label="Fit", ax=ax, show=True)
+## Matplotlib Best Practices (Ready-to-Reuse Patterns)
+
+### A) Two subplots in the same figure (fit + residuals)
+
+```python
+import marhare as mh
+import numpy as np
+import matplotlib.pyplot as plt
+
+xq = mh.quantity(np.array([1, 2, 3, 4, 5]), 0.1, "cm", symbol="D")
+yq = mh.quantity(np.array([2.0, 4.1, 6.0, 8.2, 10.1]), np.array([0.3, 0.3, 0.4, 0.4, 0.5]), "um", symbol="i")
+
+fit = mh.fit_quantity("linear", xq, yq)
+
+fig, (ax_fit, ax_res) = plt.subplots(
+    1,
+    2,
+    figsize=(11, 4),
+    constrained_layout=True,
+)
+
+# Left: data + fitted model
+mh.errorbar(xq, yq, ax=ax_fit, fmt="o", capsize=3, label="Data")
+mh.plot_fit(fit, ax=ax_fit, color="tab:red", linewidth=2, label="Linear fit")
+ax_fit.set_title("Fit")
+ax_fit.set_xlabel("D (cm)")
+ax_fit.set_ylabel("i (um)")
+ax_fit.grid(alpha=0.25)
+ax_fit.legend()
+
+# Right: residuals with y=0 reference
+res = fit.residuals
+ax_res.axhline(0.0, color="black", linewidth=1)
+ax_res.errorbar(xq.value, res, yerr=yq.sigma, fmt="o", capsize=3)
+ax_res.set_title("Residuals")
+ax_res.set_xlabel("D (cm)")
+ax_res.set_ylabel("i - i_fit (um)")
+ax_res.grid(alpha=0.25)
+
+plt.show()
+```
+
+### B) Multiple datasets in one axis (same figure, same plot)
+
+```python
+import marhare as mh
+import numpy as np
+import matplotlib.pyplot as plt
+
+groups = {
+    "cam_1": {
+        "x": np.array([1, 2, 3, 4]),
+        "y": np.array([1.9, 3.8, 6.2, 8.0]),
+        "sy": np.array([0.2, 0.2, 0.3, 0.3]),
+    },
+    "cam_2": {
+        "x": np.array([1, 2, 3, 4]),
+        "y": np.array([2.2, 4.4, 6.1, 8.4]),
+        "sy": np.array([0.2, 0.2, 0.3, 0.3]),
+    },
+}
+
+fig, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
+
+for name, data in groups.items():
+    xq = mh.quantity(data["x"], 0.1, "cm", symbol="D")
+    yq = mh.quantity(data["y"], data["sy"], "um", symbol="i")
+    fit = mh.fit_quantity("linear", xq, yq)
+
+    mh.errorbar(xq, yq, ax=ax, fmt="o", capsize=3, label=f"{name} data")
+    mh.plot_fit(fit, ax=ax, linewidth=2, label=f"{name} fit")
+
+ax.set_title("Interference spacing vs distance")
+ax.set_xlabel("D (cm)")
+ax.set_ylabel("i (um)")
+ax.grid(alpha=0.25)
+ax.legend(ncol=2)
+
+plt.show()
 ```
 
 ---
@@ -241,5 +333,4 @@ mh.plot(xq, yq, y_fit=y_fit_func, label="Data")
 ## Next Steps
 
 - See [README_uncertainties.md](README_uncertainties.md) to build `quantity` objects
-- See [README_graphics.md](README_graphics.md) to plot data and fits
 - See [README_statistics.md](README_statistics.md) to analyze residuals
