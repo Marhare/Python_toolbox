@@ -1,33 +1,44 @@
+import pytest
+
 import marhare as mh
 
-print("=== Issue #1: Dimensional validation in addition ===")
-try:
-    m = mh.quantity(5.0, 0.1, 'm', symbol='x')
-    s = mh.quantity(3.0, 0.1, 's', symbol='y')
-    result = m + s
-    print(f'ERROR: (5 m) + (3 s) = {result.value} (should have failed!)')
-except ValueError as e:
-    print(f'✓ Good: {str(e)[:80]}...')
 
-print("\n=== Issue #2: Scalar operations with units ===")
-x = mh.quantity(5.0, 0.1, 'm', symbol='x')
-r1 = 5 * x
-print(f'✓ 5 * (5 m) = {r1.value} {r1.unit}')
-r2 = x * 5
-print(f'✓ (5 m) * 5 = {r2.value} {r2.unit}')
-r3 = x / 5
-print(f'✓ (5 m) / 5 = {r3.value} {r3.unit}')
+def test_dimensional_validation_in_addition_raises_error():
+    length = mh.quantity(5.0, 0.1, "m", symbol="x")
+    time = mh.quantity(3.0, 0.1, "s", symbol="y")
 
-print("\n=== Issue #3: Unit simplification ===")
-V = mh.quantity(10.0, 0.5, 'V', symbol='U')
-I = mh.quantity(2.0, 0.1, 'A', symbol='I')
-R = V / I
-print(f'✓ (10 V) / (2 A) = {R.value} {R.unit}')
+    with pytest.raises(ValueError):
+        _ = length + time
 
-print("\n=== Complex unit algebra ===")
-a = mh.quantity(6.0, 0.1, 'm/s', symbol='v')
-b = mh.quantity(2.0, 0.05, 'm/s', symbol='v2')
-result = a / b
-print(f'✓ (6 m/s) / (2 m/s) = {result.value} {result.unit} (dimensionless)')
 
-print("\n=== All tests completed ===")
+def test_scalar_operations_with_units():
+    value = mh.quantity(5.0, 0.1, "m", symbol="x")
+
+    left_mul = 5 * value
+    right_mul = value * 5
+    division = value / 5
+
+    assert float(left_mul.value) == pytest.approx(25.0)
+    assert float(right_mul.value) == pytest.approx(25.0)
+    assert float(division.value) == pytest.approx(1.0)
+    assert str(left_mul.unit) == str(value.unit)
+    assert str(right_mul.unit) == str(value.unit)
+    assert str(division.unit) == str(value.unit)
+
+
+def test_unit_simplification_for_resistance():
+    voltage = mh.quantity(10.0, 0.5, "V", symbol="U")
+    current = mh.quantity(2.0, 0.1, "A", symbol="I")
+    resistance = voltage / current
+
+    assert float(resistance.value) == pytest.approx(5.0)
+    assert "ohm" in str(resistance.unit).lower() or "ampere" in str(resistance.unit).lower()
+
+
+def test_complex_unit_algebra_dimensionless_division():
+    speed_a = mh.quantity(6.0, 0.1, "m/s", symbol="v")
+    speed_b = mh.quantity(2.0, 0.05, "m/s", symbol="v2")
+    ratio = speed_a / speed_b
+
+    assert float(ratio.value) == pytest.approx(3.0)
+    assert str(ratio.unit) in {"", "1", "dimensionless"} or "dimensionless" in str(ratio.unit)

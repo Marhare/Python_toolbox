@@ -1,46 +1,42 @@
-"""Quick test of v1.0 immutable uncertainties architecture."""
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+"""Quick pytest checks for v1 immutable uncertainties workflow."""
 
-from marhare.uncertainties import quantity, register, evaluate_quantity
+import pytest
 
-print("Testing v1.0 immutable architecture...")
-print("-" * 50)
+from marhare.uncertainties import evaluate_quantity, quantity, register
 
-# Test 1: Basic propagation
-print("\n[1] Basic propagation: R = V/I")
-V = quantity(5, 0.1, "V", symbol="V")
-I = quantity(0.5, 0.01, "A", symbol="I")
-R = quantity("V/I", "ohm", symbol="R")
 
-print(f"  V = {V['measure'][0]} ± {V['measure'][1]} {V.unit}")
-print(f"  I = {I['measure'][0]} ± {I['measure'][1]} {I.unit}")
+def test_v1_basic_propagation_returns_expected_resistance():
+    voltage = quantity(5.0, 0.1, "V", symbol="V")
+    current = quantity(0.5, 0.01, "A", symbol="I")
+    resistance_expr = quantity("V/I", "ohm", symbol="R")
 
-registry = register(V, I, R)
-R_result = evaluate_quantity(R, registry)
+    result = evaluate_quantity(resistance_expr, register(voltage, current, resistance_expr))
+    value, sigma = result["result"]
 
-print(f"  R = {R_result['result'][0]:.2f} ± {R_result['result'][1]:.2f} {R_result.unit}")
-print(f"  unit_raw: {R_result.unit_raw}")
-print(f"  unit_internal: {R_result.unit_internal}")
-print(f"  unit_display: {R_result._unit_display}")
+    assert float(value) == pytest.approx(10.0)
+    assert float(sigma) > 0
+    assert result.unit is not None
 
-# Test 2: Immutability check
-print("\n[2] Immutability check")
-try:
-    R_result._result_value = 999  # Should attribute error on __slots__
-    print("  FAILED: Could reassign _result_value directly!")
-except AttributeError as e:
-    print(f"  SUCCESS: Cannot mutate (AttributeError as expected)")
 
-# Test 3: Compact mode
-print("\n[3] Compact mode check")
-R2 = quantity("V/I", "ohm", symbol="R2")
-registry2 = register(V, I, R2)
-R2_result = evaluate_quantity(R2, registry2, compact=True)
-print(f"  R2 (compact) = {R2_result['result'][0]:.2f} ± {R2_result['result'][1]:.2f} {R2_result.unit}")
-print(f"  unit_internal: {R2_result.unit_internal}")
-print(f"  unit_display: {R2_result._unit_display}")
+def test_v1_result_is_immutable():
+    voltage = quantity(5.0, 0.1, "V", symbol="V")
 
-print("\n" + "=" * 50)
-print("v1.0 architecture tests PASSED!")
+    with pytest.raises(AttributeError):
+        voltage._measure_value = 999
+
+
+def test_v1_compact_mode_exposes_display_unit():
+    voltage = quantity(5.0, 0.1, "V", symbol="V")
+    current = quantity(0.5, 0.01, "A", symbol="I")
+    resistance_expr = quantity("V/I", "ohm", symbol="R")
+
+    result = evaluate_quantity(
+        resistance_expr,
+        register(voltage, current, resistance_expr),
+        compact=True,
+    )
+
+    assert result._unit_display is not None
+    assert str(result.unit_internal)
+    assert str(result.unit)
+

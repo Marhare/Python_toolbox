@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Martín", email = "your.email@example.com"}
+    {name = "Martín", email = "martinhaderli@gmail.com"}
 ]
 keywords = ["scientific computing", "data analysis", "utilities", "tools"]
 classifiers = [
@@ -41,5 +41,5 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/python_toolbox"
-Repository = "https://github.com/yourusername/python_toolbox.git"
+Homepage = "https://github.com/Marhare/python_toolbox"
+Repository = "https://github.com/Marhare/python_toolbox.git"
