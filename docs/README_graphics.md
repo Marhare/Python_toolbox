@@ -84,6 +84,26 @@ mh.plot(x, y, yerr=sy, title="Data with Uncertainty")
 mh.plot(x, y, sy=sy, title="Data with Uncertainty")  # alias for yerr
 ```
 
+Single-call overlay is also supported (data + fit + band in one subplot):
+
+```python
+def model(x, a, b):
+    return a * x + b
+
+fit = mh.fit(model, x, (y, sy), p0=[1.0, 0.0])
+y_low = y - sy
+y_high = y + sy
+
+mh.plot(
+    x,
+    y,
+    yerr=sy,
+    y_fit=fit,                 # accepts FitResult directly
+    yband=(y_low, y_high),     # alias: bands=(y_low, y_high)
+    title="Data + fit + uncertainty band",
+)
+```
+
 ![Scatter with errors](img/plot_errorbar_placeholder.svg)
 
 ### 2. **Line Mode: Smooth Curves**

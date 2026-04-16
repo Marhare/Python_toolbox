@@ -84,6 +84,127 @@ print(f"Uncertainties: {R.sigma}")
 print(f"Weighted summary: {mh.latex_quantity(R_summary, cifras=2)}")
 ```
 
+## New Ergonomic Helpers
+
+### Physical constants
+
+You can import SI physical constants directly as `Quantity` objects.
+
+```python
+from marhare.constants import h, e, m_e, c, hbar, k_B
+
+print(h.value, h.unit)
+print(e.value, e.unit)
+print(m_e.value, m_e.unit)
+```
+
+Top-level imports are also available:
+
+```python
+import marhare as mh
+
+print(mh.h, mh.e, mh.m_e)
+print(mh.c, mh.hbar, mh.k_B)
+```
+
+### Appendable quantity collections
+
+Use `Quantity.empty(...)` to accumulate measurements without manual Python lists.
+
+```python
+import marhare as mh
+
+q1 = mh.quantity(1.0, 0.1, "mm")
+q2 = mh.quantity(2.0, 0.2, "mm")
+
+r_big = mh.Quantity.empty("mm", symbol="r")
+r_big.append(q1)
+r_big.append(q2)
+
+r_summary = r_big.weighted()
+print(r_big.value)   # [1.0, 2.0]
+print(r_big.sigma)   # [0.1, 0.2]
+print(r_summary.value, r_summary.sigma)
+```
+
+### Figure save helper
+
+Use `save_figure(...)` to avoid repeated boilerplate for folders/timestamps.
+
+```python
+import marhare as mh
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+ax.plot([0, 1], [0, 1])
+
+out_path = mh.save_figure(fig, "line_plot", folder="graphics", timestamp=True)
+print(out_path)
+```
+
+### Long measurement-table workflow
+
+For RAW_DATA-like tables in long format, prefer the dedicated importer:
+
+```python
+import marhare as mh
+import pandas as pd
+
+df = pd.read_excel("difraccion.ods", sheet_name="RAW_DATA")
+
+ds = mh.Dataset.from_measurement_table(
+    df,
+    value_col="Value",
+    sigma_col="Uncertainty",
+    unit_col="Unit",
+    quantity_name="q",
+)
+
+ds = ds.where(Magnitude="d")
+```
+
+Then query physically meaningful rows directly:
+
+```python
+q_ext = ds.get_quantity(
+    "q",
+    Voltage=3100,
+    Angle=5,
+    Tag1="anillo_grande",
+    Tag2="radio_exterior",
+)
+```
+
+This keeps structure in `Dataset` and physics in `Quantity`.
+
+```python
+import numpy as np
+
+Vs = mh.Quantity.empty("kV")
+R1 = mh.Quantity.empty("m")
+R2 = mh.Quantity.empty("m")
+
+for V in np.unique(ds["Voltage"]):
+    r_big = mh.Quantity.empty("mm")
+    r_small = mh.Quantity.empty("mm")
+
+    for angle in np.unique(ds["Angle"]):
+        try:
+            q_ext = ds.get_quantity("q", Voltage=V, Angle=angle, Tag1="anillo_grande", Tag2="radio_exterior")
+            q_int = ds.get_quantity("q", Voltage=V, Angle=angle, Tag1="anillo_grande", Tag2="radio_interior")
+            r_big.append((q_ext + q_int) / 2)
+
+            h_ext = ds.get_quantity("q", Voltage=V, Angle=angle, Tag1="anillo_pequeno", Tag2="radio_exterior")
+            h_int = ds.get_quantity("q", Voltage=V, Angle=angle, Tag1="anillo_pequeno", Tag2="radio_interior")
+            r_small.append((h_ext + h_int) / 2)
+        except KeyError:
+            continue
+
+    Vs.append(mh.quantity(V, 0, "kV"))
+    R2.append(r_big.weighted().to("m"))
+    R1.append(r_small.weighted().to("m"))
+```
+
 ## Unit Writing Guide
 
 Unit algebra has been hardened for common workflows:

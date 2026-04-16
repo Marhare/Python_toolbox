@@ -191,63 +191,6 @@ class Quantity(np.lib.mixins.NDArrayOperatorsMixin):
             "sigma_latex": self._sigma_latex
         }
 
-    @classmethod
-    def empty(cls, unit: str, symbol: Optional[str] = None):
-        """Create an empty appendable quantity collection for one unit."""
-        return cls(
-            value=np.array([], dtype=float),
-            sigma=np.array([], dtype=float),
-            unit=unit,
-            symbol=symbol,
-            traceable=False,
-            _unit_raw=unit,
-            _unit_display=unit,
-        )
-
-    def append(self, q: "Quantity"):
-        """Append one quantity, converting units to this collection's unit if needed."""
-        if not isinstance(q, Quantity):
-            raise TypeError("append expects a Quantity")
-
-        if self._value is None or self._sigma is None:
-            raise ValueError("append requires a numeric Quantity (not expression-only)")
-
-        q_aligned = q
-        if q.unit != self.unit:
-            q_aligned = q.to(self.unit, normalize=False)
-
-        val = np.asarray(q_aligned.value, dtype=float).reshape(-1)
-        sig = np.asarray(q_aligned.sigma, dtype=float).reshape(-1)
-
-        if val.shape != sig.shape:
-            raise ValueError("append requires value and sigma with matching shapes")
-
-        base_value = np.asarray(self._value, dtype=float).reshape(-1)
-        base_sigma = np.asarray(self._sigma, dtype=float).reshape(-1)
-
-        new_value = np.concatenate([base_value, val])
-        new_sigma = np.concatenate([base_sigma, sig])
-
-        if new_value.shape != new_sigma.shape:
-            raise ValueError("internal inconsistency: value and sigma lengths differ")
-
-        object.__setattr__(self, "_value", new_value)
-        object.__setattr__(self, "_sigma", new_sigma)
-
-        if self._traceable and self._expr is None and self._base_values and self._base_sigmas:
-            if len(self._base_values) == 1 and len(self._base_sigmas) == 1:
-                sym = next(iter(self._base_values.keys()))
-                object.__setattr__(self, "_base_values", {sym: new_value})
-                object.__setattr__(self, "_base_sigmas", {sym: new_sigma})
-
-        return self
-
-    def extend(self, qs):
-        """Append multiple quantities in sequence."""
-        for q in qs:
-            self.append(q)
-        return self
-
     def uncertainty_budget(self, as_percent: bool = True) -> Dict[str, Any]:
         """Return uncertainty contributions from each base variable.
 

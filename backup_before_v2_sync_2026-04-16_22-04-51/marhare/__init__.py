@@ -38,33 +38,6 @@ from .quantities import (
 )
 
 from .evaluation import evaluate_quantity
-from . import constants
-from .constants import (
-    h,
-    e,
-    m_e,
-    c,
-    hbar,
-    k_B,
-    N_A,
-    R,
-    epsilon_0,
-    mu_0,
-    G,
-    g0,
-)
-
-
-def save_figure(*args, **kwargs):
-    """Lazy top-level wrapper for graphics.save_figure."""
-    from .graphics import save_figure as _save_figure
-    return _save_figure(*args, **kwargs)
-
-
-def plot(*args, **kwargs):
-    """Lazy top-level wrapper for graphics.plot."""
-    from .graphics import plot as _plot
-    return _plot(*args, **kwargs)
 
 # --- Dataset ---
 from .dataset import Dataset
@@ -154,21 +127,6 @@ __all__ = [
     "FitResult",
     "errorbar",
     "plot_fit",
-    "plot",
-    "save_figure",
-    "constants",
-    "h",
-    "e",
-    "m_e",
-    "c",
-    "hbar",
-    "k_B",
-    "N_A",
-    "R",
-    "epsilon_0",
-    "mu_0",
-    "G",
-    "g0",
     "mean",
     "variance",
     "standard_deviation",

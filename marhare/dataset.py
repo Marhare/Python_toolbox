@@ -80,9 +80,108 @@ class Dataset:
         mask = np.asarray(mask, dtype=bool)
         if len(mask) != self.nrows:
             raise ValueError("Mask length must match Dataset rows.")
-        
-        new_data = {k: v[mask] for k, v in self._data.items()}
-        return Dataset(new_data, name=f"{self.name}_filtered", metadata=self.metadata.copy())
+
+        # Preserve original column types (Quantity vs raw ndarray) instead of
+        # round-tripping through __setitem__, which may coerce numeric arrays.
+        out = Dataset(name=f"{self.name}_filtered", metadata=self.metadata.copy())
+        out._nrows = int(mask.sum())
+
+        for key, val in self._data.items():
+            if isinstance(val, Quantity):
+                out._data[key] = val[mask]
+            else:
+                out._data[key] = np.asarray(val)[mask].copy()
+
+        return out
+
+    def where(self, **conds) -> 'Dataset':
+        """Filter rows by exact-match conditions on one or more columns.
+
+        Examples
+        --------
+        >>> ds.where(Voltage=3100, Tag1="anillo_grande")
+        """
+        mask = np.ones(self.nrows, dtype=bool)
+
+        def _normalize_condition(
+            condition_value: Any,
+            column_name: str,
+            expected_shape: tuple,
+        ):
+            """Normalize user conditions for exact/row-aligned filtering.
+
+            Accepted forms:
+            - scalar,
+            - singleton array (size 1),
+            - row-aligned array with the same shape as the target column.
+            """
+            arr = np.asarray(condition_value)
+            if arr.shape == ():
+                return arr.item()
+            if arr.size == 1:
+                return np.asarray(arr.reshape(-1)[0]).item()
+            if arr.shape == expected_shape:
+                return arr
+            raise TypeError(
+                f"Condition for column '{column_name}' must be scalar or "
+                f"row-aligned with shape {expected_shape}, got shape {arr.shape}."
+            )
+
+        for key, val in conds.items():
+            if key not in self._data:
+                raise KeyError(f"Column '{key}' not found.")
+
+            col = self[key]
+            if isinstance(col, Quantity):
+                raw = np.asarray(col.value)
+                if isinstance(val, Quantity):
+                    val = val.to(col.unit, normalize=False).value
+                val = _normalize_condition(val, key, raw.shape)
+            else:
+                raw = np.asarray(col)
+                if isinstance(val, Quantity):
+                    raise TypeError(
+                        f"Condition for non-quantity column '{key}' cannot be a Quantity."
+                    )
+                val = _normalize_condition(val, key, raw.shape)
+
+            mask &= (raw == val)
+
+        return self.select(mask)
+
+    def filter_rows(self, **conds) -> 'Dataset':
+        """Alias for :meth:`where` kept for readability in notebooks."""
+        return self.where(**conds)
+
+    def get_quantity(self, column: str, **conds) -> Quantity:
+        """Return a single-row Quantity selected by conditions.
+
+        Raises
+        ------
+        KeyError
+            If no rows match conditions.
+        ValueError
+            If multiple rows match conditions.
+        TypeError
+            If the requested column is not a Quantity column.
+        """
+        sub = self.where(**conds)
+
+        if sub.nrows == 0:
+            raise KeyError(conds)
+        if sub.nrows > 1:
+            raise ValueError(f"Multiple rows match {conds}")
+
+        out = sub[column]
+        if not isinstance(out, Quantity):
+            raise TypeError(f"Column '{column}' is not a Quantity column.")
+
+        out_value = np.asarray(out.value)
+        if out_value.shape == ():
+            return out
+
+        # One-row selection: return scalar quantity for ergonomic downstream math.
+        return out[0]
 
     def group_by(self, column: str) -> Dict[Any, 'Dataset']:
         """Groups by unique values in either a Quantity or a categorical column."""
@@ -155,6 +254,104 @@ class Dataset:
                 processed_cols.add(sigma_col)
             
         return ds
+
+    @classmethod
+    def from_measurement_table(
+        cls,
+        df: pd.DataFrame,
+        *,
+        value_col: str = "Value",
+        sigma_col: str = "Uncertainty",
+        unit_col: str = "Unit",
+        quantity_name: str = "q",
+        name: str = "MeasurementTable",
+    ) -> 'Dataset':
+        """Build Dataset from long-format measurement tables.
+
+        Expected input shape:
+            metadata columns + value/sigma/unit columns.
+
+        Output:
+            - metadata columns kept as plain numpy arrays,
+            - one quantity column named ``quantity_name``.
+        """
+        required = [value_col, sigma_col, unit_col]
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise KeyError(f"Missing required columns: {missing}")
+
+        ds = cls(name=name)
+        meta_cols = [c for c in df.columns if c not in (value_col, sigma_col, unit_col)]
+
+        ds._nrows = len(df)
+        for col in meta_cols:
+            ds._data[col] = np.asarray(df[col])
+
+        values = np.asarray(df[value_col])
+        sigmas = np.asarray(df[sigma_col])
+        units_arr = np.asarray(df[unit_col])
+
+        if len(values) == 0:
+            ds._data[quantity_name] = Quantity(
+                np.array([], dtype=float),
+                np.array([], dtype=float),
+                unit="1",
+                symbol=quantity_name,
+                traceable=False,
+            )
+            return ds
+
+        q_rows = [
+            Quantity(v, s, str(u), symbol=quantity_name)
+            for v, s, u in zip(values, sigmas, units_arr)
+        ]
+
+        base_unit = q_rows[0].unit
+        vals = []
+        sigs = []
+        for i, q in enumerate(q_rows):
+            q_conv = q
+            if q.unit != base_unit:
+                try:
+                    q_conv = q.to(base_unit, normalize=False)
+                except Exception as exc:
+                    raise ValueError(
+                        f"Row {i}: unit '{q.unit}' is not compatible with '{base_unit}'"
+                    ) from exc
+
+            vals.append(float(np.asarray(q_conv.value, dtype=float)))
+            sigs.append(float(np.asarray(q_conv.sigma, dtype=float)))
+
+        ds._data[quantity_name] = Quantity(
+            np.asarray(vals, dtype=float),
+            np.asarray(sigs, dtype=float),
+            unit=base_unit,
+            symbol=quantity_name,
+            traceable=False,
+        )
+
+        return ds
+
+    @classmethod
+    def from_long_table(
+        cls,
+        df: pd.DataFrame,
+        *,
+        value_col: str = "Value",
+        sigma_col: str = "Uncertainty",
+        unit_col: str = "Unit",
+        quantity_col: str = "q",
+        name: str = "MeasurementTable",
+    ) -> 'Dataset':
+        """Alias for :meth:`from_measurement_table` for explicit naming."""
+        return cls.from_measurement_table(
+            df,
+            value_col=value_col,
+            sigma_col=sigma_col,
+            unit_col=unit_col,
+            quantity_name=quantity_col,
+            name=name,
+        )
 
     @classmethod
     def read_csv(cls, filepath: str, name: str = "Imported_CSV", **kwargs) -> 'Dataset':

@@ -262,6 +262,92 @@ print(latex_quantity(R_summary, cifras=2))
 
 This approach keeps your measurements organized and makes batch uncertainty propagation straightforward.
 
+## Long Experimental Tables (RAW_DATA)
+
+For long-format measurement tables like diffraction RAW_DATA:
+
+- keep structural columns (`Voltage`, `Angle`, `Tag1`, `Tag2`, `Magnitude`) as plain arrays,
+- build one physical quantity column (`q`) from `Value`/`Uncertainty`/`Unit`.
+
+Use the dedicated importer instead of `from_pandas(...)`:
+
+```python
+import pandas as pd
+import marhare as mh
+
+df = pd.read_excel("difraccion.ods", sheet_name="RAW_DATA")
+
+ds = mh.Dataset.from_measurement_table(
+  df,
+  value_col="Value",
+  sigma_col="Uncertainty",
+  unit_col="Unit",
+  quantity_name="q",
+)
+
+ds = ds.where(Magnitude="d")
+```
+
+Equivalent alias:
+
+```python
+ds = mh.Dataset.from_long_table(df, quantity_col="q")
+```
+
+Row-level quantity retrieval is then direct:
+
+```python
+q_ext = ds.get_quantity(
+  "q",
+  Voltage=3100,
+  Angle=5,
+  Tag1="anillo_grande",
+  Tag2="radio_exterior",
+)
+```
+
+### Clean diffraction aggregation loop
+
+```python
+import numpy as np
+import marhare as mh
+
+Vs = mh.Quantity.empty("kV")
+R1 = mh.Quantity.empty("m")
+R2 = mh.Quantity.empty("m")
+
+for V in np.unique(ds["Voltage"]):
+  r_big = mh.Quantity.empty("mm")
+  r_small = mh.Quantity.empty("mm")
+
+  for angle in np.unique(ds["Angle"]):
+    try:
+      q_ext = ds.get_quantity("q", Voltage=V, Angle=angle, Tag1="anillo_grande", Tag2="radio_exterior")
+      q_int = ds.get_quantity("q", Voltage=V, Angle=angle, Tag1="anillo_grande", Tag2="radio_interior")
+      r_big.append((q_ext + q_int) / 2)
+
+      h_ext = ds.get_quantity("q", Voltage=V, Angle=angle, Tag1="anillo_pequeno", Tag2="radio_exterior")
+      h_int = ds.get_quantity("q", Voltage=V, Angle=angle, Tag1="anillo_pequeno", Tag2="radio_interior")
+      r_small.append((h_ext + h_int) / 2)
+    except KeyError:
+      continue
+
+  Vs.append(mh.quantity(V, 0, "kV"))
+  R2.append(r_big.weighted().to("m"))
+  R1.append(r_small.weighted().to("m"))
+```
+
+Architecture summary:
+
+- `Dataset`: structure and indexing (`where`, `get_quantity`).
+- `Quantity`: physical magnitudes and propagation.
+- `Quantity.empty + append`: physical accumulation without manual list plumbing.
+
+Before/after summary:
+
+- Before: DataFrame -> dict -> Python lists -> manual reconstruction.
+- Now: DataFrame -> Dataset (clean) -> Quantity -> physics.
+
 ## Filtering Tables Before Quantities (Pandas)
 
 It is common to split measurements before creating quantities. You can filter by number, by text, or by grouped values:

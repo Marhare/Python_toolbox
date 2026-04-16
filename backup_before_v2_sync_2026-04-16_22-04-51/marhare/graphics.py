@@ -29,7 +29,6 @@ from __future__ import annotations
 import numpy as np
 from pathlib import Path
 from typing import Optional, Tuple, Union, List, Dict, Any
-from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator
 from cycler import cycler
@@ -842,22 +841,12 @@ def _safe_len(obj: Any) -> Optional[int]:
 
 
 def _evaluate_fit_result_model(fit_result: Any, x: np.ndarray) -> np.ndarray:
-    predictor = getattr(fit_result, "predict", None)
-    if callable(predictor):
-        try:
-            return np.asarray(predictor(x), dtype=float)
-        except Exception:
-            # Fall back to raw-model evaluation for custom fit-like objects.
-            pass
-
     model = fit_result.model
     raw = fit_result.raw
 
     if isinstance(model, str):
         if model == "linear":
-            params = raw.get("parameters")
-            if params is None:
-                params = raw.get("parametros")
+            params = raw.get("parametros")
             if isinstance(params, dict):
                 a = params.get("a")
                 b = params.get("b")
@@ -865,26 +854,12 @@ def _evaluate_fit_result_model(fit_result: Any, x: np.ndarray) -> np.ndarray:
                 a, b = params
             return a + b * x
         if model == "polynomial":
-            coef = raw.get("coefficients")
-            if coef is None:
-                coef = raw.get("coeficientes")
-            if coef is None:
-                coef = raw.get("parameters")
-            if coef is None:
-                coef = raw.get("parametros")
-            if isinstance(coef, dict):
-                coef = list(coef.values())
+            coef = raw.get("coeficientes")
             return np.polyval(coef, x)
         raise ValueError(f"Unknown model shortcut: {model}")
 
     if callable(model) and not _is_sympy_expr_like(model):
-        params = raw.get("parameters")
-        if params is None:
-            params = raw.get("parametros")
-        if isinstance(params, dict):
-            params = list(params.values())
-        if params is None:
-            raise ValueError("Fit result does not contain model parameters")
+        params = raw.get("parametros")
         return model(x, *params)
 
     if _is_sympy_expr_like(model):
@@ -893,16 +868,10 @@ def _evaluate_fit_result_model(fit_result: Any, x: np.ndarray) -> np.ndarray:
         except ImportError as exc:
             raise ImportError("sympy is required to evaluate symbolic models") from exc
 
-        expr = raw.get("expression")
-        if expr is None:
-            expr = raw.get("expresion", model)
-        params_symbols = raw.get("symbolic_parameters")
+        expr = raw.get("expresion", model)
+        params_symbols = raw.get("parametros_simbolicos")
         if params_symbols is None:
-            params_symbols = raw.get("parametros_simbolicos")
-        if params_symbols is None:
-            raise ValueError(
-                "Symbolic fit results must include 'symbolic_parameters'"
-            )
+            raise ValueError("Symbolic fit results must include 'parametros_simbolicos'")
 
         free_symbols = set(expr.free_symbols)
         params_set = set(params_symbols)
@@ -912,21 +881,7 @@ def _evaluate_fit_result_model(fit_result: Any, x: np.ndarray) -> np.ndarray:
 
         var_symbol = var_symbols[0]
         func = sp.lambdify((var_symbol, *params_symbols), expr, "numpy")
-        params = raw.get("parameters")
-        if params is None:
-            params = raw.get("parametros")
-        if isinstance(params, dict):
-            ordered_params = []
-            for sym in params_symbols:
-                if sym in params:
-                    ordered_params.append(params[sym])
-                elif str(sym) in params:
-                    ordered_params.append(params[str(sym)])
-                else:
-                    raise KeyError(
-                        f"Missing parameter value for symbolic parameter '{sym}'"
-                    )
-            params = ordered_params
+        params = raw.get("parametros")
         return func(x, *params)
 
     raise ValueError("Unsupported model type for fit evaluation")
@@ -1085,7 +1040,6 @@ def plot(
     yerr: Optional[np.ndarray] = None,
     sy: Optional[np.ndarray] = None,
     sx: Optional[np.ndarray] = None,
-    yband: Optional[Any] = None,
     bands: Optional[Any] = None,
     hist: Optional[Any] = None,
     ax: Optional[plt.Axes] = None,
@@ -1125,7 +1079,7 @@ def plot(
         Symmetric y-errors. ``sy`` is an alias of ``yerr``.
     sx : array_like | None
         Symmetric x-errors.
-    yband, bands : Band | tuple | dict | None
+    bands : Band | tuple | dict | None
         Optional uncertainty band.
     hist : array_like | tuple | Histogram | quantity-like | None
         Optional histogram input (constructor mode).
@@ -1166,10 +1120,6 @@ def plot(
     if sx is not None:
         # sx is stored but used when creating SeriesWithError objects
         kwargs['sx'] = sx  # Pass to SeriesWithError internally
-    if yband is not None:
-        if bands is not None:
-            raise ValueError("Use either 'bands' or 'yband', not both")
-        bands = yband
     
     # Constructor mode: build a Scene from raw data
     return_scene = False
@@ -1431,29 +1381,11 @@ def plot(
                     fit_len = _safe_len(y_fit)
                     if fit_len is not None and fit_len == _safe_len(x):
                         objetos_scene.append(Fit(x, y_fit))
-                    elif fit_len is not None and not callable(y_fit) and not _is_fit_result_like(y_fit):
-                        raise ValueError(
-                            "y_fit array length must match x; pass a callable or FitResult "
-                            "to auto-evaluate on a dense grid"
-                        )
                     else:
                         objetos_scene.append(_build_dense_fit(np.asarray(x, dtype=float), y_fit))
             if bands is not None:
                 objetos_scene.append(_parse_band(x, bands))
-
-            # Constructor mode ``plot(x, y, ...)`` represents one subplot.
-            # Keep data, fit and bands overlaid in the same panel.
-            if len(objetos_scene) == 0:
-                raise ValueError("plot(x, y, ...) could not build drawable objects")
-
-            if _is_panel_like(objetos_scene[0]):
-                panel = objetos_scene[0]
-                for extra in objetos_scene[1:]:
-                    panel.objetos.append(extra)
-            else:
-                panel = Panel(*objetos_scene)
-
-            scene = Scene(panel)
+            scene = Scene(*objetos_scene)
             if auto_index and xlabel is None:
                 xlabel = "index"
         if xlabel is not None:
@@ -1968,42 +1900,6 @@ def save(
     
     if close:
         plt.close(fig)
-
-
-def save_figure(
-    fig,
-    name: Union[str, Path],
-    folder: Union[str, Path] = "graphics",
-    timestamp: bool = True,
-    *,
-    script_dir: Optional[Union[str, Path]] = None,
-    dpi: int = 300,
-    transparent: Optional[bool] = None,
-    close: bool = False,
-) -> str:
-    """Save one figure with optional timestamp and return absolute output path."""
-    if transparent is None:
-        transparent = PLOT_DEFAULTS["transparent"]
-
-    name_path = Path(name)
-    fmt = name_path.suffix.lstrip(".") if name_path.suffix else "png"
-    stem = name_path.stem if name_path.suffix else str(name_path)
-
-    if timestamp:
-        stem = f"{stem}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-
-    out_dir = Path(folder)
-    if script_dir is not None:
-        out_dir = Path(script_dir) / out_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    out = (out_dir / f"{stem}.{fmt}").resolve()
-    fig.savefig(out, dpi=dpi, bbox_inches="tight", transparent=transparent)
-
-    if close:
-        plt.close(fig)
-
-    return str(out)
 
 
 def line(
