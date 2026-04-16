@@ -243,11 +243,21 @@ print(f"y = {pred['y']:.3f} ± {pred['sigma_model']:.3f}")
 import matplotlib.pyplot as plt
 
 fig, ax = plt.subplots()
-mh.errorbar(xq, yq, ax=ax, label="Data")
-mh.plot_fit(fit, ax=ax, label="Linear fit")
-ax.legend()
+mh.plot(
+    xq,
+    yq,
+    y_fit=fit,
+    yerr=yq.sigma,  # optional: auto-inferred when Y is Quantity-like
+    ax=ax,
+    show=False,
+    title="Data + fit",
+)
+ax.grid(alpha=0.25)
 plt.show()
 ```
+
+Note: axis labels are auto-generated only when `x` and `y` are `Quantity` inputs.
+With raw numpy arrays, set `xlabel`/`ylabel` manually.
 
 ## Matplotlib Best Practices (Ready-to-Reuse Patterns)
 
@@ -271,13 +281,16 @@ fig, (ax_fit, ax_res) = plt.subplots(
 )
 
 # Left: data + fitted model
-mh.errorbar(xq, yq, ax=ax_fit, fmt="o", capsize=3, label="Data")
-mh.plot_fit(fit, ax=ax_fit, color="tab:red", linewidth=2, label="Linear fit")
-ax_fit.set_title("Fit")
-ax_fit.set_xlabel("D (cm)")
-ax_fit.set_ylabel("i (um)")
+mh.plot(
+    xq,
+    yq,
+    y_fit=fit,
+    yerr=yq.sigma,  # optional: auto-inferred when Y is Quantity-like
+    ax=ax_fit,
+    show=False,
+    title="Fit",
+)
 ax_fit.grid(alpha=0.25)
-ax_fit.legend()
 
 # Right: residuals with y=0 reference
 res = fit.residuals
@@ -315,11 +328,18 @@ fig, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
 
 for name, data in groups.items():
     xq = mh.quantity(data["x"], 0.1, "cm", symbol="D")
-    yq = mh.quantity(data["y"], data["sy"], "um", symbol="i")
+    yq = mh.quantity(data["y"], data["sy"], "um")
     fit = mh.fit_quantity("linear", xq, yq)
+    fit.label = f"{name} fit"
 
-    mh.errorbar(xq, yq, ax=ax, fmt="o", capsize=3, label=f"{name} data")
-    mh.plot_fit(fit, ax=ax, linewidth=2, label=f"{name} fit")
+    mh.plot(
+        xq,
+        yq,
+        y_fit=fit,
+        yerr=yq.sigma,  # optional: auto-inferred when Y is Quantity-like
+        ax=ax,
+        show=False,
+    )
 
 ax.set_title("Interference spacing vs distance")
 ax.set_xlabel("D (cm)")
